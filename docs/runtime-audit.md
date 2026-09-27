@@ -74,7 +74,7 @@ requirement even though its present implementation comes from the shell.
 | `native/CMakeLists.txt` | Builds linker, JNI, log/audio libraries and native checks | Yes, adapted | `cordial-linker-sys/build.rs` | per-crate native builds or shared `crates/native-compat` | CMake, Clang, optional audio headers | split | Avoid one monolithic native target after Rust boundaries are established. |
 | `third_party/mcpelauncher-linker` | AOSP bionic linker host port | Yes | `native/shim.cpp` | destination submodule under `third_party/` | git submodule | preserve | Required native dependency; no rewrite. |
 | `third_party/libjnivm` | JNI virtual machine and class/method registry | Yes | JNI shim | destination submodule under `third_party/` | git submodule | preserve | Required compatibility implementation. |
-| `third_party/libbadcpu` | x86-64 CPU feature emulator source | Not currently linked by the Rust build | native CMake target only | retain only if build/link trace proves needed; otherwise omit after confirming no runtime caller | C++ | audit | CMake builds it, but linker-sys currently links no `badcpu` archive. Do not mistake build presence for use. |
+| `third_party/libbadcpu` | x86-64 CPU feature emulator source | No | No linked caller | Excluded from destination | C++ | remove | CMake built it as an unlinked archive; the linker build script links no `badcpu` archive and no runtime caller references it. Its dead build target is removed. |
 | `third_party/mocktail-webview` | Web view support or test dependency | Unclear from runtime calls | Webview path/tests | inspect manifest and references before disposition | native/third-party | audit | No removal decision until its consumers are fully traced. |
 
 ## Build, submodules and validation notes
@@ -103,6 +103,13 @@ Because separate builds must not share `target/`, destination validation must
 use its own Cargo target directory. Runtime parity additionally requires a
 client-supplied APK and native library directory; this audit does not make a
 runtime claim based solely on compilation.
+
+The destination exposes linker and JNI native code through separate Rust
+crates. The existing native build is retained because the shims share CMake
+setup and symbols. Bionic functions, their generated stubs, and the missing
+symbol table are extracted into `roblox-abi`; the generated input remains the
+source TSV. The old `badcpu` target is omitted because the linker build script
+never linked that archive.
 
 ## Boundary decisions
 

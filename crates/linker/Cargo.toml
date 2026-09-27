@@ -15,4 +15,4 @@ unsafe_op_in_unsafe_fn = "deny"
 undocumented_unsafe_blocks = "warn"
 
 [build-dependencies]
-cmake = "0.1"
+cmake = "0.1.58"

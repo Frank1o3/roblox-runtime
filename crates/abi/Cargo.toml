@@ -1,13 +1,10 @@
 [package]
-name = "roblox-jni"
-description = "JNI/JVM compatibility API for the Roblox Android runtime"
+name = "roblox-abi"
+description = "Bionic and libc ABI compatibility for the Roblox Android runtime"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 build = "build.rs"
-
-[dependencies]
-roblox-linker = { path = "../linker" }
 
 [lints.rust]
 unsafe_code = "allow"

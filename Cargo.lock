@@ -58,6 +58,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "roblox-abi"
+version = "0.1.0"
+
+[[package]]
 name = "roblox-jni"
 version = "0.1.0"
 dependencies = [
@@ -75,6 +79,7 @@ dependencies = [
 name = "roblox-runtime"
 version = "0.1.0"
 dependencies = [
+ "roblox-abi",
  "roblox-jni",
  "roblox-linker",
  "serde_json",

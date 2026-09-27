@@ -45,6 +45,7 @@ fn main() {
         .build();
 
     println!("cargo:rustc-link-search=native={}/lib", dst.display());
+    println!("cargo:root={}", dst.display());
     println!("cargo:rustc-link-lib=static=cordial_linker_shim");
     println!("cargo:rustc-link-lib=static=cordial_jni_shim");
     println!("cargo:rustc-link-lib=static=cordial_liblog");
