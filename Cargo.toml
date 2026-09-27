@@ -1,10 +1,31 @@
 [workspace]
+    default-members=["."]
+    members=[".", "crates/jni", "crates/linker"]
     resolver="3"
 
     [workspace.package]
         edition="2024"
-        name="roblox-runtime"
+        license="GPL-3.0-or-later"
         version="0.1.0"
+
+[package]
+    description="Embeddable Roblox Android runtime for Linux"
+    edition.workspace=true
+    license.workspace=true
+    name="roblox-runtime"
+    version.workspace=true
+
+[dependencies]
+    roblox-jni={path="crates/jni"}
+    roblox-linker={path="crates/linker"}
+    serde_json="1"
+
+[lints.rust]
+    unsafe_code="deny"
+    unsafe_op_in_unsafe_fn="deny"
+
+[lints.clippy]
+    undocumented_unsafe_blocks="warn"
 
 [profile.release]
     debug=true
