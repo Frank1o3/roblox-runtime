@@ -6,7 +6,7 @@
 // `getApplication()Landroid/app/Application;` (instance) and
 // `currentActivityThread()Landroid/app/ActivityThread;` (static) -- and both
 // are in `docs/analysis/unanswered-jni-observed.tsv`, which is not a class
-// dump but a capture of one real `CORDIAL_JNI_TRACE=ON` run that joined a game
+// dump but a capture of one real `RBX_RUNTIME_JNI_TRACE=ON` run that joined a game
 // and played until the 304 disconnect. So unlike most of the classes a fork's
 // wishlist names, this pair is not a guess: the engine's own native code
 // reaches for them on a real session, and today gets nothing back.

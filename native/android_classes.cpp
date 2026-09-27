@@ -81,7 +81,7 @@
 /// alphabetical order cannot rank the four booleans any more than it can the
 /// six ints.
 ///
-/// The rest came from `CORDIAL_TRACE_TEXT=1` on the Login screen at 1280x720,
+/// The rest came from `RBX_RUNTIME_TRACE_TEXT=1` on the Login screen at 1280x720,
 /// where two boxes were focused in turn:
 ///
 ///     x=470 y=297 w=340 h=22 fontSize=16 z5=0 i6=0 i7=1 textColor=0xffd5d5dd
@@ -129,7 +129,7 @@
 /// `yAlignment` and `font` is also why the naive alphabetical-ish reading put
 /// it at slot 7 and was wrong, noted above.
 ///
-/// `CORDIAL_TEXTBOX_FONT_SLOT` (see `font_slot` in
+/// `RBX_RUNTIME_TEXTBOX_FONT_SLOT` (see `font_slot` in
 /// `crates/cordial-runtime/src/android/editor_font.rs`) still defaults to 9
 /// and is kept rather than deleted: it is one env var now confirming a fact
 /// instead of covering for an unresolved one, and it stays useful if a future
@@ -244,16 +244,16 @@ void trace_textbox_info(const char* source, const CordialTextBoxInfo& i) {
 }
 } // namespace
 
-extern "C" void cordial_textbox_last_built(const CordialTextBoxInfo* info) {
+extern "C" void roblox_textbox_last_built(const CordialTextBoxInfo* info) {
     if (!info) return;
     std::lock_guard<std::mutex> lock(g_textbox_mutex);
     g_textbox_last_built = *info;
     g_textbox_last_built_known = true;
 }
 
-extern "C" void cordial_textbox_focused(long long handle, const char* text,
+extern "C" void roblox_textbox_focused(long long handle, const char* text,
                                         const CordialTextBoxInfo* info) {
-    const bool trace = getenv("CORDIAL_TRACE_TEXT") != nullptr;
+    const bool trace = getenv("RBX_RUNTIME_TRACE_TEXT") != nullptr;
     if (trace) {
         fprintf(stderr, "[cordial] textbox focused handle=%lld current=%zu bytes\n",
                 handle, text ? strlen(text) : 0);
@@ -290,8 +290,8 @@ extern "C" void cordial_textbox_focused(long long handle, const char* text,
     g_textbox_generation.fetch_add(1, std::memory_order_acq_rel);
 }
 
-extern "C" void cordial_textbox_blurred() {
-    if (getenv("CORDIAL_TRACE_TEXT")) {
+extern "C" void roblox_textbox_blurred() {
+    if (getenv("RBX_RUNTIME_TRACE_TEXT")) {
         fprintf(stderr, "[cordial] textbox blurred\n");
     }
     {
@@ -306,15 +306,15 @@ extern "C" void cordial_textbox_blurred() {
 
 /// The focused box's handle, or 0 when nothing is focused. A 0 here is why
 /// text must not be sent at all, rather than sent to handle 0.
-extern "C" long long cordial_textbox_handle() {
+extern "C" long long roblox_textbox_handle() {
     return g_textbox_handle.load(std::memory_order_acquire);
 }
 
-extern "C" unsigned cordial_textbox_generation() {
+extern "C" unsigned roblox_textbox_generation() {
     return g_textbox_generation.load(std::memory_order_acquire);
 }
 
-extern "C" unsigned cordial_textbox_property_generation() {
+extern "C" unsigned roblox_textbox_property_generation() {
     return g_textbox_property_generation.load(std::memory_order_acquire);
 }
 
@@ -323,8 +323,8 @@ extern "C" unsigned cordial_textbox_property_generation() {
 /// callback's own comment) gets no GTK call, no re-read of the box's
 /// geometry, and no lock beyond the atomic itself. The actual re-read
 /// happens on Cordial's own pump, the next time it looks.
-extern "C" void cordial_textbox_property_changed() {
-    if (getenv("CORDIAL_TRACE_TEXT")) {
+extern "C" void roblox_textbox_property_changed() {
+    if (getenv("RBX_RUNTIME_TRACE_TEXT")) {
         fprintf(stderr, "[cordial] textbox property changed, generation now %u\n",
                 g_textbox_property_generation.load(std::memory_order_relaxed) + 1);
     }
@@ -340,16 +340,16 @@ extern "C" void cordial_textbox_property_changed() {
 static std::atomic<unsigned> g_games_loaded{0};
 static std::atomic<long long> g_last_place{0};
 
-extern "C" void cordial_note_game_loaded(long long place_id) {
+extern "C" void roblox_note_game_loaded(long long place_id) {
     g_games_loaded.fetch_add(1, std::memory_order_release);
     g_last_place.store(place_id, std::memory_order_release);
 }
 
-extern "C" unsigned cordial_games_loaded(void) {
+extern "C" unsigned roblox_games_loaded(void) {
     return g_games_loaded.load(std::memory_order_acquire);
 }
 
-extern "C" long long cordial_last_place(void) {
+extern "C" long long roblox_last_place(void) {
     return g_last_place.load(std::memory_order_acquire);
 }
 
@@ -358,7 +358,7 @@ extern "C" long long cordial_last_place(void) {
 /// `*out` is left untouched rather than zeroed. A box at (0, 0) sized 0x0 is
 /// indistinguishable from a box Cordial was never told about, and only one of
 /// those is worth drawing an editor for.
-extern "C" int cordial_textbox_info(CordialTextBoxInfo* out) {
+extern "C" int roblox_textbox_info(CordialTextBoxInfo* out) {
     if (!out) return 0;
     std::lock_guard<std::mutex> lock(g_textbox_mutex);
     if (!g_textbox_info_known) return 0;
@@ -370,12 +370,12 @@ extern "C" int cordial_textbox_info(CordialTextBoxInfo* out) {
 /// the order `NativeTextBoxInfo.<init>` takes them.
 ///
 /// It exists because the obvious test — hand a Rust-built struct to
-/// `cordial_textbox_focused` and read it back — proves only that `memcpy`
+/// `roblox_textbox_focused` and read it back — proves only that `memcpy`
 /// works. That version was written first and passed with the Rust mirror
 /// deliberately shifted by one field, which is precisely the bug it was meant
 /// to catch. Naming the members on this side and naming them again on the
 /// other is what makes the two layouts have to agree.
-extern "C" void cordial_textbox_test_focus(long long handle, const char* text,
+extern "C" void roblox_textbox_test_focus(long long handle, const char* text,
                                            float s0, float s1, float s2, float s3,
                                            float s4, int s5, int s6, int s7, int s8,
                                            int s9, int s10, int s11, int s12, int s13,
@@ -396,12 +396,12 @@ extern "C" void cordial_textbox_test_focus(long long handle, const char* text,
     info.manual_focus_release = s12;
     info.text_wrapped = s13;
     info.z14 = s14;
-    cordial_textbox_focused(handle, text, &info);
+    roblox_textbox_focused(handle, text, &info);
 }
 
 /// Copy the focused box's current contents into `buf`. Returns the number of
 /// bytes written, not counting the NUL.
-extern "C" int cordial_textbox_text(char* buf, int n) {
+extern "C" int roblox_textbox_text(char* buf, int n) {
     if (!buf || n <= 0) return 0;
     std::lock_guard<std::mutex> lock(g_textbox_mutex);
     int len = static_cast<int>(g_textbox_text.size());
@@ -582,7 +582,7 @@ public:
     /// parameter of the Java constructor. The trace is the authority here
     /// because it prints the descriptor the engine looked up.
     ///
-    /// `CORDIAL_JNI_TRACE=1 cargo build` is what makes that visible, and it is
+    /// `RBX_RUNTIME_JNI_TRACE=1 cargo build` is what makes that visible, and it is
     /// the tool to reach for whenever a hook silently does nothing.
     static std::shared_ptr<NativeTextBoxInfo> init(
         ENV*, Class*, jfloat f0, jfloat f1, jfloat f2, jfloat f3, jfloat f4,
@@ -600,7 +600,7 @@ public:
             manual_focus_release ? 1 : 0, text_wrapped ? 1 : 0, z14 ? 1 : 0,
         };
         o->spec_known = true;
-        cordial_textbox_last_built(&o->spec);
+        roblox_textbox_last_built(&o->spec);
         return o;
     }
 
@@ -643,7 +643,7 @@ bool g_identity_under13 = false;
 bool g_identity_subscription = false;
 
 // Atomic rather than under `g_identity_mutex`: the login sink calls back into
-// `cordial_identity_publish`, which takes that mutex, so reading the pointer
+// `roblox_identity_publish`, which takes that mutex, so reading the pointer
 // under it would deadlock the first time anybody signed in.
 std::atomic<void (*)(const char*)> g_identity_login_sink{nullptr};
 std::atomic<void (*)()> g_identity_logout_sink{nullptr};
@@ -698,7 +698,7 @@ bool identity_known() {
     return g_identity_known;
 }
 
-/// `CORDIAL_TRACE_IDENTITY=1`: name each mirror the engine asks, and never the
+/// `RBX_RUNTIME_TRACE_IDENTITY=1`: name each mirror the engine asks, and never the
 /// answer.
 ///
 /// This exists because filling the mirrors in was not enough on its own and
@@ -707,7 +707,7 @@ bool identity_known() {
 /// same symptom, which is a landing page. It reports the *field*, and whether an
 /// identity was known at the time; a username or a user id never reaches it.
 void trace_identity(const char* field) {
-    static const bool on = getenv("CORDIAL_TRACE_IDENTITY") != nullptr;
+    static const bool on = getenv("RBX_RUNTIME_TRACE_IDENTITY") != nullptr;
     if (!on) return;
     fprintf(stderr, "[cordial] identity asked: %s (%s)\n", field,
             identity_known() ? "signed in" : "nobody");
@@ -715,7 +715,7 @@ void trace_identity(const char* field) {
 
 /// What Cordial answers when the engine asks which platform it is running on.
 ///
-/// It follows the profile's device identity (`CORDIAL_DEVICE_PROFILE`, see
+/// It follows the profile's device identity (`RBX_RUNTIME_DEVICE_PROFILE`, see
 /// `device_identity()` in `native/init_params.cpp`): `pc-windows-11`, the
 /// default, answers `Windows`; `android-tablet` and `roblox-app` answer
 /// `Android`. All of those are the engine's own `Enum.Platform` tokens from
@@ -732,7 +732,7 @@ void trace_identity(const char* field) {
 ///
 /// **What this is not.** It is not established as the fix for Settings >
 /// Device Preferences lacking the theme selector: neither
-/// `CORDIAL_PLATFORM_NAME=Android` nor `=Windows` brought it back on 2026-09-14,
+/// `RBX_RUNTIME_PLATFORM_NAME=Android` nor `=Windows` brought it back on 2026-09-14,
 /// signed in, same page, override confirmed in the process environment. See
 /// docs/analysis/platform-identity.md for what was measured about the platform
 /// name and what was not.
@@ -746,14 +746,14 @@ void trace_identity(const char* field) {
 /// `Enum.Platform` until someone has printed `UserInputService:GetPlatform()`
 /// inside a running experience.
 ///
-/// `CORDIAL_PLATFORM_NAME=<name>` still overrides it, which is also the control:
-/// `CORDIAL_PLATFORM_NAME=Linux` is the previous client in the same session and
+/// `RBX_RUNTIME_PLATFORM_NAME=<name>` still overrides it, which is also the control:
+/// `RBX_RUNTIME_PLATFORM_NAME=Linux` is the previous client in the same session and
 /// the same binary, differing in exactly this string.
 const char* device_platform_name();  // native/init_params.cpp
 
 const char* platform_name() {
     static const std::string v = [] {
-        const char* e = getenv("CORDIAL_PLATFORM_NAME");
+        const char* e = getenv("RBX_RUNTIME_PLATFORM_NAME");
         return (e && *e) ? std::string(e) : std::string(device_platform_name());
     }();
     return v.c_str();
@@ -779,7 +779,7 @@ public:
         // never completed is otherwise invisible: the pump keeps running, the
         // window keeps presenting the place it was already on, and the user is
         // left looking at a screen that simply never changes.
-        cordial_note_game_loaded(static_cast<long long>(place_id));
+        roblox_note_game_loaded(static_cast<long long>(place_id));
     }
 
     static std::shared_ptr<DeviceStaticParams> getDeviceStaticParams(ENV*, Class*) {
@@ -838,14 +838,14 @@ public:
         // null object means the engine had nothing to give, while an object
         // whose spec is unknown means our `<init>` hook never matched and the
         // fourteen values went past us.
-        if (getenv("CORDIAL_TRACE_TEXT") != nullptr) {
+        if (getenv("RBX_RUNTIME_TRACE_TEXT") != nullptr) {
             fprintf(stderr, "[cordial] showKeyboard: info=%s spec_known=%s\n",
                     info ? "object" : "NULL",
                     info ? (info->spec_known ? "true" : "false") : "n/a");
         }
-        cordial_textbox_focused(handle, text.c_str(), spec);
+        roblox_textbox_focused(handle, text.c_str(), spec);
     }
-    static void hideKeyboard(ENV*, Class*) { cordial_textbox_blurred(); }
+    static void hideKeyboard(ENV*, Class*) { roblox_textbox_blurred(); }
 
     // In-app purchases go through Google Play Billing, which does not exist here.
     // Silently doing nothing is the honest behaviour: the alternative is
@@ -896,19 +896,19 @@ public:
     static void onLuaTextBoxChangedCallback(ENV*, Class*, std::shared_ptr<String>) {}
     // Does not arrive on Cordial's GTK main loop, or even on the engine's
     // main thread -- confirmed 2026-09-16 by logging `gettid()` and the
-    // calling thread's `pthread_getname_np` name under `CORDIAL_TRACE_TEXT=1`
+    // calling thread's `pthread_getname_np` name under `RBX_RUNTIME_TRACE_TEXT=1`
     // while cycling fullscreen with a Create Account username field focused
     // (a resize is what the box's own responsive layout reacts to). Both
     // firings printed the same tid, named `RBX Worker A` -- one of the
     // engine's own job-system pool threads, not `Main` and not anything
     // Cordial spawns. That is exactly why this only bumps an atomic rather
     // than re-reading geometry or touching GTK here:
-    // `cordial_textbox_property_changed` does no engine work and takes no
+    // `roblox_textbox_property_changed` does no engine work and takes no
     // lock beyond the counter itself, and the actual re-read happens later,
     // on Cordial's own pump, which is the only thread anything here may
     // safely call into GTK from.
     static void onLuaTextBoxPropertyChangedCallback(ENV*, Class*) {
-        cordial_textbox_property_changed();
+        roblox_textbox_property_changed();
     }
     static void listenToMotionEvents(ENV*, Class*, std::shared_ptr<String>) {}
     static void screenOrientationChanged(ENV*, Class*, jint) {}
@@ -1218,13 +1218,13 @@ public:
 /// See docs/design/instances-and-launch.md §4.
 /// Set from Rust, which is the only side that knows which profile is active.
 ///
-/// Empty until `cordial_set_files_dir` runs, which is the state the fallback
+/// Empty until `roblox_set_files_dir` runs, which is the state the fallback
 /// below exists for.
 std::string g_files_dir;
 
 const char* files_dir() {
     static const std::string dir = [] {
-        if (const char* override = getenv("CORDIAL_FILES_DIR")) {
+        if (const char* override = getenv("RBX_RUNTIME_FILES_DIR")) {
             return std::string(override);
         }
         // What Rust passed to `nativeSetFilesDirectory`, when it has.
@@ -1277,7 +1277,7 @@ const char* files_dir() {
 /// **`files_dir()` latches on first use**, so this has to run before anything
 /// asks. Rust calls it beside `nativeSetFilesDirectory`, with the same value, so
 /// the engine and the framework layer cannot disagree about where files live.
-extern "C" void cordial_set_files_dir(const char* dir) {
+extern "C" void roblox_set_files_dir(const char* dir) {
     g_files_dir = dir ? dir : "";
 }
 
@@ -1465,7 +1465,7 @@ void register_battery_classes(jnivm::ENV* env);
 /// and again on every `DID_LOG_IN`.
 ///
 /// Copies out of both pointers before returning, so the caller may free them.
-extern "C" void cordial_identity_publish(long long user_id, const char* username,
+extern "C" void roblox_identity_publish(long long user_id, const char* username,
                                          const char* display_name, long long membership_type,
                                          int is_under13, int has_subscription) {
     std::lock_guard<std::mutex> lock(cordial::g_identity_mutex);
@@ -1483,7 +1483,7 @@ extern "C" void cordial_identity_publish(long long user_id, const char* username
 /// Everything is reset, not just the id. A leftover username with a zeroed id
 /// is a self-contradicting client, and the engine reads the two through
 /// different calls at different times, so it would see exactly that.
-extern "C" void cordial_identity_clear() {
+extern "C" void roblox_identity_clear() {
     std::lock_guard<std::mutex> lock(cordial::g_identity_mutex);
     cordial::g_identity_user_id = 0;
     cordial::g_identity_username.clear();
@@ -1498,12 +1498,12 @@ extern "C" void cordial_identity_clear() {
 /// clear them with null.
 ///
 /// Separate from class registration so the control run — same binary,
-/// `CORDIAL_SKIP_IDENTITY=1` — differs in exactly whether anything is
+/// `RBX_RUNTIME_SKIP_IDENTITY=1` — differs in exactly whether anything is
 /// listening, rather than in whether the engine's callback resolves at all.
-/// That is the same split `cordial_cookies_set_host_sink` makes, and for the
+/// That is the same split `roblox_cookies_set_host_sink` makes, and for the
 /// same reason: a behavioural difference must not be confusable with a
 /// registration failure.
-extern "C" void cordial_identity_set_sinks(void (*on_login)(const char*),
+extern "C" void roblox_identity_set_sinks(void (*on_login)(const char*),
                                            void (*on_logout)()) {
     cordial::g_identity_login_sink.store(on_login, std::memory_order_release);
     cordial::g_identity_logout_sink.store(on_logout, std::memory_order_release);
@@ -1514,7 +1514,7 @@ extern "C" void cordial_identity_set_sinks(void (*on_login)(const char*),
 /// Same split as the two above: registration is unconditional and the sink is
 /// what decides whether anything listens, so "nobody was listening" can never
 /// be mistaken for "the engine never called".
-extern "C" void cordial_app_ready_set_sink(void (*on_ready)(const char*)) {
+extern "C" void roblox_app_ready_set_sink(void (*on_ready)(const char*)) {
     cordial::g_app_ready_sink.store(on_ready, std::memory_order_release);
 }
 
@@ -1930,7 +1930,7 @@ void register_permission_checks(ENV* env) {
 
 } // namespace cordial
 
-extern "C" void cordial_register_android_classes(void* env_ptr) {
+extern "C" void roblox_register_android_classes(void* env_ptr) {
     auto* env = static_cast<jnivm::ENV*>(env_ptr);
     if (!env) {
         return;
@@ -1955,14 +1955,14 @@ extern "C" void cordial_register_android_classes(void* env_ptr) {
     cordial::register_local_storage_classes(env);
     cordial::register_platform_classes(env);
     cordial::register_battery_classes(env);
-    if (getenv("CORDIAL_JNI_TRACE")) {
+    if (getenv("RBX_RUNTIME_JNI_TRACE")) {
         fprintf(stderr, "[classes] Cordial's Java side registered\n");
     }
 }
 
 // ------------------------------------------------- asking the engine directly
 //
-// Down here rather than beside `cordial_textbox_info` because it needs
+// Down here rather than beside `roblox_textbox_info` because it needs
 // `cordial::NativeTextBoxInfo`, which is defined above and cannot be
 // forward-declared usefully.
 
@@ -1992,8 +1992,8 @@ jnivm::ENV* process_env();
 /// Returns 1 with `*out` filled, 0 when the engine answered null — which it
 /// does for the whole of the sign-in page — and -1 on error. **A 0 is not a
 /// zeroed box:** `*out` is left untouched, for the reason
-/// `cordial_textbox_info` gives at more length.
-extern "C" int cordial_textbox_info_now(void* fn, CordialTextBoxInfo* out,
+/// `roblox_textbox_info` gives at more length.
+extern "C" int roblox_textbox_info_now(void* fn, CordialTextBoxInfo* out,
                                         char* err, size_t err_len) {
     using Call = jobject (*)(JNIEnv*, jobject);
     auto* env = cordial::process_env();
@@ -2017,7 +2017,7 @@ extern "C" int cordial_textbox_info_now(void* fn, CordialTextBoxInfo* out,
         auto* jni = env->GetJNIEnv();
         auto cls = env->GetClass("com/roblox/engine/jni/NativeGLInterface");
         // `to_jni` parks every object it touches in the current local frame --
-        // the same unbounded growth `cordial_game_activity_touch` documents.
+        // the same unbounded growth `roblox_game_activity_touch` documents.
         jni->PushLocalFrame(16);
         LocalFrame frame{jni};
         jobject r = reinterpret_cast<Call>(fn)(

@@ -89,26 +89,26 @@ pub fn function_overrides() -> Vec<(&'static str, *mut c_void)> {
     // OpenSL ES. Data symbols, so a missing one fails the DT_NEEDED walk rather
     // than the first audio call — see `opensles_overrides`.
     v.extend(opensles_overrides());
-    // `pthread_create`, forwarded untouched unless `CORDIAL_TRACE_THREADS=1` —
+    // `pthread_create`, forwarded untouched unless `RBX_RUNTIME_TRACE_THREADS=1` —
     // see `thread_overrides` and `native/thread_trace.cpp`.
     v.extend(thread_overrides());
-    if std::env::var_os("CORDIAL_TRACE_PATHS").is_some() {
+    if std::env::var_os("RBX_RUNTIME_TRACE_PATHS").is_some() {
         unsafe extern "C" {
-            fn cordial_set_path_trace(on: c_int);
+            fn roblox_set_path_trace(on: c_int);
         }
         // SAFETY: sets one bool in system_paths.cpp.
-        unsafe { cordial_set_path_trace(1) };
+        unsafe { roblox_set_path_trace(1) };
     }
-    if std::env::var_os("CORDIAL_TRACE_THREADS").is_some() {
+    if std::env::var_os("RBX_RUNTIME_TRACE_THREADS").is_some() {
         unsafe extern "C" {
-            fn cordial_set_thread_trace(on: c_int);
+            fn roblox_set_thread_trace(on: c_int);
         }
         // SAFETY: sets one bool in thread_trace.cpp.
-        unsafe { cordial_set_thread_trace(1) };
+        unsafe { roblox_set_thread_trace(1) };
     }
     // A silent abort costs more debugging time than these wrappers cost anything.
     v.extend(trace::always_on());
-    if std::env::var_os("CORDIAL_TRACE").is_some() {
+    if std::env::var_os("RBX_RUNTIME_TRACE").is_some() {
         trace::enable();
         v.extend(trace::verbose());
     }
@@ -127,25 +127,25 @@ pub fn data_overrides() -> Vec<(&'static str, *mut c_void)> {
 }
 
 unsafe extern "C" {
-    #[link_name = "cordial_legacy_fflush"]
+    #[link_name = "roblox_legacy_fflush"]
     fn legacy_fflush(f: *mut c_void) -> c_int;
-    #[link_name = "cordial_legacy_fclose"]
+    #[link_name = "roblox_legacy_fclose"]
     fn legacy_fclose(f: *mut c_void) -> c_int;
-    #[link_name = "cordial_legacy_fseek"]
+    #[link_name = "roblox_legacy_fseek"]
     fn legacy_fseek(f: *mut c_void, off: i64, whence: c_int) -> c_int;
-    #[link_name = "cordial_legacy_ftell"]
+    #[link_name = "roblox_legacy_ftell"]
     fn legacy_ftell(f: *mut c_void) -> i64;
-    #[link_name = "cordial_legacy_fputs"]
+    #[link_name = "roblox_legacy_fputs"]
     fn legacy_fputs(s: *const c_char, f: *mut c_void) -> c_int;
-    #[link_name = "cordial_legacy_setvbuf"]
+    #[link_name = "roblox_legacy_setvbuf"]
     fn legacy_setvbuf(f: *mut c_void, buf: *mut c_char, mode: c_int, size: usize) -> c_int;
-    #[link_name = "cordial_legacy_fread"]
+    #[link_name = "roblox_legacy_fread"]
     fn legacy_fread(p: *mut c_void, sz: usize, n: usize, f: *mut c_void) -> usize;
-    #[link_name = "cordial_legacy_fwrite"]
+    #[link_name = "roblox_legacy_fwrite"]
     fn legacy_fwrite(p: *const c_void, sz: usize, n: usize, f: *mut c_void) -> usize;
-    #[link_name = "cordial_legacy_fprintf"]
+    #[link_name = "roblox_legacy_fprintf"]
     fn legacy_fprintf(f: *mut c_void, fmt: *const c_char, ...) -> c_int;
-    #[link_name = "cordial_legacy_vfprintf"]
+    #[link_name = "roblox_legacy_vfprintf"]
     fn legacy_vfprintf(f: *mut c_void, fmt: *const c_char, ap: *mut c_void) -> c_int;
 }
 
@@ -175,12 +175,12 @@ static LEGACY_SF: [[u8; LEGACY_FILE_SIZE]; 3] = [[0; LEGACY_FILE_SIZE]; 3];
 /// number nobody can derive twice reliably, and two copies that drift would send
 /// a legacy write to an address a third of a FILE off the stream it meant.
 #[unsafe(no_mangle)]
-pub extern "C" fn cordial_legacy_sf_base() -> *const u8 {
+pub extern "C" fn roblox_legacy_sf_base() -> *const u8 {
     std::ptr::addr_of!(LEGACY_SF) as *const u8
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn cordial_legacy_sf_stride() -> usize {
+pub extern "C" fn roblox_legacy_sf_stride() -> usize {
     LEGACY_FILE_SIZE
 }
 
@@ -475,7 +475,7 @@ extern "C" fn system_property_get(name: *const c_char, value: *mut c_char) -> c_
         .map(|(_, v)| *v)
         .unwrap_or("");
 
-    // `CORDIAL_TRACE_PROPS=1` names every property the engine asks for and what
+    // `RBX_RUNTIME_TRACE_PROPS=1` names every property the engine asks for and what
     // it was told.
     //
     // An unknown key returns the empty string, and an empty string handed to
@@ -484,7 +484,7 @@ extern "C" fn system_property_get(name: *const c_char, value: *mut c_char) -> c_
     // construction on exactly that shape -- three `stat("")` in a row -- and
     // system properties are one of the few things readable that early on
     // Android and absent here. See docs/analysis/flag-init.md §26.
-    if std::env::var_os("CORDIAL_TRACE_PROPS").is_some() {
+    if std::env::var_os("RBX_RUNTIME_TRACE_PROPS").is_some() {
         eprintln!(
             "[props] {key} = {}",
             if found.is_empty() {
@@ -555,12 +555,12 @@ pub fn liblog_overrides() -> Vec<(&'static str, *mut c_void)> {
         addr: *mut c_void,
     }
     unsafe extern "C" {
-        fn cordial_liblog_symbols(count: *mut usize) -> *const Symbol;
+        fn roblox_liblog_symbols(count: *mut usize) -> *const Symbol;
     }
 
     let mut count = 0usize;
     // SAFETY: the table is a static in liblog.cpp and outlives the process.
-    let table = unsafe { cordial_liblog_symbols(&mut count) };
+    let table = unsafe { roblox_liblog_symbols(&mut count) };
     if table.is_null() {
         return Vec::new();
     }
@@ -599,12 +599,12 @@ pub fn opensles_overrides() -> Vec<(&'static str, *mut c_void)> {
         addr: *mut c_void,
     }
     unsafe extern "C" {
-        fn cordial_opensles_symbols(count: *mut usize) -> *const Symbol;
+        fn roblox_opensles_symbols(count: *mut usize) -> *const Symbol;
     }
 
     let mut count = 0usize;
     // SAFETY: the table is a static in opensles.cpp and outlives the process.
-    let table = unsafe { cordial_opensles_symbols(&mut count) };
+    let table = unsafe { roblox_opensles_symbols(&mut count) };
     if table.is_null() {
         return Vec::new();
     }
@@ -622,7 +622,7 @@ pub fn opensles_overrides() -> Vec<(&'static str, *mut c_void)> {
 
 // -------------------------------------------------------------------- AAudio
 
-/// Whether `CORDIAL_AUDIO` selected an AAudio mode. True for an unset
+/// Whether `RBX_RUNTIME_AUDIO` selected an AAudio mode. True for an unset
 /// variable: AAudio is the default.
 ///
 /// Read from `native/aaudio.cpp` rather than from `std::env` here so that
@@ -634,25 +634,25 @@ pub fn opensles_overrides() -> Vec<(&'static str, *mut c_void)> {
 /// it ran and did not.
 pub fn aaudio_selected() -> bool {
     unsafe extern "C" {
-        fn cordial_audio_backend_is_aaudio() -> c_int;
+        fn roblox_audio_backend_is_aaudio() -> c_int;
     }
     // SAFETY: reads a process-wide `static` decided once in aaudio.cpp.
-    unsafe { cordial_audio_backend_is_aaudio() != 0 }
+    unsafe { roblox_audio_backend_is_aaudio() != 0 }
 }
 
 /// Prints which audio backend is in force, during startup.
 ///
-/// `CORDIAL_AUDIO` was described in conversation as the intended design and
+/// `RBX_RUNTIME_AUDIO` was described in conversation as the intended design and
 /// then tried on a live run before it existed, where it was silently ignored.
 /// That is indistinguishable from a feature that did nothing, so the switch
 /// announces itself rather than leaving the reader to infer it from whether
 /// sound comes out.
 pub fn announce_audio_backend() {
     unsafe extern "C" {
-        fn cordial_audio_backend_announce();
+        fn roblox_audio_backend_announce();
     }
     // SAFETY: no arguments, no return; writes one line to stderr.
-    unsafe { cordial_audio_backend_announce() }
+    unsafe { roblox_audio_backend_announce() }
 }
 
 /// AAudio, implemented in `native/aaudio.cpp` over
@@ -667,7 +667,7 @@ pub fn announce_audio_backend() {
 ///
 /// So this is registered the way `android::vulkan` and `mimalloc_lib` are, as
 /// a virtual library of its own — by default, since 2026-08-22, with
-/// `CORDIAL_AUDIO=java` the way back to FMOD's Java `AudioDevice` path.
+/// `RBX_RUNTIME_AUDIO=java` the way back to FMOD's Java `AudioDevice` path.
 pub fn aaudio_overrides() -> Vec<(&'static str, *mut c_void)> {
     #[repr(C)]
     struct Symbol {
@@ -675,12 +675,12 @@ pub fn aaudio_overrides() -> Vec<(&'static str, *mut c_void)> {
         addr: *mut c_void,
     }
     unsafe extern "C" {
-        fn cordial_aaudio_symbols(count: *mut usize) -> *const Symbol;
+        fn roblox_aaudio_symbols(count: *mut usize) -> *const Symbol;
     }
 
     let mut count = 0usize;
     // SAFETY: the table is a static in aaudio.cpp and outlives the process.
-    let table = unsafe { cordial_aaudio_symbols(&mut count) };
+    let table = unsafe { roblox_aaudio_symbols(&mut count) };
     if table.is_null() {
         return Vec::new();
     }
@@ -773,12 +773,12 @@ pub fn system_path_overrides() -> Vec<(&'static str, *mut c_void)> {
         addr: *mut c_void,
     }
     unsafe extern "C" {
-        fn cordial_system_symbols(count: *mut usize) -> *const Symbol;
+        fn roblox_system_symbols(count: *mut usize) -> *const Symbol;
     }
 
     let mut count = 0usize;
     // SAFETY: the table is a static in system_paths.cpp and outlives the process.
-    let table = unsafe { cordial_system_symbols(&mut count) };
+    let table = unsafe { roblox_system_symbols(&mut count) };
     if table.is_null() {
         return Vec::new();
     }
@@ -809,12 +809,12 @@ pub fn thread_overrides() -> Vec<(&'static str, *mut c_void)> {
         addr: *mut c_void,
     }
     unsafe extern "C" {
-        fn cordial_thread_symbols(count: *mut usize) -> *const Symbol;
+        fn roblox_thread_symbols(count: *mut usize) -> *const Symbol;
     }
 
     let mut count = 0usize;
     // SAFETY: the table is a static in thread_trace.cpp and outlives the process.
-    let table = unsafe { cordial_thread_symbols(&mut count) };
+    let table = unsafe { roblox_thread_symbols(&mut count) };
     if table.is_null() {
         return Vec::new();
     }
@@ -844,12 +844,12 @@ pub fn netdb_overrides() -> Vec<(&'static str, *mut c_void)> {
         addr: *mut c_void,
     }
     unsafe extern "C" {
-        fn cordial_netdb_symbols(count: *mut usize) -> *const Symbol;
+        fn roblox_netdb_symbols(count: *mut usize) -> *const Symbol;
     }
 
     let mut count = 0usize;
     // SAFETY: the table is a static in netdb_compat.cpp and outlives the process.
-    let table = unsafe { cordial_netdb_symbols(&mut count) };
+    let table = unsafe { roblox_netdb_symbols(&mut count) };
     if table.is_null() {
         return Vec::new();
     }

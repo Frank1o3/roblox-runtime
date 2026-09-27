@@ -58,7 +58,7 @@
 // `openWindow`, and a second subscriber going through those same three
 // globals would not add a subscription, it would silently overwrite
 // clipboard's, exactly the way registering a class twice under this same
-// engine already did once. `cordial_messagebus_subscribe` below is keyed by
+// engine already did once. `roblox_messagebus_subscribe` below is keyed by
 // message id — a callback and a `Connection` per id, in a map, so clipboard's
 // subscription and any other module's live independently. Nothing about
 // clipboard's own behaviour changes; it is now one caller of a shared
@@ -106,7 +106,7 @@ struct Subscription {
     std::atomic<long long> connection_ptr{0};
 };
 
-/// One entry per message id ever passed to `cordial_messagebus_subscribe`.
+/// One entry per message id ever passed to `roblox_messagebus_subscribe`.
 ///
 /// A map rather than a single slot: see the file comment for the bug a single
 /// slot causes as soon as a second subscriber exists. Guarded by a mutex
@@ -137,7 +137,7 @@ Subscription& subscription_for(const std::string& message_id) {
 }
 
 bool trace() {
-    return getenv("CORDIAL_TRACE_CLIPBOARD") != nullptr;
+    return getenv("RBX_RUNTIME_TRACE_CLIPBOARD") != nullptr;
 }
 
 } // namespace
@@ -157,7 +157,7 @@ bool trace() {
 ///
 /// One instance of this class exists per subscription, not per class — that
 /// is what makes the map above unnecessary on the delivery path. `sink` and
-/// `message_id` are set once, on the instance `cordial_messagebus_subscribe`
+/// `message_id` are set once, on the instance `roblox_messagebus_subscribe`
 /// creates, before that instance is ever handed to `doSubscribeRaw`; `run` is
 /// hooked once for the class and reads them back off whichever instance the
 /// bus calls it on, which is `self` below because
@@ -402,7 +402,7 @@ static std::vector<std::shared_ptr<MessageBusRequestHandlerAsyncRaw>>& async_req
 /// overwrites the first registration, which is the exact mistake this file's
 /// header describes happening once already. Every subscriber, clipboard
 /// included, shares this one registration and gets its own `Subscription`
-/// through `cordial_messagebus_subscribe` instead.
+/// through `roblox_messagebus_subscribe` instead.
 void register_clipboard_classes(jnivm::ENV* env) {
     MessageBusRawCallback::Register(env);
     MessageBusConnection::Register(env);
@@ -419,7 +419,7 @@ extern "C" {
 /// One callback object and one `Connection` are created and kept alive per
 /// `message_id`, looked up through `cordial::subscription_for`, rather than in
 /// the single set of globals this file used to hold. `sink` may be null: that
-/// is the control case a run with `CORDIAL_SKIP_CLIPBOARD=1` still exercises —
+/// is the control case a run with `RBX_RUNTIME_SKIP_CLIPBOARD=1` still exercises —
 /// registration and the subscribe call both still happen, and only whether
 /// anything acts on what comes back differs. Installed on the callback object
 /// before the subscribing call, not after: the bus may deliver a message
@@ -436,7 +436,7 @@ extern "C" {
 /// The class is passed where a receiver would go, which is what
 /// `deeplink.cpp`'s `publishRaw` caller already does for this same class and
 /// what works there.
-int cordial_messagebus_subscribe(void* fn, const char* message_id, void (*sink)(const char*),
+int roblox_messagebus_subscribe(void* fn, const char* message_id, void (*sink)(const char*),
                                  char* err, size_t err_len) {
     using Call = jobject (*)(JNIEnv*, jobject, jstring, jobject, jboolean);
     auto* env = cordial::process_env();
@@ -494,13 +494,13 @@ int cordial_messagebus_subscribe(void* fn, const char* message_id, void (*sink)(
 ///
 /// `fn` is `Java_com_roblox_universalapp_messagebus_MessageBus_setRequestHandlerRaw`.
 /// Note the arity: five, not four. The second parameter is the receiver, and
-/// the class goes there -- the same trick `cordial_messagebus_subscribe` and
+/// the class goes there -- the same trick `roblox_messagebus_subscribe` and
 /// `deeplink.cpp`'s `publishRaw` caller already rely on against this engine.
 ///
 /// Unlike a subscription this returns nothing, so there is no `Connection` to
 /// confirm it with. "Did not throw" is the whole of the available evidence,
 /// and the only real confirmation is a request arriving.
-extern "C" int cordial_messagebus_set_request_handler(
+extern "C" int roblox_messagebus_set_request_handler(
     void* fn, const char* protocol, const char* method,
     int (*sink)(const char*, char*, size_t), char* err, size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jstring, jstring, jobject);
@@ -540,11 +540,11 @@ extern "C" int cordial_messagebus_set_request_handler(
 /// `set_fn` is `setRequestHandlerAsyncRaw`, `publish_fn` is
 /// `publishProtocolMethodResponseRaw`, and `respond_fn` is
 /// `callResponseHandlerRaw`. All are exported natives on `MessageBus` and take
-/// the class as their receiver, like `cordial_messagebus_set_request_handler`.
+/// the class as their receiver, like `roblox_messagebus_set_request_handler`.
 /// The publish prototype is `(JNIEnv*, jobject, protocol, method, response,
 /// code, telemetry)`, matching Mocktail's public PermissionsProtocol bridge.
 /// "Did not throw" is again the whole of the evidence until a request arrives.
-extern "C" int cordial_messagebus_set_request_handler_async(
+extern "C" int roblox_messagebus_set_request_handler_async(
     void* set_fn, void* publish_fn, void* respond_fn, int dual_response,
     const char* protocol, const char* method,
     int (*sink)(const char*, char*, size_t), char* err, size_t err_len) {
@@ -587,12 +587,12 @@ extern "C" int cordial_messagebus_set_request_handler_async(
     }
 }
 
-/// The `long` inside the `Connection` a prior `cordial_messagebus_subscribe`
+/// The `long` inside the `Connection` a prior `roblox_messagebus_subscribe`
 /// for `message_id` returned, or 0 when that id was never subscribed or the
 /// engine handed back something this side could not read as a `Connection`.
-/// Feeds `cordial_messagebus_is_connected`; on its own it means only that a
+/// Feeds `roblox_messagebus_is_connected`; on its own it means only that a
 /// `Connection` came back at all.
-long long cordial_messagebus_connection_ptr(const char* message_id) {
+long long roblox_messagebus_connection_ptr(const char* message_id) {
     if (!message_id) {
         return 0;
     }
@@ -608,7 +608,7 @@ long long cordial_messagebus_connection_ptr(const char* message_id) {
 /// address. Writes 1 or 0 into `*out_connected`. Unchanged in shape from
 /// clipboard's original version: the address alone is what the native wants,
 /// so this does not need to know which message id it came from.
-int cordial_messagebus_is_connected(void* fn, long long ptr, int* out_connected, char* err,
+int roblox_messagebus_is_connected(void* fn, long long ptr, int* out_connected, char* err,
                                     size_t err_len) {
     using Call = jboolean (*)(JNIEnv*, jobject, jlong);
     auto* env = cordial::process_env();

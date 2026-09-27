@@ -98,7 +98,7 @@ struct CordialAAudioSymbol {
     void* address;
 };
 
-const CordialAAudioSymbol* cordial_aaudio_symbols(size_t* count);
+const CordialAAudioSymbol* roblox_aaudio_symbols(size_t* count);
 
 } // extern "C"
 
@@ -107,7 +107,7 @@ namespace {
 template <typename Function>
 Function symbol(const char* name) {
     size_t count = 0;
-    const CordialAAudioSymbol* symbols = cordial_aaudio_symbols(&count);
+    const CordialAAudioSymbol* symbols = roblox_aaudio_symbols(&count);
     for (size_t i = 0; i < count; ++i) {
         if (std::strcmp(symbols[i].name, name) == 0) {
             return reinterpret_cast<Function>(symbols[i].address);
@@ -519,7 +519,7 @@ void blocking_reads_remain_supported() {
 } // namespace
 
 int main() {
-    ::setenv("CORDIAL_AUDIO", "aaudio", 1);
+    ::setenv("RBX_RUNTIME_AUDIO", "aaudio", 1);
     callback_input_delivers_s16_frames_and_callback_stop_releases_capture();
     stop_from_inside_callback_does_not_self_join_or_leak_capture();
     callback_stop_closes_capture_before_a_blocked_callback_returns();

@@ -4,7 +4,7 @@ description = "AOSP bionic linker compatibility bindings for Roblox runtime"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-links = "cordial_linker_shim"
+links = "roblox_linker_shim"
 build = "build.rs"
 
 [lints.rust]

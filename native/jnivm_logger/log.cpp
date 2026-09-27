@@ -6,7 +6,7 @@
 #include <cstring>
 
 // `crate::unimplemented`'s C entry point. The codes match `Kind::from_code`.
-extern "C" void cordial_unimplemented_record(unsigned int kind, const char* detail);
+extern "C" void roblox_unimplemented_record(unsigned int kind, const char* detail);
 
 namespace {
 
@@ -27,7 +27,7 @@ constexpr const char* MARKER = "Constructed Unresolved symbol";
 // everything through keeps the behaviour the `#else` branch had, so turning the
 // logger on is not also a behaviour change nobody asked for.
 bool quiet() {
-    static const bool on = std::getenv("CORDIAL_JNI_QUIET") != nullptr;
+    static const bool on = std::getenv("RBX_RUNTIME_JNI_QUIET") != nullptr;
     return on;
 }
 
@@ -54,7 +54,7 @@ void debug(const char* tag, const char* format, ...) {
     // The whole reason this file exists. Everything else here is preserving
     // what the default macro already did.
     if (strstr(line, MARKER) != nullptr) {
-        cordial_unimplemented_record(KIND_JNI, line);
+        roblox_unimplemented_record(KIND_JNI, line);
     }
 }
 

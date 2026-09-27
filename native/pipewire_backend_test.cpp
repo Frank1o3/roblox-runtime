@@ -248,8 +248,8 @@ void a_null_fell_back_pointer_is_allowed() {
 /// that matters about it — that listing devices opens no capture stream — is
 /// what `a_capture_stream_holds_nothing_until_it_is_opened` above pins.
 void the_shells_device_list_survives_being_asked_for_nothing() {
-    assert(cordial_audio_sinks(nullptr) == 0);
-    cordial_audio_sinks_free(nullptr, 0);
+    assert(roblox_audio_sinks(nullptr) == 0);
+    roblox_audio_sinks_free(nullptr, 0);
     assert(cordial::audio::active_capture_streams() == 0);
     std::printf("ok: the_shells_device_list_survives_being_asked_for_nothing\n");
 }
@@ -269,7 +269,7 @@ void the_factory_always_returns_a_stream() {
     std::printf("ok: the_factory_always_returns_a_stream\n");
 }
 
-/// `CORDIAL_AUDIO_HOST` names a backend, falls back rather than failing, and is
+/// `RBX_RUNTIME_AUDIO_HOST` names a backend, falls back rather than failing, and is
 /// read exactly once.
 ///
 /// The once matters and is not tidiness: `host_backend_name` caches in a
@@ -283,9 +283,9 @@ void an_unknown_host_backend_falls_back_to_pipewire() {
     // and ALSA behind this name.
     const char* first = cordial::audio::host_backend_name();
     assert(std::strcmp(first, "pipewire") == 0);
-    ::setenv("CORDIAL_AUDIO_HOST", "something-that-does-not-exist", 1);
+    ::setenv("RBX_RUNTIME_AUDIO_HOST", "something-that-does-not-exist", 1);
     assert(std::strcmp(cordial::audio::host_backend_name(), first) == 0);
-    ::unsetenv("CORDIAL_AUDIO_HOST");
+    ::unsetenv("RBX_RUNTIME_AUDIO_HOST");
     std::printf("ok: an_unknown_host_backend_falls_back_to_pipewire\n");
 }
 

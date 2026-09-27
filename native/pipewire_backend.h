@@ -84,7 +84,7 @@ std::vector<DeviceInfo> enumerate_devices();
 /// `node.name` — `alsa_output.pci-0000_00_1f.3-...`, not an index and not a
 /// description.
 ///
-/// Read once from `CORDIAL_AUDIO_SINK`, which the shell sets from the Audio
+/// Read once from `RBX_RUNTIME_AUDIO_SINK`, which the shell sets from the Audio
 /// row in its settings. Empty is the ordinary state and means "follow
 /// whatever the session calls the default sink", *and keeps following it* —
 /// PipeWire moves a stream with no `PW_KEY_TARGET_OBJECT` when the default
@@ -100,7 +100,7 @@ std::vector<DeviceInfo> enumerate_devices();
 /// rename a device. `node.name` is the routing target `PW_KEY_TARGET_OBJECT`
 /// takes and the only one of the three that is meant to be persisted.
 ///
-/// One reader, here, on the same argument `aaudio.h` makes for `CORDIAL_AUDIO`:
+/// One reader, here, on the same argument `aaudio.h` makes for `RBX_RUNTIME_AUDIO`:
 /// each file calling `getenv` for itself is how a switch comes to mean two
 /// different things in one process.
 const std::string& configured_output_device();
@@ -249,10 +249,10 @@ public:
     virtual uint64_t silence_cycles() const = 0;
 };
 
-/// The host backend this run will use, named the way `CORDIAL_AUDIO_HOST`
+/// The host backend this run will use, named the way `RBX_RUNTIME_AUDIO_HOST`
 /// spells it. Read once, from one place, and announced at startup -- which was written here before it was true and became true on 2026-08-28, after a user set the variable, got silence, and had nothing to read that would tell them whether it had been seen.
 ///
-/// **A separate variable from `CORDIAL_AUDIO`, and ADR-023 says why.** That one
+/// **A separate variable from `RBX_RUNTIME_AUDIO`, and ADR-023 says why.** That one
 /// selects which *Android* API FMOD reaches Cordial through — AAudio, OpenSL,
 /// or FMOD's Java path — and every combination of those with a host backend is
 /// meaningful. One variable for two orthogonal axes is a variable nobody can
@@ -268,7 +268,7 @@ const char* effective_backend_name();
 /// Whether sound can come out on this host, by whichever backend was resolved.
 ///
 /// **The predicate a one-way door must ask.** Asking `pipewire_available()`
-/// instead is what made `CORDIAL_AUDIO_HOST` inert on the machines that needed
+/// instead is what made `RBX_RUNTIME_AUDIO_HOST` inert on the machines that needed
 /// it: the door closed on PipeWire's absence before the selector ever ran.
 bool host_backend_available();
 
@@ -298,11 +298,11 @@ bool alsa_available();
 /// An ALSA stream, or null on a build without the headers.
 std::unique_ptr<OutputStream> make_alsa_stream();
 
-/// Whether `/dev/dsp` (or `CORDIAL_AUDIO_DEVICE`) can be opened for playback.
+/// Whether `/dev/dsp` (or `RBX_RUNTIME_AUDIO_DEVICE`) can be opened for playback.
 ///
 /// **The probe opens the device**, which on most OSS drivers is exclusive, so
 /// asking briefly takes sound from whatever holds it. Cached, and only reached
-/// when `CORDIAL_AUDIO_HOST=oss` names it -- see `oss_backend.cpp`.
+/// when `RBX_RUNTIME_AUDIO_HOST=oss` names it -- see `oss_backend.cpp`.
 bool oss_available();
 
 /// An OSS output stream. `/dev/dsp` and three ioctls; no server, no library.
@@ -545,7 +545,7 @@ extern "C" {
 /// owned by the array they came in, and are valid until it is freed.
 struct CordialAudioSink {
     /// `node.name` — what gets stored in `shell.json` and handed back as
-    /// `CORDIAL_AUDIO_SINK`. Stable across replug; never shown to a user.
+    /// `RBX_RUNTIME_AUDIO_SINK`. Stable across replug; never shown to a user.
     const char* node_name;
     /// `node.description`, or `node.name` when the session gave no
     /// description. What the row displays.
@@ -563,9 +563,9 @@ struct CordialAudioSink {
 /// `enumerate_devices` gives.
 ///
 /// The caller owns the array and must hand it back to
-/// `cordial_audio_sinks_free`.
-size_t cordial_audio_sinks(CordialAudioSink** out);
+/// `roblox_audio_sinks_free`.
+size_t roblox_audio_sinks(CordialAudioSink** out);
 
-void cordial_audio_sinks_free(CordialAudioSink* sinks, size_t count);
+void roblox_audio_sinks_free(CordialAudioSink* sinks, size_t count);
 
 } // extern "C"

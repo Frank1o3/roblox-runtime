@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(cordial_native LANGUAGES C CXX)
+project(roblox_native LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -131,7 +131,7 @@ find_path(PULSE_INCLUDE_DIR pulse/pulseaudio.h)
 if(PULSE_INCLUDE_DIR AND NOT PULSE_INCLUDE_DIR MATCHES "linuxbrew|Cellar|homebrew")
   set(PULSE_FOUND TRUE)
   message(STATUS "PulseAudio backend: headers at ${PULSE_INCLUDE_DIR}; libpulse.so.0 will be "
-                  "dlopen'd at run time. Selected with CORDIAL_AUDIO_HOST=pulse.")
+                  "dlopen'd at run time. Selected with RBX_RUNTIME_AUDIO_HOST=pulse.")
 elseif(PULSE_INCLUDE_DIR)
   message(STATUS "PulseAudio backend: ignoring headers at ${PULSE_INCLUDE_DIR} because they are "
                   "not the system ones -- a Homebrew prefix here compiles against a different "
@@ -172,7 +172,7 @@ endif()
 # compiles identically on a tree with no
 # pipewire-devel, and honestly refuses every stream there, exactly as
 # `slCreateEngine` does.
-add_library(cordial_liblog STATIC
+add_library(roblox_liblog STATIC
   liblog.cpp system_paths.cpp netdb_compat.cpp opensles.cpp pipewire_backend.cpp
   pulse_backend.cpp alsa_backend.cpp oss_backend.cpp aaudio.cpp
   aaudio_input_callback.cpp thread_trace.cpp)
@@ -180,8 +180,8 @@ add_library(cordial_liblog STATIC
 # is its own honest "unavailable" arm, so the selector gets a truthful answer
 # rather than a link error. Only the define is conditional.
 if(PULSE_FOUND)
-  target_include_directories(cordial_liblog PRIVATE ${PULSE_INCLUDE_DIR})
-  target_compile_definitions(cordial_liblog PRIVATE CORDIAL_HAVE_PULSE=1)
+  target_include_directories(roblox_liblog PRIVATE ${PULSE_INCLUDE_DIR})
+  target_compile_definitions(roblox_liblog PRIVATE RBX_RUNTIME_HAVE_PULSE=1)
 endif()
 # ALSA, the third backend. Same rule as the two above: headers optional,
 # `libasound.so.2` dlopen'd and never linked, and the same refusal to trust
@@ -190,10 +190,10 @@ endif()
 # missing one.
 find_path(ALSA_INCLUDE_DIR alsa/asoundlib.h)
 if(ALSA_INCLUDE_DIR AND NOT ALSA_INCLUDE_DIR MATCHES "linuxbrew|Cellar|homebrew")
-  target_include_directories(cordial_liblog PRIVATE ${ALSA_INCLUDE_DIR})
-  target_compile_definitions(cordial_liblog PRIVATE CORDIAL_HAVE_ALSA=1)
+  target_include_directories(roblox_liblog PRIVATE ${ALSA_INCLUDE_DIR})
+  target_compile_definitions(roblox_liblog PRIVATE RBX_RUNTIME_HAVE_ALSA=1)
   message(STATUS "ALSA backend: headers at ${ALSA_INCLUDE_DIR}; libasound.so.2 will be "
-                  "dlopen'd at run time. Selected with CORDIAL_AUDIO_HOST=alsa.")
+                  "dlopen'd at run time. Selected with RBX_RUNTIME_AUDIO_HOST=alsa.")
 else()
   message(STATUS "ALSA backend: no usable alsa/asoundlib.h; building the honest "
                   "\"unavailable\" arm. Install alsa-lib-devel for it.")
@@ -206,19 +206,19 @@ endif()
 # ADR-023 deferred this on the grounds that Linux has not used OSS since ALSA
 # replaced it and the remaining users are on FreeBSD. Somebody asked for it, so
 # "nobody needs this" turned out to be a claim about who had spoken up. It is
-# opt-in behind CORDIAL_AUDIO_HOST=oss and is never selected for anybody who did
+# opt-in behind RBX_RUNTIME_AUDIO_HOST=oss and is never selected for anybody who did
 # not ask -- which matters more here than for the others, because /dev/dsp is
 # exclusive on most drivers.
 #
-# This block must stay *after* `add_library(cordial_liblog ...)`. Put before it
+# This block must stay *after* `add_library(roblox_liblog ...)`. Put before it
 # once, and `target_include_directories` fails on a target that does not exist
 # yet -- which reads as a problem with OSS rather than with where the lines sit.
 find_path(OSS_INCLUDE_DIR sys/soundcard.h)
 if(OSS_INCLUDE_DIR AND NOT OSS_INCLUDE_DIR MATCHES "linuxbrew|Cellar|homebrew")
-  target_include_directories(cordial_liblog PRIVATE ${OSS_INCLUDE_DIR})
-  target_compile_definitions(cordial_liblog PRIVATE CORDIAL_HAVE_OSS=1)
+  target_include_directories(roblox_liblog PRIVATE ${OSS_INCLUDE_DIR})
+  target_compile_definitions(roblox_liblog PRIVATE RBX_RUNTIME_HAVE_OSS=1)
   message(STATUS "OSS backend: sys/soundcard.h at ${OSS_INCLUDE_DIR}. Selected with "
-                  "CORDIAL_AUDIO_HOST=oss. /dev/dsp is exclusive on most drivers, so "
+                  "RBX_RUNTIME_AUDIO_HOST=oss. /dev/dsp is exclusive on most drivers, so "
                   "nothing else on the machine gets sound while it is held.")
 else()
   message(STATUS "OSS backend: no sys/soundcard.h; building the honest "
@@ -226,8 +226,8 @@ else()
 endif()
 
 if(PIPEWIRE_FOUND)
-  target_include_directories(cordial_liblog PRIVATE ${PIPEWIRE_INCLUDE_DIRS})
-  target_compile_definitions(cordial_liblog PRIVATE CORDIAL_HAVE_PIPEWIRE=1)
+  target_include_directories(roblox_liblog PRIVATE ${PIPEWIRE_INCLUDE_DIRS})
+  target_compile_definitions(roblox_liblog PRIVATE RBX_RUNTIME_HAVE_PIPEWIRE=1)
 
   # Checks pipewire_backend.cpp's buffer-queue fill logic (the underrun ->
   # silence rule in particular) without a live PipeWire session, a daemon, or
@@ -236,41 +236,41 @@ if(PIPEWIRE_FOUND)
   # rather than left for someone to remember to invoke separately: a check
   # that only runs when asked for is a check that silently stops running.
   # `pulse_backend.cpp` comes along because `pipewire_backend.cpp`'s factory
-  # now calls into it. Deliberately built here *without* `CORDIAL_HAVE_PULSE`,
+  # now calls into it. Deliberately built here *without* `RBX_RUNTIME_HAVE_PULSE`,
   # so the test exercises the arm that reports the backend unavailable -- which
   # is the arm every machine without pulseaudio-libs-devel will run, and the one
   # a fallback bug would hide in.
-  add_executable(cordial_pipewire_backend_test EXCLUDE_FROM_ALL
+  add_executable(roblox_pipewire_backend_test EXCLUDE_FROM_ALL
     pipewire_backend.cpp pulse_backend.cpp alsa_backend.cpp oss_backend.cpp
     pipewire_backend_test.cpp)
-  target_include_directories(cordial_pipewire_backend_test PRIVATE ${PIPEWIRE_INCLUDE_DIRS})
-  target_compile_definitions(cordial_pipewire_backend_test PRIVATE CORDIAL_HAVE_PIPEWIRE=1)
-  add_custom_command(TARGET cordial_pipewire_backend_test POST_BUILD
-    COMMAND cordial_pipewire_backend_test
+  target_include_directories(roblox_pipewire_backend_test PRIVATE ${PIPEWIRE_INCLUDE_DIRS})
+  target_compile_definitions(roblox_pipewire_backend_test PRIVATE RBX_RUNTIME_HAVE_PIPEWIRE=1)
+  add_custom_command(TARGET roblox_pipewire_backend_test POST_BUILD
+    COMMAND roblox_pipewire_backend_test
     COMMENT "Running pipewire_backend fill_pcm checks (no PipeWire session needed)")
-  add_dependencies(cordial_liblog cordial_pipewire_backend_test)
+  add_dependencies(roblox_liblog roblox_pipewire_backend_test)
 endif()
 
-add_executable(cordial_aaudio_input_callback_test EXCLUDE_FROM_ALL
+add_executable(roblox_aaudio_input_callback_test EXCLUDE_FROM_ALL
   aaudio_input_callback.cpp aaudio_input_callback_test.cpp)
-target_compile_options(cordial_aaudio_input_callback_test PRIVATE -UNDEBUG)
-add_custom_command(TARGET cordial_aaudio_input_callback_test POST_BUILD
-  COMMAND cordial_aaudio_input_callback_test
+target_compile_options(roblox_aaudio_input_callback_test PRIVATE -UNDEBUG)
+add_custom_command(TARGET roblox_aaudio_input_callback_test POST_BUILD
+  COMMAND roblox_aaudio_input_callback_test
   COMMENT "Running AAudio input callback lifecycle checks")
-add_dependencies(cordial_liblog cordial_aaudio_input_callback_test)
+add_dependencies(roblox_liblog roblox_aaudio_input_callback_test)
 
-add_executable(cordial_aaudio_input_test EXCLUDE_FROM_ALL
+add_executable(roblox_aaudio_input_test EXCLUDE_FROM_ALL
   aaudio.cpp aaudio_input_callback.cpp aaudio_input_test.cpp)
-target_compile_options(cordial_aaudio_input_test PRIVATE -UNDEBUG)
-add_custom_command(TARGET cordial_aaudio_input_test POST_BUILD
-  COMMAND cordial_aaudio_input_test
+target_compile_options(roblox_aaudio_input_test PRIVATE -UNDEBUG)
+add_custom_command(TARGET roblox_aaudio_input_test POST_BUILD
+  COMMAND roblox_aaudio_input_test
   COMMENT "Running AAudio callback and blocking input ABI checks")
-add_dependencies(cordial_liblog cordial_aaudio_input_test)
+add_dependencies(roblox_liblog roblox_aaudio_input_test)
 
-add_library(cordial_linker_shim STATIC shim.cpp)
-target_link_libraries(cordial_linker_shim PUBLIC linker)
+add_library(roblox_linker_shim STATIC shim.cpp)
+target_link_libraries(roblox_linker_shim PUBLIC linker)
 
-install(TARGETS cordial_linker_shim cordial_liblog linker ARCHIVE DESTINATION lib)
+install(TARGETS roblox_linker_shim roblox_liblog linker ARCHIVE DESTINATION lib)
 
 # JNI virtual machine. Roblox's native code calls into Java through 518 statically
 # registered natives and expects a JavaVM to call back into; libjnivm supplies both
@@ -291,14 +291,14 @@ set(JNIVM_ENABLE_DEBUG ON CACHE BOOL "" FORCE)
 #
 # So: off by default, and one flag to get it back when diagnosing.
 #
-#     cmake -DCORDIAL_JNI_TRACE=ON ...
+#     cmake -DRBX_RUNTIME_JNI_TRACE=ON ...
 #
 # `--dump-classes` remains available without it (that is JNIVM_ENABLE_DEBUG,
 # above, which costs nothing per call) and answers "what did Roblox reach for"
 # for most purposes. Reach for the trace when the question is "and what happened
 # when it did".
-option(CORDIAL_JNI_TRACE "Log every JNI call libjnivm handles (very slow)" OFF)
-set(JNIVM_ENABLE_TRACE ${CORDIAL_JNI_TRACE} CACHE BOOL "" FORCE)
+option(RBX_RUNTIME_JNI_TRACE "Log every JNI call libjnivm handles (very slow)" OFF)
+set(JNIVM_ENABLE_TRACE ${RBX_RUNTIME_JNI_TRACE} CACHE BOOL "" FORCE)
 set(JNIVM_ENABLE_TESTS OFF CACHE BOOL "" FORCE)
 set(JNIVM_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 
@@ -329,17 +329,17 @@ add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../third_party/libjnivm
 # (see its own header comment), so the Java audio surface builds identically
 # either way and reports an honestly empty device list on a tree that has no
 # backend behind it.
-add_library(cordial_jni_shim STATIC jni_shim.cpp android_classes.cpp game_activity.cpp init_params.cpp accessibility.cpp cookies.cpp audio_classes.cpp deeplink.cpp clipboard.cpp permissions_transport.cpp local_storage.cpp legacy_stdio.cpp platform_classes.cpp battery.cpp unanswered_classes.cpp)
-target_link_libraries(cordial_jni_shim PUBLIC jnivm)
+add_library(roblox_jni_shim STATIC jni_shim.cpp android_classes.cpp game_activity.cpp init_params.cpp accessibility.cpp cookies.cpp audio_classes.cpp deeplink.cpp clipboard.cpp permissions_transport.cpp local_storage.cpp legacy_stdio.cpp platform_classes.cpp battery.cpp unanswered_classes.cpp)
+target_link_libraries(roblox_jni_shim PUBLIC jnivm)
 
-add_executable(cordial_permissions_transport_test EXCLUDE_FROM_ALL
+add_executable(roblox_permissions_transport_test EXCLUDE_FROM_ALL
   permissions_transport.cpp permissions_transport_test.cpp)
-target_compile_options(cordial_permissions_transport_test PRIVATE -UNDEBUG)
-target_include_directories(cordial_permissions_transport_test PRIVATE
+target_compile_options(roblox_permissions_transport_test PRIVATE -UNDEBUG)
+target_include_directories(roblox_permissions_transport_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/libjnivm/include)
-add_custom_command(TARGET cordial_permissions_transport_test POST_BUILD
-  COMMAND cordial_permissions_transport_test
+add_custom_command(TARGET roblox_permissions_transport_test POST_BUILD
+  COMMAND roblox_permissions_transport_test
   COMMENT "Running PermissionsProtocol response transport checks")
-add_dependencies(cordial_jni_shim cordial_permissions_transport_test)
+add_dependencies(roblox_jni_shim roblox_permissions_transport_test)
 
-install(TARGETS cordial_jni_shim jnivm logger ARCHIVE DESTINATION lib)
+install(TARGETS roblox_jni_shim jnivm logger ARCHIVE DESTINATION lib)

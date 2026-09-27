@@ -13,7 +13,7 @@
 // 2026-09-23, `pthread.rs`'s own doc comment — so an `attr` built by the
 // engine's own bionic-compiled code and forwarded straight to the host's
 // `pthread_create` would have glibc read 8 bytes past what the engine
-// allocated. `cordial_pthread_attr_real` below resolves `attr` to the real,
+// allocated. `roblox_pthread_attr_real` below resolves `attr` to the real,
 // correctly-sized object behind `pthread.rs`'s own wrapper before it reaches
 // `::pthread_create`; on x86_64 that function does not exist and this file
 // changes nothing.
@@ -28,8 +28,8 @@
 // what it was actually asked to do, so it is also an answer to "what does it
 // do first" in every trace this produces.
 //
-// Gated behind `CORDIAL_TRACE_THREADS=1`, matching `CORDIAL_TRACE_PATHS` and
-// `CORDIAL_TRACE_PROPS`: off by default, and a plain `fprintf(stderr, …)` per
+// Gated behind `RBX_RUNTIME_TRACE_THREADS=1`, matching `RBX_RUNTIME_TRACE_PATHS` and
+// `RBX_RUNTIME_TRACE_PROPS`: off by default, and a plain `fprintf(stderr, …)` per
 // creation, not the `printf`-to-stdout libjnivm uses — §29's own instrument
 // warning about the two streams buffering differently under redirection
 // applies here as much as it did there.
@@ -122,15 +122,15 @@ void* trampoline(void* raw) {
 
 #if defined(__aarch64__)
 // Defined in crates/cordial-runtime/src/bionic/pthread.rs, aarch64 only —
-// see that file's own comment on `cordial_pthread_attr_real` for why this
+// see that file's own comment on `roblox_pthread_attr_real` for why this
 // call exists and what it would silently overrun without it.
-extern "C" const void* cordial_pthread_attr_real(const void* attr);
+extern "C" const void* roblox_pthread_attr_real(const void* attr);
 #endif
 
-extern "C" int cordial_pthread_create(pthread_t* thread, const pthread_attr_t* attr,
+extern "C" int roblox_pthread_create(pthread_t* thread, const pthread_attr_t* attr,
                                        void* (*start_routine)(void*), void* arg) {
 #if defined(__aarch64__)
-    attr = reinterpret_cast<const pthread_attr_t*>(cordial_pthread_attr_real(attr));
+    attr = reinterpret_cast<const pthread_attr_t*>(roblox_pthread_attr_real(attr));
 #endif
     if (!g_trace) {
         return ::pthread_create(thread, attr, start_routine, arg);
@@ -152,10 +152,10 @@ extern "C" int cordial_pthread_create(pthread_t* thread, const pthread_attr_t* a
     return rc;
 }
 
-/// Turn on the thread-creation log. `CORDIAL_TRACE_THREADS=1` — see the file
-/// comment for why this is a separate flag from `CORDIAL_TRACE_PATHS` rather
+/// Turn on the thread-creation log. `RBX_RUNTIME_TRACE_THREADS=1` — see the file
+/// comment for why this is a separate flag from `RBX_RUNTIME_TRACE_PATHS` rather
 /// than folding into it.
-extern "C" void cordial_set_thread_trace(int on) {
+extern "C" void roblox_set_thread_trace(int on) {
     g_trace = on != 0;
 }
 
@@ -164,9 +164,9 @@ extern "C" struct CordialThreadSymbol {
     void* addr;
 };
 
-extern "C" const CordialThreadSymbol* cordial_thread_symbols(size_t* count) {
+extern "C" const CordialThreadSymbol* roblox_thread_symbols(size_t* count) {
     static const CordialThreadSymbol table[] = {
-        {"pthread_create", (void*)&cordial_pthread_create},
+        {"pthread_create", (void*)&roblox_pthread_create},
     };
     *count = sizeof(table) / sizeof(table[0]);
     return table;

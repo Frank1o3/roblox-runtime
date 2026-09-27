@@ -1,11 +1,11 @@
-// PipeWire, reached without ever appearing in `libcordial_liblog.a`'s
+// PipeWire, reached without ever appearing in `libroblox_liblog.a`'s
 // `DT_NEEDED`.
 //
 // Two separate "optional" decisions are stacked here and it is worth being
 // precise about which is which:
 //
 // 1. **Compile time.** `CMakeLists.txt` looks for `libpipewire-0.3` and
-//    `spa-0.2` with `pkg_check_modules` and defines `CORDIAL_HAVE_PIPEWIRE`
+//    `spa-0.2` with `pkg_check_modules` and defines `RBX_RUNTIME_HAVE_PIPEWIRE`
 //    only if it finds them. If it does not — a machine with no
 //    `pipewire-devel` installed — this whole file compiles down to the
 //    fallback at the bottom, and the rest of the tree builds exactly as it
@@ -37,7 +37,7 @@
 #include <cstring>
 #include <memory>
 
-#ifdef CORDIAL_HAVE_PIPEWIRE
+#ifdef RBX_RUNTIME_HAVE_PIPEWIRE
 
 #include <spa/param/audio/format-utils.h>
 #include <spa/param/props.h>
@@ -171,7 +171,7 @@ bool load_library() {
 
 /// One PipeWire connection for the whole process, matching how Roblox itself
 /// only ever creates one OpenSL engine. Never torn down: it lives exactly as
-/// long as `cordial_liblog`'s other process-lifetime state (bionic's TLS,
+/// long as `roblox_liblog`'s other process-lifetime state (bionic's TLS,
 /// the linker's loaded-library table) does.
 ///
 /// The core listener and its round-trip state are *members* rather than the
@@ -325,7 +325,7 @@ Session* connect_session() {
     // reading that has to be believed before it can be checked.
     //
     // Nothing is lost by dropping the promise: which backend is in use is
-    // announced by `cordial_audio_backend_announce` on its own line, from the
+    // announced by `roblox_audio_backend_announce` on its own line, from the
     // place that actually decides it.
     std::fprintf(stderr,
         "I/Cordial-Audio           PipeWire session reachable: the client library loaded "
@@ -450,12 +450,12 @@ uint32_t fill_pcm(std::deque<PendingBuffer>& pending, uint8_t* dst, uint32_t wan
 
 namespace {
 
-/// `CORDIAL_TRACE_AUDIO=1` prints a running tally every second: buffers
+/// `RBX_RUNTIME_TRACE_AUDIO=1` prints a running tally every second: buffers
 /// enqueued, buffers drained, and how many frames were silence-padded for
 /// lack of a fed queue. Off by default — this is a diagnostic for chasing a
 /// stalled or underrunning stream, not routine output.
 bool trace_audio_enabled() {
-    static const bool enabled = std::getenv("CORDIAL_TRACE_AUDIO") != nullptr;
+    static const bool enabled = std::getenv("RBX_RUNTIME_TRACE_AUDIO") != nullptr;
     return enabled;
 }
 
@@ -473,7 +473,7 @@ struct PlaybackStream::Impl {
     uint32_t enqueued_index = 0;
     uint64_t underrun_frames = 0; // diagnostic counter, not surfaced through the OpenSL API
 
-    // CORDIAL_TRACE_AUDIO=1 bookkeeping only; untouched otherwise.
+    // RBX_RUNTIME_TRACE_AUDIO=1 bookkeeping only; untouched otherwise.
     uint64_t trace_process_cycles = 0;
     uint64_t trace_drains = 0;
     std::chrono::steady_clock::time_point trace_last_report{};
@@ -755,17 +755,17 @@ std::string choose_output_target(const std::string& requested,
 
 const std::string& configured_output_device() {
     static const std::string name = [] {
-        const char* v = std::getenv("CORDIAL_AUDIO_SINK");
+        const char* v = std::getenv("RBX_RUNTIME_AUDIO_SINK");
         std::string s = v ? v : "";
         // A variable set to the empty string is the same instruction as one
         // that is not set: follow the default. `launch.rs` omits it rather
         // than sending an empty value, but a hand-run client with
-        // `CORDIAL_AUDIO_SINK=` in its environment must not end up asking for
+        // `RBX_RUNTIME_AUDIO_SINK=` in its environment must not end up asking for
         // a sink literally called "".
         if (!s.empty()) {
             std::fprintf(stderr,
                 "I/Cordial-OpenSLES         output device: playback will be aimed at PipeWire "
-                "sink '%s' (CORDIAL_AUDIO_SINK). Unset it to follow the system default.\n",
+                "sink '%s' (RBX_RUNTIME_AUDIO_SINK). Unset it to follow the system default.\n",
                 s.c_str());
         }
         return s;
@@ -1589,7 +1589,7 @@ PlaybackStream::QueueState PlaybackStream::state() const {
 
 } // namespace cordial::audio
 
-#else // !CORDIAL_HAVE_PIPEWIRE
+#else // !RBX_RUNTIME_HAVE_PIPEWIRE
 
 // No PipeWire headers at configure time (see CMakeLists.txt). Every entry
 // point degrades to "no audio", the same answer this backend gives for an
@@ -1628,7 +1628,7 @@ uint32_t active_capture_streams() { return 0; }
 /// which is a different and untrue thing from "there is no audio at all".
 const std::string& configured_output_device() {
     static const std::string name = [] {
-        const char* v = std::getenv("CORDIAL_AUDIO_SINK");
+        const char* v = std::getenv("RBX_RUNTIME_AUDIO_SINK");
         return std::string(v ? v : "");
     }();
     return name;
@@ -1706,7 +1706,7 @@ PlaybackStream::QueueState PlaybackStream::state() const { return {0, 0}; }
 
 } // namespace cordial::audio
 
-#endif // CORDIAL_HAVE_PIPEWIRE
+#endif // RBX_RUNTIME_HAVE_PIPEWIRE
 
 // ---------------------------------------------------------------- the seam
 //
@@ -1718,18 +1718,18 @@ PlaybackStream::QueueState PlaybackStream::state() const { return {0, 0}; }
 namespace cordial::audio {
 
 const char* host_backend_name() {
-    // One reader, and it caches. `aaudio.cpp`'s own `CORDIAL_AUDIO` parser
+    // One reader, and it caches. `aaudio.cpp`'s own `RBX_RUNTIME_AUDIO` parser
     // documents the same rule for the same reason: two readers of one variable
     // is two places for a typo to mean different things.
     static const char* const name = [] () -> const char* {
-        const char* raw = std::getenv("CORDIAL_AUDIO_HOST");
+        const char* raw = std::getenv("RBX_RUNTIME_AUDIO_HOST");
         // **Unset means detect, not PipeWire.** It used to mean PipeWire, so a
         // machine without it was told "no audio" while ALSA and OSS sat
         // unexamined a few lines below -- reported by a user on 2026-08-27 who
         // reasonably concluded the variable did nothing. Nobody with a PipeWire
         // session sees a difference: detection asks for it first.
         if (!raw || raw[0] == '\0') return "auto";
-        // Lowercased before comparing. `CORDIAL_AUDIO_HOST=OSS` used to fall
+        // Lowercased before comparing. `RBX_RUNTIME_AUDIO_HOST=OSS` used to fall
         // through to the warning and silently become PipeWire, which is a sharp
         // edge on a variable somebody only ever types when audio is already
         // broken.
@@ -1749,7 +1749,7 @@ const char* host_backend_name() {
         // a run that asked for one should be told it did not get it rather
         // than left to infer it from silence.
         std::fprintf(stderr,
-            "W/Cordial-Audio           CORDIAL_AUDIO_HOST=%s is not a backend this build has "
+            "W/Cordial-Audio           RBX_RUNTIME_AUDIO_HOST=%s is not a backend this build has "
             "(pipewire, pulse, alsa, oss); using pipewire. See "
             "docs/adr/ADR-023-host-audio-backends.md.\n",
             value);
@@ -1825,15 +1825,15 @@ std::unique_ptr<OutputStream> make_output_stream() {
             if (auto stream = make_oss_stream()) return stream;
         }
         std::fprintf(stderr,
-            "W/Cordial-Audio           CORDIAL_AUDIO_HOST=oss, but /dev/dsp would not open "
-            "(set CORDIAL_AUDIO_DEVICE for another node); using pipewire.\n");
+            "W/Cordial-Audio           RBX_RUNTIME_AUDIO_HOST=oss, but /dev/dsp would not open "
+            "(set RBX_RUNTIME_AUDIO_DEVICE for another node); using pipewire.\n");
     }
     if (std::strcmp(effective_backend_name(), "alsa") == 0) {
         if (alsa_available()) {
             if (auto stream = make_alsa_stream()) return stream;
         }
         std::fprintf(stderr,
-            "W/Cordial-Audio           CORDIAL_AUDIO_HOST=alsa, but no ALSA device would "
+            "W/Cordial-Audio           RBX_RUNTIME_AUDIO_HOST=alsa, but no ALSA device would "
             "open; using pipewire.\n");
     }
     if (std::strcmp(effective_backend_name(), "pulse") == 0) {
@@ -1846,7 +1846,7 @@ std::unique_ptr<OutputStream> make_output_stream() {
             if (auto stream = make_pulse_stream()) return stream;
         }
         std::fprintf(stderr,
-            "W/Cordial-Audio           CORDIAL_AUDIO_HOST=pulse, but no PulseAudio server "
+            "W/Cordial-Audio           RBX_RUNTIME_AUDIO_HOST=pulse, but no PulseAudio server "
             "answered; using pipewire.\n");
     }
     return std::make_unique<CallbackStream>();
@@ -1872,7 +1872,7 @@ std::unique_ptr<OutputStream> make_output_stream() {
 
 extern "C" {
 
-size_t cordial_audio_sinks(CordialAudioSink** out) {
+size_t roblox_audio_sinks(CordialAudioSink** out) {
     if (!out) return 0;
     *out = nullptr;
 
@@ -1907,7 +1907,7 @@ size_t cordial_audio_sinks(CordialAudioSink** out) {
     return count;
 }
 
-void cordial_audio_sinks_free(CordialAudioSink* sinks, size_t count) {
+void roblox_audio_sinks_free(CordialAudioSink* sinks, size_t count) {
     if (!sinks) return;
     for (size_t i = 0; i < count; ++i) {
         std::free(const_cast<char*>(sinks[i].node_name));

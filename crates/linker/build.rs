@@ -22,7 +22,7 @@ fn main() {
         .define("CMAKE_C_COMPILER", "clang")
         .define("CMAKE_CXX_COMPILER", "clang++")
         .define("CMAKE_BUILD_TYPE", "Release")
-        // `CORDIAL_JNI_TRACE=1 cargo build` turns on libjnivm's trace.
+        // `RBX_RUNTIME_JNI_TRACE=1 cargo build` turns on libjnivm's trace.
         //
         // Not a convenience. libjnivm only emits `Constructed Unresolved
         // symbol` -- the one notice that the engine asked for a Java class or
@@ -35,8 +35,8 @@ fn main() {
         // per pointer per frame and this writes a line for each, unbuffered. Use
         // it to take an inventory, not to play.
         .define(
-            "CORDIAL_JNI_TRACE",
-            if std::env::var_os("CORDIAL_JNI_TRACE").is_some() {
+            "RBX_RUNTIME_JNI_TRACE",
+            if std::env::var_os("RBX_RUNTIME_JNI_TRACE").is_some() {
                 "ON"
             } else {
                 "OFF"
@@ -46,9 +46,9 @@ fn main() {
 
     println!("cargo:rustc-link-search=native={}/lib", dst.display());
     println!("cargo:root={}", dst.display());
-    println!("cargo:rustc-link-lib=static=cordial_linker_shim");
-    println!("cargo:rustc-link-lib=static=cordial_jni_shim");
-    println!("cargo:rustc-link-lib=static=cordial_liblog");
+    println!("cargo:rustc-link-lib=static=roblox_linker_shim");
+    println!("cargo:rustc-link-lib=static=roblox_jni_shim");
+    println!("cargo:rustc-link-lib=static=roblox_liblog");
     println!("cargo:rustc-link-lib=static=jnivm");
     // After jnivm: it is jnivm that references `Log::debug`, and a static
     // archive only satisfies symbols from archives listed after it.
@@ -59,7 +59,7 @@ fn main() {
     println!("cargo:rustc-link-lib=dylib=dl");
     println!("cargo:rustc-link-lib=dylib=pthread");
 
-    println!("cargo:rerun-if-env-changed=CORDIAL_JNI_TRACE");
+    println!("cargo:rerun-if-env-changed=RBX_RUNTIME_JNI_TRACE");
 
     // Watch the whole native tree, not a hand-maintained list. A file missing
     // from that list is not a build error — Cargo simply does not re-run this

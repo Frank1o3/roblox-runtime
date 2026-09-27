@@ -27,7 +27,7 @@
 //     stop with an atomic and joins, and only then is anything freed.
 //
 // One capability is genuinely lost and ADR-023 records it rather than papering
-// over it. An empty `CORDIAL_AUDIO_SINK` on PipeWire and PulseAudio means
+// over it. An empty `RBX_RUNTIME_AUDIO_SINK` on PipeWire and PulseAudio means
 // "follow whatever the session calls the default, and keep following it" -- a
 // standing instruction, so changing the default sink mid-game moves the stream.
 // ALSA resolves `default` once, inside alsa-lib's configuration, at
@@ -43,7 +43,7 @@
 #include <thread>
 #include <vector>
 
-#ifdef CORDIAL_HAVE_ALSA
+#ifdef RBX_RUNTIME_HAVE_ALSA
 
 #include <alsa/asoundlib.h>
 #include <dlfcn.h>
@@ -331,7 +331,7 @@ std::unique_ptr<OutputStream> make_alsa_stream() { return std::make_unique<AlsaS
 
 } // namespace cordial::audio
 
-#else // !CORDIAL_HAVE_ALSA
+#else // !RBX_RUNTIME_HAVE_ALSA
 
 namespace cordial::audio {
 
@@ -342,4 +342,4 @@ std::unique_ptr<OutputStream> make_alsa_stream() { return nullptr; }
 
 } // namespace cordial::audio
 
-#endif // CORDIAL_HAVE_ALSA
+#endif // RBX_RUNTIME_HAVE_ALSA

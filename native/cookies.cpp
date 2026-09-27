@@ -5,7 +5,7 @@
 // confirmed on a single profile, so it is not the `flock` in `profile.rs`
 // handing out a different directory.
 //
-// The measurement that explains it. A complete `CORDIAL_TRACE_PATHS=1`
+// The measurement that explains it. A complete `RBX_RUNTIME_TRACE_PATHS=1`
 // inventory of every non-system file the engine opens contains no cookie jar
 // and no credential store of any kind, and `grep -rl ROBLOSECURITY` over a
 // real profile tree finds nothing. **The engine never writes its cookies to
@@ -76,7 +76,7 @@ static auto to_jni(jnivm::ENV* env, const std::shared_ptr<T>& p) {
 namespace {
 
 /// Where an observed host is handed to the Rust store. Null until
-/// `cordial_cookies_set_host_sink` installs one, which is the state a run with
+/// `roblox_cookies_set_host_sink` installs one, which is the state a run with
 /// cookie persistence switched off stays in — the class is still registered so
 /// the engine's callback resolves, but nothing is recorded.
 void (*g_host_sink)(const char*) = nullptr;
@@ -190,7 +190,7 @@ extern "C" {
 /// is listening. The class stays registered either way, so a difference in
 /// behaviour cannot be confused with the engine failing to resolve the
 /// callback.
-void cordial_cookies_set_host_sink(void (*sink)(const char*)) {
+void roblox_cookies_set_host_sink(void (*sink)(const char*)) {
     cordial::g_host_sink = sink;
 }
 
@@ -200,7 +200,7 @@ void cordial_cookies_set_host_sink(void (*sink)(const char*)) {
 /// four times in the Waydroid capture, on a *logged-out* cold start — the
 /// device and tracking cookies exercise the identical plumbing an auth cookie
 /// does, which is what makes this testable without an account.
-int cordial_cookies_register_handler(void* fn, char* err, size_t err_len) {
+int roblox_cookies_register_handler(void* fn, char* err, size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jobject);
     auto* env = cordial::process_env();
     if (!fn || !env) {
@@ -238,7 +238,7 @@ int cordial_cookies_register_handler(void* fn, char* err, size_t err_len) {
 /// to the engine on the next launch is the "half-token that parses" failure —
 /// it presents as an invalid session rather than as a Cordial bug, which is
 /// the worst place for it to present.
-int cordial_cookies_get_for_domain(void* fn, const char* class_name, const char* domain,
+int roblox_cookies_get_for_domain(void* fn, const char* class_name, const char* domain,
                                    char* out, size_t out_len, size_t* needed,
                                    char* err, size_t err_len) {
     using Call = jstring (*)(JNIEnv*, jobject, jstring);

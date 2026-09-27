@@ -23,14 +23,14 @@
 // **Once FMOD has been told AAudio exists, there is no way back.** This is
 // the most consequential thing measured while writing this file, and it is
 // the reverse of what the plan assumed. A control run
-// (`CORDIAL_AUDIO=aaudio-refuse`) answered `supportsAAudio()` true and then
+// (`RBX_RUNTIME_AUDIO=aaudio-refuse`) answered `supportsAAudio()` true and then
 // reported `AAUDIO_ERROR_UNAVAILABLE` from every `openStream`. FMOD tried
 // twice and then abandoned audio altogether: no `AudioDevice.init`, no
 // `slCreateEngine`, no PipeWire node of any kind for the rest of the run, and
 // a place that loaded and played in silence. The "AAudio, then OpenSL ES,
 // then Java" chain does not exist on this build once the first link has been
 // claimed. That is why `supportsAAudio()` checks `pipewire_available()`
-// before saying yes. `CORDIAL_AUDIO=java` remains the rollback when that check
+// before saying yes. `RBX_RUNTIME_AUDIO=java` remains the rollback when that check
 // is not enough for a particular host.
 //
 // **What the engine actually asks for is measured, not assumed.**
@@ -169,7 +169,7 @@ using AAudioStream_errorCallback = void (*)(AAudioStream* stream, void* userData
 
 // ------------------------------------------------------------ backend choice
 
-/// What `CORDIAL_AUDIO` selected, decided once and logged once.
+/// What `RBX_RUNTIME_AUDIO` selected, decided once and logged once.
 ///
 /// The variable did not exist before this file. It was described in
 /// conversation as the intended design, then tried on a live run where
@@ -179,7 +179,7 @@ using AAudioStream_errorCallback = void (*)(AAudioStream* stream, void* userData
 enum class Backend {
     /// FMOD's Java `org.fmod.AudioDevice` path. Was the default until AAudio
     /// had been measured against it; now the fallback, reachable with
-    /// `CORDIAL_AUDIO=java`, and still the path a host with no PipeWire takes
+    /// `RBX_RUNTIME_AUDIO=java`, and still the path a host with no PipeWire takes
     /// because `supportsAAudio()` answers false there whatever this says.
     Java,
     /// AAudio over PipeWire: this file, wired all the way through. **The
@@ -206,7 +206,7 @@ Backend parse_backend(const char* value) {
     // the microphone indicator would stay lit for the session.
     //
     // Answered on 2026-08-22 by a real signed-in session -- Doors, 1 hour 44
-    // minutes, `CORDIAL_AUDIO=aaudio`, the user's own account:
+    // minutes, `RBX_RUNTIME_AUDIO=aaudio`, the user's own account:
     //
     //     input stream opened   x2      FMOD probing for capabilities
     //     microphone opened      0
@@ -232,24 +232,24 @@ Backend parse_backend(const char* value) {
     // Falls back to the default rather than to `java`, so that a typo does not
     // quietly select a different backend from the one an untyped run gets.
     std::fprintf(stderr,
-        "W/Cordial-AAudio          CORDIAL_AUDIO=%s is not a backend I know "
+        "W/Cordial-AAudio          RBX_RUNTIME_AUDIO=%s is not a backend I know "
         "(java, aaudio, aaudio-refuse); using aaudio, the default.\n", value);
     return Backend::AAudio;
 }
 
 Backend selected_backend() {
     static const Backend backend = [] {
-        Backend b = parse_backend(std::getenv("CORDIAL_AUDIO"));
+        Backend b = parse_backend(std::getenv("RBX_RUNTIME_AUDIO"));
         const char* name = b == Backend::AAudio          ? "aaudio"
                             : b == Backend::AAudioRefuse ? "aaudio-refuse"
                                                           : "java";
         std::fprintf(stderr,
-            "I/Cordial-AAudio          audio backend: %s (CORDIAL_AUDIO=%s). %s\n", name,
-            std::getenv("CORDIAL_AUDIO") ? std::getenv("CORDIAL_AUDIO") : "unset",
+            "I/Cordial-AAudio          audio backend: %s (RBX_RUNTIME_AUDIO=%s). %s\n", name,
+            std::getenv("RBX_RUNTIME_AUDIO") ? std::getenv("RBX_RUNTIME_AUDIO") : "unset",
             b == Backend::Java
                 ? "libaaudio.so is not registered and org.fmod.FMOD.supportsAAudio() reports "
                   "false, so FMOD takes its Java AudioDevice path. This is the explicit "
-                  "rollback; unset CORDIAL_AUDIO selects AAudio."
+                  "rollback; unset RBX_RUNTIME_AUDIO selects AAudio."
                 : b == Backend::AAudio
                       ? "libaaudio.so is registered and supportsAAudio() reports true; streams "
                         "open against PipeWire. Playback and callback input are callback-driven; "
@@ -379,7 +379,7 @@ struct Stream {
     /// counts what Cordial can honestly see, which is not what Android counts.
     std::atomic<int32_t> xruns{0};
 
-    // CORDIAL_TRACE_AUDIO=1 bookkeeping only. Output callbacks and each input
+    // RBX_RUNTIME_TRACE_AUDIO=1 bookkeeping only. Output callbacks and each input
     // delivery shape have one owner thread. Lifecycle joins callback input
     // before resetting these fields, so plain members remain sufficient.
     uint64_t trace_cycles = 0;
@@ -428,9 +428,9 @@ const char* format_name(aaudio_format_t f) {
     }
 }
 
-/// `CORDIAL_TRACE_AUDIO=1` only. Off, this is one relaxed bool load per cycle.
+/// `RBX_RUNTIME_TRACE_AUDIO=1` only. Off, this is one relaxed bool load per cycle.
 bool trace_audio_enabled() {
-    static const bool enabled = std::getenv("CORDIAL_TRACE_AUDIO") != nullptr;
+    static const bool enabled = std::getenv("RBX_RUNTIME_TRACE_AUDIO") != nullptr;
     return enabled;
 }
 
@@ -476,7 +476,7 @@ float buffer_peak(const void* data, uint32_t frames, uint32_t channels, uint32_t
 ///
 /// **Realtime.** With the trace off this is two relaxed atomic stores and the
 /// engine's own callback: no lock, no allocation, no log. With
-/// `CORDIAL_TRACE_AUDIO=1` it also scans the buffer for a peak and prints a
+/// `RBX_RUNTIME_TRACE_AUDIO=1` it also scans the buffer for a peak and prints a
 /// line a second, which breaks that rule deliberately and only when asked —
 /// the same bargain `PlaybackStream::process` already strikes with the same
 /// variable, and the reason it is a switch rather than a default.
@@ -698,7 +698,7 @@ aaudio_result_t open_input_stream(const Builder& b, AAudioStream** streamOut) {
 
 // --------------------------------------------------------------- entry points
 //
-// Exported through `cordial_aaudio_symbols` below rather than as real ELF
+// Exported through `roblox_aaudio_symbols` below rather than as real ELF
 // exports: nothing on the host links `libaaudio.so`, the guest reaches it
 // through the bionic linker's virtual-library table, and keeping these
 // internal means the host's own dynamic symbol table gains no `AAudio*` names
@@ -788,7 +788,7 @@ static aaudio_result_t AAudioStreamBuilder_openStream(AAudioStreamBuilder* build
 
     if (selected_backend() == Backend::AAudioRefuse) {
         std::fprintf(stderr,
-            "I/Cordial-AAudio          CONTROL RUN (CORDIAL_AUDIO=aaudio-refuse): reporting "
+            "I/Cordial-AAudio          CONTROL RUN (RBX_RUNTIME_AUDIO=aaudio-refuse): reporting "
             "AAUDIO_ERROR_UNAVAILABLE so that what FMOD does next can be read off the log.\n");
         return AAUDIO_ERROR_UNAVAILABLE;
     }
@@ -1325,20 +1325,20 @@ static const CordialAAudioSymbol kSymbols[] = {
      reinterpret_cast<void*>(&AAudioStream_setBufferSizeInFrames)},
 };
 
-const CordialAAudioSymbol* cordial_aaudio_symbols(size_t* count) {
+const CordialAAudioSymbol* roblox_aaudio_symbols(size_t* count) {
     if (count) *count = sizeof(kSymbols) / sizeof(kSymbols[0]);
     return kSymbols;
 }
 
-int cordial_audio_backend_is_aaudio(void) {
+int roblox_audio_backend_is_aaudio(void) {
     return selected_backend() == Backend::Java ? 0 : 1;
 }
 
-void cordial_audio_backend_announce(void) {
+void roblox_audio_backend_announce(void) {
     (void)selected_backend();
     // **Said out loud, because `pipewire_backend.h` has claimed for some time
     // that it was and it never was.** A user on 2026-08-27 set
-    // `CORDIAL_AUDIO_HOST=oss`, got "no audio", and had no way to tell whether
+    // `RBX_RUNTIME_AUDIO_HOST=oss`, got "no audio", and had no way to tell whether
     // their variable had been seen -- it had not, and one line here would have
     // said so in ten seconds rather than costing a diagnosis.
     //
@@ -1351,7 +1351,7 @@ void cordial_audio_backend_announce(void) {
         std::fprintf(stderr, "I/Cordial-Audio           host backend: %s\n", got);
     } else {
         std::fprintf(stderr,
-            "I/Cordial-Audio           host backend: %s (CORDIAL_AUDIO_HOST=%s)\n",
+            "I/Cordial-Audio           host backend: %s (RBX_RUNTIME_AUDIO_HOST=%s)\n",
             got, asked);
     }
 }

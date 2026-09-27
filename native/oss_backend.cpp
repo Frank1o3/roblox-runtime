@@ -22,7 +22,7 @@
 //! It also means the device is **exclusive on most drivers**: while Cordial
 //! holds `/dev/dsp`, nothing else on the machine gets sound. That is not a bug
 //! to work around, it is what the interface is, and it is why this is opt-in
-//! behind `CORDIAL_AUDIO_HOST=oss` and will not be selected for anybody who did
+//! behind `RBX_RUNTIME_AUDIO_HOST=oss` and will not be selected for anybody who did
 //! not ask.
 //!
 //! ## The write is the clock
@@ -50,7 +50,7 @@
 #include <thread>
 #include <vector>
 
-#if defined(CORDIAL_HAVE_OSS)
+#if defined(RBX_RUNTIME_HAVE_OSS)
 
 #include <fcntl.h>
 #include <sys/ioctl.h>
@@ -67,9 +67,9 @@ constexpr uint32_t kRate = 48000;
 /// responsive, large enough that the syscall rate is unremarkable.
 constexpr uint32_t kPeriod = 480;
 
-/// `CORDIAL_AUDIO_DEVICE`, or the conventional node.
+/// `RBX_RUNTIME_AUDIO_DEVICE`, or the conventional node.
 const char* device_path() {
-    const char* env = std::getenv("CORDIAL_AUDIO_DEVICE");
+    const char* env = std::getenv("RBX_RUNTIME_AUDIO_DEVICE");
     if (env && env[0] != '\0') return env;
     return "/dev/dsp";
 }
@@ -254,7 +254,7 @@ std::unique_ptr<OutputStream> make_oss_stream() { return std::make_unique<OssStr
 
 } // namespace cordial::audio
 
-#else // !CORDIAL_HAVE_OSS
+#else // !RBX_RUNTIME_HAVE_OSS
 
 namespace cordial::audio {
 

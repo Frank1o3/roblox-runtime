@@ -18,7 +18,7 @@
 //
 // `fprintf` is variadic. Rust cannot define a variadic `extern "C"` function, and
 // AGENTS.md records that Cordial's one previous attempt to wrap variadics
-// unsafely -- `CORDIAL_TRACE=1` -- aborts the engine outright. Forwarding through
+// unsafely -- `RBX_RUNTIME_TRACE=1` -- aborts the engine outright. Forwarding through
 // `va_list` is ordinary C and is safe here, so the wrappers live on this side.
 //
 // ## What this deliberately does not do
@@ -39,8 +39,8 @@ extern "C" {
 /// entries. Both come from Rust rather than being restated here: the size is
 /// `sizeof(struct __sFILE)` in pre-M bionic on LP64, and two copies of that
 /// constant would eventually disagree.
-extern const unsigned char* cordial_legacy_sf_base(void);
-extern size_t cordial_legacy_sf_stride(void);
+extern const unsigned char* roblox_legacy_sf_base(void);
+extern size_t roblox_legacy_sf_stride(void);
 
 /// Map a `FILE*` onto the host's real stream when it points into `__sF`.
 ///
@@ -49,13 +49,13 @@ extern size_t cordial_legacy_sf_stride(void);
 /// caller that computed `&__sF[1]` and a caller that took `stdout` as a macro
 /// arrive at the same place by different arithmetic and both must be caught.
 static FILE* translate(FILE* f) {
-    const unsigned char* base = cordial_legacy_sf_base();
+    const unsigned char* base = roblox_legacy_sf_base();
     if (!f || !base) {
         return f;
     }
     const auto addr = reinterpret_cast<uintptr_t>(f);
     const auto lo = reinterpret_cast<uintptr_t>(base);
-    const size_t stride = cordial_legacy_sf_stride();
+    const size_t stride = roblox_legacy_sf_stride();
     if (addr < lo || addr >= lo + stride * 3) {
         return f;
     }
@@ -71,28 +71,28 @@ static FILE* translate(FILE* f) {
 // each of these shadows the host symbol for the engine only because Cordial's
 // symbol table resolves the engine's imports before the host's.
 
-int cordial_legacy_fflush(FILE* f) { return fflush(translate(f)); }
-int cordial_legacy_fclose(FILE* f) { return fclose(translate(f)); }
-int cordial_legacy_fseek(FILE* f, long off, int whence) { return fseek(translate(f), off, whence); }
-long cordial_legacy_ftell(FILE* f) { return ftell(translate(f)); }
-int cordial_legacy_fputs(const char* s, FILE* f) { return fputs(s, translate(f)); }
-int cordial_legacy_setvbuf(FILE* f, char* buf, int mode, size_t size) {
+int roblox_legacy_fflush(FILE* f) { return fflush(translate(f)); }
+int roblox_legacy_fclose(FILE* f) { return fclose(translate(f)); }
+int roblox_legacy_fseek(FILE* f, long off, int whence) { return fseek(translate(f), off, whence); }
+long roblox_legacy_ftell(FILE* f) { return ftell(translate(f)); }
+int roblox_legacy_fputs(const char* s, FILE* f) { return fputs(s, translate(f)); }
+int roblox_legacy_setvbuf(FILE* f, char* buf, int mode, size_t size) {
     return setvbuf(translate(f), buf, mode, size);
 }
-size_t cordial_legacy_fread(void* p, size_t sz, size_t n, FILE* f) {
+size_t roblox_legacy_fread(void* p, size_t sz, size_t n, FILE* f) {
     return fread(p, sz, n, translate(f));
 }
-size_t cordial_legacy_fwrite(const void* p, size_t sz, size_t n, FILE* f) {
+size_t roblox_legacy_fwrite(const void* p, size_t sz, size_t n, FILE* f) {
     return fwrite(p, sz, n, translate(f));
 }
 
 /// The variadic pair, forwarded through `va_list`, which is the whole reason
 /// this file is C++.
-int cordial_legacy_vfprintf(FILE* f, const char* fmt, va_list ap) {
+int roblox_legacy_vfprintf(FILE* f, const char* fmt, va_list ap) {
     return vfprintf(translate(f), fmt, ap);
 }
 
-int cordial_legacy_fprintf(FILE* f, const char* fmt, ...) {
+int roblox_legacy_fprintf(FILE* f, const char* fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
     const int r = vfprintf(translate(f), fmt, ap);

@@ -15,12 +15,12 @@
 
 extern "C" {
 
-void cordial_linker_init() {
+void roblox_linker_init() {
     linker::init();
 }
 
 // names/addrs are parallel arrays of length n. Returns a library handle, or null.
-void* cordial_linker_load_library(const char* name, const char* const* names,
+void* roblox_linker_load_library(const char* name, const char* const* names,
                                   void* const* addrs, size_t n) {
     std::unordered_map<std::string, void*> symbols;
     symbols.reserve(n);
@@ -30,12 +30,12 @@ void* cordial_linker_load_library(const char* name, const char* const* names,
     return linker::load_library(name, symbols);
 }
 
-void cordial_linker_update_ld_library_path(const char* path) {
+void roblox_linker_update_ld_library_path(const char* path) {
     linker::update_LD_LIBRARY_PATH(path);
 }
 
-void* cordial_linker_dlopen(const char* filename, int flags) {
-    // `CORDIAL_TRACE_DLOPEN=1` reports every request and how long it took.
+void* roblox_linker_dlopen(const char* filename, int flags) {
+    // `RBX_RUNTIME_TRACE_DLOPEN=1` reports every request and how long it took.
     //
     // Roblox reaches several subsystems this way rather than through DT_NEEDED
     // — Vulkan is the known one — so this is the only place that shows which
@@ -43,7 +43,7 @@ void* cordial_linker_dlopen(const char* filename, int flags) {
     // promptly. FMOD's Android output prefers AAudio and falls back to OpenSL
     // ES; if that fallback depends on `dlopen("libaaudio.so")` failing fast,
     // a slow or hanging miss would be a real bug rather than a cosmetic one.
-    static const bool trace = getenv("CORDIAL_TRACE_DLOPEN") != nullptr;
+    static const bool trace = getenv("RBX_RUNTIME_TRACE_DLOPEN") != nullptr;
     if (!trace) {
         return linker::dlopen(filename, flags);
     }
@@ -80,7 +80,7 @@ void* cordial_linker_dlopen(const char* filename, int flags) {
 extern "C" __attribute__((weak)) void mcpelauncher_defer_next_ctors(int defer);
 extern "C" __attribute__((weak)) void mcpelauncher_run_deferred_ctors(void* handle);
 
-void cordial_linker_defer_next_ctors(int defer) {
+void roblox_linker_defer_next_ctors(int defer) {
     if (mcpelauncher_defer_next_ctors) {
         mcpelauncher_defer_next_ctors(defer);
         return;
@@ -88,7 +88,7 @@ void cordial_linker_defer_next_ctors(int defer) {
     fprintf(stderr, "[linker] constructor deferral unavailable: patches/0003 is not applied\n");
 }
 
-void cordial_linker_run_deferred_ctors(void* handle) {
+void roblox_linker_run_deferred_ctors(void* handle) {
     if (mcpelauncher_run_deferred_ctors) {
         mcpelauncher_run_deferred_ctors(handle);
     }
@@ -100,7 +100,7 @@ void cordial_linker_run_deferred_ctors(void* handle) {
 // code. Nothing is reopened; this is metadata only.
 extern "C" __attribute__((weak)) void mcpelauncher_set_realpath(void* handle, const char* path);
 
-void cordial_linker_set_realpath(void* handle, const char* path) {
+void roblox_linker_set_realpath(void* handle, const char* path) {
     if (mcpelauncher_set_realpath) {
         mcpelauncher_set_realpath(handle, path);
         return;
@@ -108,19 +108,19 @@ void cordial_linker_set_realpath(void* handle, const char* path) {
     fprintf(stderr, "[linker] realpath override unavailable: patches/0004 is not applied\n");
 }
 
-void* cordial_linker_dlsym(void* handle, const char* symbol) {
+void* roblox_linker_dlsym(void* handle, const char* symbol) {
     return linker::dlsym(handle, symbol);
 }
 
-const char* cordial_linker_dlerror() {
+const char* roblox_linker_dlerror() {
     return linker::dlerror();
 }
 
-size_t cordial_linker_get_library_base(void* handle) {
+size_t roblox_linker_get_library_base(void* handle) {
     return linker::get_library_base(handle);
 }
 
-void cordial_linker_get_library_code_region(void* handle, size_t* base, size_t* size) {
+void roblox_linker_get_library_code_region(void* handle, size_t* base, size_t* size) {
     size_t b = 0, s = 0;
     linker::get_library_code_region(handle, b, s);
     *base = b;

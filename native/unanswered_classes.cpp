@@ -1,6 +1,6 @@
 // Classes the engine looks up and Cordial answered with nothing.
 //
-// A `CORDIAL_JNI_TRACE=ON` capture of a landing-page run shows the engine
+// A `RBX_RUNTIME_JNI_TRACE=ON` capture of a landing-page run shows the engine
 // asking libjnivm for 39 distinct classes. Seven of them had no implementation
 // anywhere in `native/`. Five are here; the two djinni local-storage ones
 // (`ILocalStorageHandlerCore$CppProxy`, `com/snapchat/djinni/NativeObjectManager`)
@@ -280,7 +280,7 @@ public:
 /// hit `NetworkUtils.getPublicIPv4Addresseses` above.
 ///
 /// Answers come from `device_profile()` in `init_params.cpp` (declared just
-/// outside this anonymous namespace), so `CORDIAL_DEVICE_PROFILE=pc-windows-11`
+/// outside this anonymous namespace), so `RBX_RUNTIME_DEVICE_PROFILE=pc-windows-11`
 /// changes BuildInfo in the same run as InitParams and the User-Agent. Nothing
 /// has been observed calling these yet (the engine resolves the class and
 /// stops); they are hooked so a future call cannot invent a second device
@@ -306,7 +306,7 @@ public:
         env->GetClass<WebRtcBuildInfo>("org/webrtc/voiceengine/BuildInfo");
         auto c = env->GetClass("org/webrtc/voiceengine/BuildInfo");
         // Static hooks: the dex declares static methods. Instance hooks would
-        // bind nothing and look fine until a CORDIAL_JNI_TRACE run printed
+        // bind nothing and look fine until a RBX_RUNTIME_JNI_TRACE run printed
         // `Constructed Unresolved symbol` for each.
         c->Hook(env, "getBrand", &WebRtcBuildInfo::getBrand);
         c->Hook(env, "getDeviceManufacturer", &WebRtcBuildInfo::getDeviceManufacturer);

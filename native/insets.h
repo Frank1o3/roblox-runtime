@@ -69,12 +69,12 @@ public:
     static void Register(jnivm::ENV* env) {
         Declare(env);
         auto c = env->GetClass("androidx/core/graphics/Insets");
-#define CORDIAL_INSETS_FIELD(name) c->HookInstance(env, #name, &Insets::name)
-        CORDIAL_INSETS_FIELD(left);
-        CORDIAL_INSETS_FIELD(top);
-        CORDIAL_INSETS_FIELD(right);
-        CORDIAL_INSETS_FIELD(bottom);
-#undef CORDIAL_INSETS_FIELD
+#define RBX_RUNTIME_INSETS_FIELD(name) c->HookInstance(env, #name, &Insets::name)
+        RBX_RUNTIME_INSETS_FIELD(left);
+        RBX_RUNTIME_INSETS_FIELD(top);
+        RBX_RUNTIME_INSETS_FIELD(right);
+        RBX_RUNTIME_INSETS_FIELD(bottom);
+#undef RBX_RUNTIME_INSETS_FIELD
     }
 };
 

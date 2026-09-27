@@ -72,7 +72,7 @@
 //! `pthread_cond_t`'s and `sem_t`'s single-sentinel lazy init below. The attr
 //! wrapper also has to follow `attr` through to `pthread_create` (there is
 //! no POSIX static initialiser for an attr, so it has no equivalent
-//! complication) — `native/thread_trace.cpp`'s `cordial_pthread_create` calls
+//! complication) — `native/thread_trace.cpp`'s `roblox_pthread_create` calls
 //! back into this file, on aarch64 only, to resolve `attr` before forwarding
 //! it to the host's own `pthread_create`.
 //!
@@ -666,8 +666,8 @@ pub extern "C" fn mutex_timedlock(mutex: *mut c_void, abstime: *const c_void) ->
 //
 // This also means `pthread_create` needs to translate whatever `attr` it is
 // given before handing it to the host's own `pthread_create` --
-// `cordial_pthread_attr_real` below is exported for exactly that, and
-// `native/thread_trace.cpp`'s `cordial_pthread_create` calls it on aarch64.
+// `roblox_pthread_attr_real` below is exported for exactly that, and
+// `native/thread_trace.cpp`'s `roblox_pthread_create` calls it on aarch64.
 // Missing that call site would leave every other fix in this file correct
 // and this one path -- thread creation with a non-default attr, which is
 // what a set stack size goes through -- still handing glibc a 56-byte object
@@ -853,7 +853,7 @@ pub extern "C" fn getattr_np(thread: c_ulong, attr: *mut c_void) -> c_int {
 
 /// Resolve a `pthread_attr_t*` handed to `pthread_create` to its real glibc
 /// backing object -- exported for `native/thread_trace.cpp`'s
-/// `cordial_pthread_create`, which otherwise forwards `attr` straight to the
+/// `roblox_pthread_create`, which otherwise forwards `attr` straight to the
 /// host's own `pthread_create`. Correct on x86_64, where bionic's and
 /// glibc's `pthread_attr_t` agree in size and this function does not even
 /// exist; wrong on aarch64, where that would hand glibc a 56-byte object it
@@ -869,7 +869,7 @@ pub extern "C" fn getattr_np(thread: c_ulong, attr: *mut c_void) -> c_int {
 /// of whatever corrupted the attr.
 #[cfg(target_arch = "aarch64")]
 #[unsafe(no_mangle)]
-pub extern "C" fn cordial_pthread_attr_real(attr: *const c_void) -> *const c_void {
+pub extern "C" fn roblox_pthread_attr_real(attr: *const c_void) -> *const c_void {
     if attr.is_null() {
         return attr;
     }
@@ -1321,14 +1321,14 @@ mod tests {
     fn attr_round_trips_a_set_stack_size_through_pthread_create() {
         // Exercises the real path an engine call takes: this file's
         // `attr_init`/`attr_setstacksize`, then `native/thread_trace.cpp`'s
-        // `cordial_pthread_create` (which calls back into
-        // `cordial_pthread_attr_real` on aarch64 before forwarding to the
+        // `roblox_pthread_create` (which calls back into
+        // `roblox_pthread_attr_real` on aarch64 before forwarding to the
         // host's own `pthread_create`), then the new thread reading its own
         // stack size back via `getattr_np`/`attr_getstacksize` -- the same
         // two functions Roblox's engine would call, on the same object,
         // through the same wrapper.
         unsafe extern "C" {
-            fn cordial_pthread_create(
+            fn roblox_pthread_create(
                 thread: *mut c_ulong,
                 attr: *const c_void,
                 start_routine: extern "C" fn(*mut c_void) -> *mut c_void,
@@ -1365,9 +1365,9 @@ mod tests {
         let mut thread: c_ulong = 0;
         // SAFETY: `attr` is a live, initialised BionicAttr; `start` matches
         // the expected signature and returns null.
-        let rc = unsafe { cordial_pthread_create(&mut thread, attr, start, std::ptr::null_mut()) };
+        let rc = unsafe { roblox_pthread_create(&mut thread, attr, start, std::ptr::null_mut()) };
         assert_eq!(rc, 0, "pthread_create with a translated attr must succeed");
-        // SAFETY: `thread` came from the `cordial_pthread_create` call above.
+        // SAFETY: `thread` came from the `roblox_pthread_create` call above.
         assert_eq!(unsafe { pthread_join(thread, std::ptr::null_mut()) }, 0);
 
         assert_eq!(

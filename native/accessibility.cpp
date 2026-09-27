@@ -22,7 +22,7 @@
 // against this project's own established descriptor-matching lessons on the
 // JNI side — but whether Roblox's engine calls any of it beyond the
 // `isEnabled` gate is INFERRED, not observed, and is exactly what
-// `--dump-classes` / `CORDIAL_JNI_TRACE=1` against a real run would settle.
+// `--dump-classes` / `RBX_RUNTIME_JNI_TRACE=1` against a real run would settle.
 //
 // One structural finding worth recording here rather than only in NEXT.md:
 // real Android's accessibility tree is *pull*, not *push* — TalkBack asks an
@@ -63,7 +63,7 @@
 //     boilerplate, not an implementation.
 //   - The dex contains no `com/roblox/**` `View` or `Surface` subclass, which
 //     is what a virtual-descendant provider would have to hang off.
-//   - A 40 s run with `CORDIAL_ACCESSIBILITY=1`, reaching the Home screen,
+//   - A 40 s run with `RBX_RUNTIME_ACCESSIBILITY=1`, reaching the Home screen,
 //     with the AT-SPI bridge genuinely attached (`connected to the AT-SPI bus
 //     as :1.2069`, so the `isEnabled` gate below answered true honestly) made
 //     **zero** calls into this file: no `obtain`, no `setBoundsInScreen`, no
@@ -126,23 +126,23 @@ std::shared_ptr<String> S(const char* v) {
 // engine's hot path, and reports here through a plain atomic rather than
 // blocking a JNI call on a D-Bus round-trip.
 //
-// `CORDIAL_ACCESSIBILITY=0`/`=1` forces the answer either way, the same
-// override-by-environment-variable idiom `CORDIAL_DPI_SCALE` and
-// `CORDIAL_INPUT_TOUCH` already use elsewhere in this tree — useful for
+// `RBX_RUNTIME_ACCESSIBILITY=0`/`=1` forces the answer either way, the same
+// override-by-environment-variable idiom `RBX_RUNTIME_DPI_SCALE` and
+// `RBX_RUNTIME_INPUT_TOUCH` already use elsewhere in this tree — useful for
 // exercising the engine's accessible path without an AT-SPI client attached,
 // or for ruling the whole feature out as a variable while debugging something
 // unrelated.
 std::atomic<int> g_a11y_bridge_connected{0};
 } // namespace cordial
 
-extern "C" void cordial_accessibility_set_bridge_connected(int connected) {
+extern "C" void roblox_accessibility_set_bridge_connected(int connected) {
     cordial::g_a11y_bridge_connected.store(connected ? 1 : 0, std::memory_order_release);
 }
 
 namespace cordial {
 namespace {
 bool accessibility_enabled() {
-    if (const char* e = getenv("CORDIAL_ACCESSIBILITY")) {
+    if (const char* e = getenv("RBX_RUNTIME_ACCESSIBILITY")) {
         if (*e) {
             return *e != '0';
         }
@@ -673,7 +673,7 @@ void register_accessibility_classes(ENV* env) {
 
 // -------------------------------------------------------------- Rust FFI
 //
-// Bounded, buffer-copy style throughout, matching `cordial_textbox_text`'s
+// Bounded, buffer-copy style throughout, matching `roblox_textbox_text`'s
 // convention elsewhere in this directory: fixed-size C structs and
 // length-prefixed string copies rather than anything that hands ownership of
 // a C++ container across the boundary.
@@ -717,8 +717,8 @@ static void fill_node(const cordial::NodeState& n, CordialA11yNode* out) {
 
 /// Copy up to `max` live nodes into `out`. Returns the number written — not
 /// the total live count, which callers get from
-/// `cordial_accessibility_node_count` if they need to size the buffer first.
-size_t cordial_accessibility_snapshot(CordialA11yNode* out, size_t max) {
+/// `roblox_accessibility_node_count` if they need to size the buffer first.
+size_t roblox_accessibility_snapshot(CordialA11yNode* out, size_t max) {
     if (!out || max == 0) return 0;
     std::lock_guard<std::mutex> lock(cordial::g_registry_mutex);
     size_t n = 0;
@@ -730,12 +730,12 @@ size_t cordial_accessibility_snapshot(CordialA11yNode* out, size_t max) {
     return n;
 }
 
-size_t cordial_accessibility_node_count() {
+size_t roblox_accessibility_node_count() {
     std::lock_guard<std::mutex> lock(cordial::g_registry_mutex);
     return cordial::g_registry.size();
 }
 
-unsigned cordial_accessibility_generation() {
+unsigned roblox_accessibility_generation() {
     return cordial::g_registry_generation.load(std::memory_order_acquire);
 }
 
@@ -754,7 +754,7 @@ unsigned cordial_accessibility_generation() {
 /// with `busctl`/`accerciser` without a Roblox APK, which this change was
 /// written without access to (see the file's header comment and the
 /// accompanying report). Returns the assigned node id.
-unsigned cordial_accessibility_test_seed_node(const char* class_name, const char* text,
+unsigned roblox_accessibility_test_seed_node(const char* class_name, const char* text,
                                               const char* content_description, int left, int top,
                                               int right, int bottom, unsigned state) {
     unsigned id = cordial::g_next_id.fetch_add(1, std::memory_order_relaxed);
@@ -776,14 +776,14 @@ unsigned cordial_accessibility_test_seed_node(const char* class_name, const char
 }
 
 /// Drop every node, seeded or real. Test-only, same reasoning as
-/// `cordial_accessibility_test_seed_node`.
-void cordial_accessibility_test_clear() {
+/// `roblox_accessibility_test_seed_node`.
+void roblox_accessibility_test_clear() {
     std::lock_guard<std::mutex> lock(cordial::g_registry_mutex);
     cordial::g_registry.clear();
     cordial::g_registry_generation.fetch_add(1, std::memory_order_acq_rel);
 }
 
-int cordial_accessibility_next_event(int* event_type, char* class_name_buf, int cn_len,
+int roblox_accessibility_next_event(int* event_type, char* class_name_buf, int cn_len,
                                      char* text_buf, int text_len) {
     std::lock_guard<std::mutex> lock(cordial::g_event_mutex);
     if (cordial::g_event_queue.empty()) return 0;

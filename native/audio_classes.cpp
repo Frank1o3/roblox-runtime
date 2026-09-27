@@ -681,7 +681,7 @@ static auto to_jni(ENV* env, const std::shared_ptr<T>& p) {
 }
 
 /// Look up a native function pointer the *engine* registered on one of its
-/// own classes via `RegisterNatives`, the way `cordial_game_activity_start` in
+/// own classes via `RegisterNatives`, the way `roblox_game_activity_start` in
 /// `game_activity.cpp` reaches AGDK's lifecycle natives.
 ///
 /// This is not a style choice: `docs/analysis/jni-natives.tsv` -- the
@@ -1351,7 +1351,7 @@ private:
 // WebRTC's own C++ audio glue therefore binds them the way AGDK binds
 // `GameActivity`'s lifecycle methods: dynamically, through `RegisterNatives`,
 // which is why `find_registered_native` above exists and is used below
-// exactly as `cordial_game_activity_start` uses its own copy of the same
+// exactly as `roblox_game_activity_start` uses its own copy of the same
 // trick in `game_activity.cpp`.
 //
 // **The pull loop stands in for WebRTC's own `AudioTrackThread`.** Real
@@ -1773,7 +1773,7 @@ private:
 
 } // namespace
 
-/// `CORDIAL_AUDIO_SELFTEST=1` prints the device list Roblox would be given, at
+/// `RBX_RUNTIME_AUDIO_SELFTEST=1` prints the device list Roblox would be given, at
 /// the moment the audio classes are registered.
 ///
 /// It exists because of a gap that took a while to notice: the whole audio
@@ -1788,7 +1788,7 @@ private:
 /// the microphone rule at the top of this file, which this must not be the
 /// exception to.
 void audio_selftest() {
-    if (!std::getenv("CORDIAL_AUDIO_SELFTEST")) return;
+    if (!std::getenv("RBX_RUNTIME_AUDIO_SELFTEST")) return;
     std::vector<audio::DeviceInfo> devices = audio::enumerate_devices();
     std::fprintf(stderr,
         "I/Cordial-Audio           selftest: PipeWire reports %zu audio device(s).\n",
@@ -1852,28 +1852,28 @@ public:
     /// latency produces underruns rather than an error anybody can trace.
     static jboolean supportsLowLatency(jnivm::ENV*, jnivm::Class*) { return JNI_FALSE; }
 
-    /// **AAudio: true unless `CORDIAL_AUDIO=java` asked otherwise, or there is
+    /// **AAudio: true unless `RBX_RUNTIME_AUDIO=java` asked otherwise, or there is
     /// no PipeWire session to be true about.**
     ///
     /// This used to be an unconditional false, with a comment saying to flip
     /// it "the day `libaaudio.so` is real, not before". That day came in two
     /// halves. First `native/aaudio.cpp` implemented the 25 entry points this
     /// build looks up, over PipeWire, and `symtab.rs` registered them as a
-    /// virtual `libaaudio.so` — behind `CORDIAL_AUDIO=aaudio`, because an
+    /// virtual `libaaudio.so` — behind `RBX_RUNTIME_AUDIO=aaudio`, because an
     /// audio backend nobody has measured must not become the default on an
     /// update. Then it was measured, capture was implemented, and it became
-    /// the default; `CORDIAL_AUDIO=java` is the way back.
+    /// the default; `RBX_RUNTIME_AUDIO=java` is the way back.
     ///
     /// Either way the answer is conditional on exactly the same reading of
-    /// `CORDIAL_AUDIO` that decides whether the library exists at all. The two
-    /// cannot disagree: both call `cordial_audio_backend_is_aaudio`, and there
+    /// `RBX_RUNTIME_AUDIO` that decides whether the library exists at all. The two
+    /// cannot disagree: both call `roblox_audio_backend_is_aaudio`, and there
     /// is one definition of it.
     ///
     /// **This predicate, not `dlopen`, is the real gate**, and that was worth
     /// measuring rather than assuming. `docs/analysis/aaudio-contract.md` had
     /// it that Roblox's `dlopen("libaaudio.so")` fails because Cordial
     /// registers no such library. It does not fail — it never happens. A
-    /// signed-in run into place 1818 with `CORDIAL_TRACE_DLSYM=1` records six
+    /// signed-in run into place 1818 with `RBX_RUNTIME_TRACE_DLSYM=1` records six
     /// guest `dlopen` calls (`libc`, `libcamera2ndk`, `libmediandk`,
     /// `libvulkan`, `libandroid` twice) and no audio library among them:
     /// FMOD asks this Java method first and never looks for the library when
@@ -1883,7 +1883,7 @@ public:
     ///
     /// **Saying yes here is a commitment, not a preference, and that is the
     /// most consequential thing measured on 2026-08-22.** A control run
-    /// (`CORDIAL_AUDIO=aaudio-refuse`) answered this true and then reported
+    /// (`RBX_RUNTIME_AUDIO=aaudio-refuse`) answered this true and then reported
     /// `AAUDIO_ERROR_UNAVAILABLE` from every `openStream`. FMOD tried twice —
     /// a probe with no callbacks, then the real stream — and on the second
     /// refusal **gave up on audio entirely**. It did not fall back to
@@ -1900,7 +1900,7 @@ public:
     /// must then refuse — costing the Java fallback that would have reported
     /// the same failure in the one place people already know to look.
     static jboolean supportsAAudio(jnivm::ENV*, jnivm::Class*) {
-        if (!cordial_audio_backend_is_aaudio()) return JNI_FALSE;
+        if (!roblox_audio_backend_is_aaudio()) return JNI_FALSE;
         if (!audio::host_backend_available()) {
             std::fprintf(stderr,
                 "W/Cordial-FMOD            AAudio is selected but no PipeWire session is "

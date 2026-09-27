@@ -32,26 +32,26 @@ mod ffi {
     use std::ffi::{c_char, c_int, c_void};
 
     unsafe extern "C" {
-        pub fn cordial_linker_init();
-        pub fn cordial_linker_load_library(
+        pub fn roblox_linker_init();
+        pub fn roblox_linker_load_library(
             name: *const c_char,
             names: *const *const c_char,
             addrs: *const *mut c_void,
             n: usize,
         ) -> *mut c_void;
-        pub fn cordial_linker_update_ld_library_path(path: *const c_char);
-        pub fn cordial_linker_dlopen(filename: *const c_char, flags: c_int) -> *mut c_void;
+        pub fn roblox_linker_update_ld_library_path(path: *const c_char);
+        pub fn roblox_linker_dlopen(filename: *const c_char, flags: c_int) -> *mut c_void;
         // EXPERIMENTAL, cordial-agent-defer: see docs/analysis/flag-init.md
         // §26 and patches/README.md. Not called from the default load path.
-        pub fn cordial_linker_defer_next_ctors(defer: c_int);
-        pub fn cordial_linker_run_deferred_ctors(handle: *mut c_void);
+        pub fn roblox_linker_defer_next_ctors(defer: c_int);
+        pub fn roblox_linker_run_deferred_ctors(handle: *mut c_void);
         // docs/analysis/flag-init.md §31. Metadata only — see the comment on
         // the Rust wrapper below.
-        pub fn cordial_linker_set_realpath(handle: *mut c_void, path: *const c_char);
-        pub fn cordial_linker_dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
-        pub fn cordial_linker_dlerror() -> *const c_char;
-        pub fn cordial_linker_get_library_base(handle: *mut c_void) -> usize;
-        pub fn cordial_linker_get_library_code_region(
+        pub fn roblox_linker_set_realpath(handle: *mut c_void, path: *const c_char);
+        pub fn roblox_linker_dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
+        pub fn roblox_linker_dlerror() -> *const c_char;
+        pub fn roblox_linker_get_library_base(handle: *mut c_void) -> usize;
+        pub fn roblox_linker_get_library_code_region(
             handle: *mut c_void,
             base: *mut usize,
             size: *mut usize,
@@ -79,19 +79,19 @@ impl Library {
 
     /// Base address the object was mapped at.
     pub fn base(self) -> usize {
-        unsafe { ffi::cordial_linker_get_library_base(self.0) }
+        unsafe { ffi::roblox_linker_get_library_base(self.0) }
     }
 
     /// Address and length of the executable segment.
     pub fn code_region(self) -> (usize, usize) {
         let (mut base, mut size) = (0usize, 0usize);
-        unsafe { ffi::cordial_linker_get_library_code_region(self.0, &mut base, &mut size) };
+        unsafe { ffi::roblox_linker_get_library_code_region(self.0, &mut base, &mut size) };
         (base, size)
     }
 
     pub fn symbol(self, name: &str) -> Option<*mut c_void> {
         let c = CString::new(name).ok()?;
-        let p = unsafe { ffi::cordial_linker_dlsym(self.0, c.as_ptr()) };
+        let p = unsafe { ffi::roblox_linker_dlsym(self.0, c.as_ptr()) };
         (!p.is_null()).then_some(p)
     }
 }
@@ -100,7 +100,7 @@ impl Library {
 ///
 /// Must be called once, before anything else in this module.
 pub fn init() {
-    unsafe { ffi::cordial_linker_init() }
+    unsafe { ffi::roblox_linker_init() }
 }
 
 /// Register a virtual library: an soname that exists only as the symbol table
@@ -126,7 +126,7 @@ pub fn register(name: &str, symbols: &[(String, *mut c_void)]) -> Result<Library
     let addrs: Vec<*mut c_void> = symbols.iter().map(|(_, a)| *a).collect();
 
     let handle = unsafe {
-        ffi::cordial_linker_load_library(
+        ffi::roblox_linker_load_library(
             cname.as_ptr(),
             name_ptrs.as_ptr(),
             addrs.as_ptr(),
@@ -143,7 +143,7 @@ pub fn register(name: &str, symbols: &[(String, *mut c_void)]) -> Result<Library
 /// Directory the linker searches for real objects.
 pub fn set_library_path(path: &str) -> Result<(), Error> {
     let c = CString::new(path)?;
-    unsafe { ffi::cordial_linker_update_ld_library_path(c.as_ptr()) };
+    unsafe { ffi::roblox_linker_update_ld_library_path(c.as_ptr()) };
     Ok(())
 }
 
@@ -151,7 +151,7 @@ pub fn set_library_path(path: &str) -> Result<(), Error> {
 /// libraries.
 pub fn dlopen(soname: &str, flags: c_int) -> Result<Library, Error> {
     let c = CString::new(soname)?;
-    let handle = unsafe { ffi::cordial_linker_dlopen(c.as_ptr(), flags) };
+    let handle = unsafe { ffi::roblox_linker_dlopen(c.as_ptr(), flags) };
     if handle.is_null() {
         Err(Error::Linker(last_error()))
     } else {
@@ -170,7 +170,7 @@ pub fn dlopen(soname: &str, flags: c_int) -> Result<Library, Error> {
 /// after `dlopen` returns. It is not wired into the default load path in
 /// `cordial-run`; nothing calls this outside an explicit experiment.
 pub fn defer_next_ctors(defer: bool) {
-    unsafe { ffi::cordial_linker_defer_next_ctors(defer as c_int) }
+    unsafe { ffi::roblox_linker_defer_next_ctors(defer as c_int) }
 }
 
 /// EXPERIMENTAL, cordial-agent-defer: run whatever construction
@@ -178,7 +178,7 @@ pub fn defer_next_ctors(defer: bool) {
 /// `soinfo::call_constructors()` is itself guarded, so calling this on a
 /// library that was never deferred (or already constructed) is harmless.
 pub fn run_deferred_ctors(lib: Library) {
-    unsafe { ffi::cordial_linker_run_deferred_ctors(lib.0) }
+    unsafe { ffi::roblox_linker_run_deferred_ctors(lib.0) }
 }
 
 /// docs/analysis/flag-init.md §31: overrides what `dladdr()` reports as
@@ -193,13 +193,13 @@ pub fn run_deferred_ctors(lib: Library) {
 /// construction, strictly earlier.
 pub fn set_realpath(lib: Library, path: &str) {
     let Ok(c) = CString::new(path) else { return };
-    // SAFETY: `cordial_linker_set_realpath` copies the string; `c` need not
+    // SAFETY: `roblox_linker_set_realpath` copies the string; `c` need not
     // outlive the call.
-    unsafe { ffi::cordial_linker_set_realpath(lib.0, c.as_ptr()) }
+    unsafe { ffi::roblox_linker_set_realpath(lib.0, c.as_ptr()) }
 }
 
 fn last_error() -> String {
-    let p = unsafe { ffi::cordial_linker_dlerror() };
+    let p = unsafe { ffi::roblox_linker_dlerror() };
     if p.is_null() {
         "unknown linker error".into()
     } else {

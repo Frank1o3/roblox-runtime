@@ -31,7 +31,7 @@
 // made-up arguments is a claim this file cannot support.
 //
 // **A URL that arrives here came from a browser click and is attacker-shaped.**
-// It is validated in `cordial_runtime::deeplink` before it reaches this file —
+// It is validated in `roblox_runtime::deeplink` before it reaches this file —
 // scheme, length, and character set — and it is never used to build a path, a
 // command line, or a format string. Here it is one `String` argument handed to
 // one native.
@@ -77,7 +77,7 @@ extern "C" {
 /// names and JSON field names of the engine's own linking protocol, so calling
 /// them is how the protocol's vocabulary is read out of a running engine
 /// instead of guessed at from symbol names. Diagnostic; changes nothing.
-int cordial_deeplink_protocol_string(void* fn, const char* class_name, char* out, size_t out_len,
+int roblox_deeplink_protocol_string(void* fn, const char* class_name, char* out, size_t out_len,
                                      char* err, size_t err_len) {
     using Call = jstring (*)(JNIEnv*, jobject);
     auto* env = cordial::process_env();
@@ -116,7 +116,7 @@ int cordial_deeplink_protocol_string(void* fn, const char* class_name, char* out
 /// URL and says whether it claimed it, so a caller can tell a link that was
 /// consumed from one that fell through — the distinction between a deep link
 /// that worked and one that silently did nothing.
-int cordial_deeplink_cold_start(void* fn, const char* class_name, const char* url, int* out_handled,
+int roblox_deeplink_cold_start(void* fn, const char* class_name, const char* url, int* out_handled,
                                 char* err, size_t err_len) {
     using Call = jboolean (*)(JNIEnv*, jobject, jstring);
     auto* env = cordial::process_env();
@@ -152,7 +152,7 @@ int cordial_deeplink_cold_start(void* fn, const char* class_name, const char* ur
 /// answers whatever is asked of it with an unresolved-symbol stub rather than
 /// crashing. If the engine ever reads something real off it, the jnivm log says
 /// so by name — which is the point of driving this rather than skipping it.
-int cordial_deeplink_protocol_init(void* fn, const char* class_name, char* err, size_t err_len) {
+int roblox_deeplink_protocol_init(void* fn, const char* class_name, char* err, size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jobject);
     auto* env = cordial::process_env();
     if (!fn || !env || !class_name) {
@@ -190,14 +190,14 @@ int cordial_deeplink_protocol_init(void* fn, const char* class_name, char* err, 
 /// its message ids as protocol-plus-method, and asking it to compose one is how
 /// a subscriber gets an id it cannot have spelled wrong. The single-argument
 /// version above cannot express it, and the three-argument
-/// `cordial_call_static_strings` returns `void` because every native it was
+/// `roblox_call_static_strings` returns `void` because every native it was
 /// written for does.
 ///
 /// Same body as its one-argument sibling with a second `jstring`. Kept beside it
 /// rather than generalised into a variadic: the shapes the engine actually uses
 /// are few and named, and a variadic JNI caller in this codebase would be a
 /// place for the argument count and the descriptor to disagree silently.
-int cordial_deeplink_two_strings_ret_string(void* fn, const char* class_name, const char* arg_a,
+int roblox_deeplink_two_strings_ret_string(void* fn, const char* class_name, const char* arg_a,
                                             const char* arg_b, char* out, size_t out_len,
                                             char* err, size_t err_len) {
     using Call = jstring (*)(JNIEnv*, jobject, jstring, jstring);
@@ -233,7 +233,7 @@ int cordial_deeplink_two_strings_ret_string(void* fn, const char* class_name, co
     }
 }
 
-int cordial_deeplink_string_ret_string(void* fn, const char* class_name, const char* arg, char* out,
+int roblox_deeplink_string_ret_string(void* fn, const char* class_name, const char* arg, char* out,
                                        size_t out_len, char* err, size_t err_len) {
     using Call = jstring (*)(JNIEnv*, jobject, jstring);
     auto* env = cordial::process_env();

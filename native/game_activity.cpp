@@ -30,7 +30,7 @@
 #include <vector>
 
 /// One contact as it crosses the C ABI, mirrored on the Rust side as
-/// `cordial_linker_sys::game_activity::TouchContact`. The two definitions are
+/// `roblox_linker_sys::game_activity::TouchContact`. The two definitions are
 /// the same three words in the same order and have to stay that way.
 ///
 /// At file scope rather than inside `namespace cordial` because it appears in
@@ -48,7 +48,7 @@ std::shared_ptr<jnivm::Object> make_display_metrics(jnivm::ENV* env);
 /// duplicated for the same reason make_display_metrics is: one class, one
 /// definition, and the insets the engine gets here are the same object the
 /// rest of the framework layer hands out.
-std::shared_ptr<Insets> cordial_make_zero_insets(jnivm::ENV* env);
+std::shared_ptr<Insets> roblox_make_zero_insets(jnivm::ENV* env);
 std::shared_ptr<jnivm::Object> make_resources(jnivm::ENV* env);
 void set_display_size(int width, int height);
 
@@ -179,7 +179,7 @@ public:
     /// `WindowInsetsCompat$Type`'s own comment records that its bit values only
     /// have to be distinct for exactly this reason.
     std::shared_ptr<Object> getWindowInsets(ENV* env, jint /*typeMask*/) {
-        return cordial_make_zero_insets(env);
+        return roblox_make_zero_insets(env);
     }
     /// **`Insets`, not `Object`, and the difference is whether it binds at
     /// all.** libjnivm derives the descriptor from this signature, so declaring
@@ -194,7 +194,7 @@ public:
     /// signature the dex says nothing about would be guessing at a contract
     /// rather than matching one.
     std::shared_ptr<Insets> getWaterfallInsets(ENV* env) {
-        return cordial_make_zero_insets(env);
+        return roblox_make_zero_insets(env);
     }
 
     /// `bootstrapTheApp()` — the app's startup, called by the engine and until
@@ -262,7 +262,7 @@ constexpr jint kToolTypeFinger = 1;
 constexpr jint kToolTypeMouse = 3;
 
 // There used to be an `input_is_touch()` here: one `static const bool` read out
-// of `CORDIAL_INPUT_TOUCH` at first use, seeding `source` and `toolType` for
+// of `RBX_RUNTIME_INPUT_TOUCH` at first use, seeding `source` and `toolType` for
 // every event the process would ever build. Its own comment already named the
 // bug — "an input device that changed identity mid-session would be a stranger
 // thing than either choice" — and the answer is that a *device* does not
@@ -291,7 +291,7 @@ struct MotionPointer {
 /// `android.view.MotionEvent`, synthesised from a host pointer or touch event.
 ///
 /// `onTouchEventNative`'s signature carries the event's scalar fields as
-/// unpacked primitive arguments (see `cordial_game_activity_touch`, below) — that
+/// unpacked primitive arguments (see `roblox_game_activity_touch`, below) — that
 /// unpacking is exactly what AGDK's own Java-side `processMotionEvent` does
 /// before calling the native. What is *not* unpacked, and has to come from this
 /// object when the native side (`GameActivityMotionEvent_fromJava` in AGDK's own
@@ -344,7 +344,7 @@ public:
     // The wheel, in detents: +1 is one notch away from the user (or one notch
     // to the right), matching what `android.view.MotionEvent` documents for
     // AXIS_VSCROLL/AXIS_HSCROLL. Zero on every event that is not ACTION_SCROLL,
-    // which is all of them except the ones `cordial_game_activity_scroll`
+    // which is all of them except the ones `roblox_game_activity_scroll`
     // makes.
     jfloat vscroll = 0.0f, hscroll = 0.0f;
 
@@ -381,7 +381,7 @@ public:
     // Populating them without also sending ACTION_SCROLL would be the useless
     // half of the pair — an axis nothing asks about on an event that does not
     // say a wheel moved — so the two landed together, and the scroll path in
-    // `cordial_game_activity_scroll` is the only thing that sets them.
+    // `roblox_game_activity_scroll` is the only thing that sets them.
     jfloat getAxisValue(ENV*, jint axis, jint index) {
         if (axis == 0) return at(index).x;
         if (axis == 1) return at(index).y;
@@ -575,9 +575,9 @@ std::atomic<unsigned> g_ime_state_generation{0};
 std::atomic<int> g_ime_soft_keyboard_active{0};
 } // namespace
 
-extern "C" void cordial_ime_set_state(const char* text, int sel_start, int sel_end,
+extern "C" void roblox_ime_set_state(const char* text, int sel_start, int sel_end,
                                       int comp_start, int comp_end) {
-    if (getenv("CORDIAL_TRACE_TEXT")) {
+    if (getenv("RBX_RUNTIME_TRACE_TEXT")) {
         fprintf(stderr,
                 "[cordial] InputConnection.setState text=%zu bytes sel=[%d,%d) composing=[%d,%d)\n",
                 text ? strlen(text) : 0, sel_start, sel_end, comp_start, comp_end);
@@ -593,15 +593,15 @@ extern "C" void cordial_ime_set_state(const char* text, int sel_start, int sel_e
     g_ime_state_generation.fetch_add(1, std::memory_order_acq_rel);
 }
 
-extern "C" void cordial_ime_set_soft_keyboard_active(int active, int flags) {
-    if (getenv("CORDIAL_TRACE_TEXT")) {
+extern "C" void roblox_ime_set_soft_keyboard_active(int active, int flags) {
+    if (getenv("RBX_RUNTIME_TRACE_TEXT")) {
         fprintf(stderr, "[cordial] InputConnection.setSoftKeyboardActive(%d, flags=%d)\n", active, flags);
     }
     g_ime_soft_keyboard_active.store(active, std::memory_order_release);
 }
 
-extern "C" void cordial_ime_restart_input() {
-    if (getenv("CORDIAL_TRACE_TEXT")) {
+extern "C" void roblox_ime_restart_input() {
+    if (getenv("RBX_RUNTIME_TRACE_TEXT")) {
         fprintf(stderr, "[cordial] InputConnection.restartInput\n");
     }
     // `restartInput` means "forget whatever editing session was in progress",
@@ -612,13 +612,13 @@ extern "C" void cordial_ime_restart_input() {
 }
 
 /// Read-side, for `crates/cordial-linker-sys` to expose to `android::input`.
-extern "C" unsigned cordial_ime_state_generation() {
+extern "C" unsigned roblox_ime_state_generation() {
     return g_ime_state_generation.load(std::memory_order_acquire);
 }
-extern "C" int cordial_ime_soft_keyboard_active() {
+extern "C" int roblox_ime_soft_keyboard_active() {
     return g_ime_soft_keyboard_active.load(std::memory_order_acquire);
 }
-extern "C" int cordial_ime_state_text(char* buf, int n) {
+extern "C" int roblox_ime_state_text(char* buf, int n) {
     if (!buf || n <= 0) return 0;
     std::lock_guard<std::mutex> lock(g_ime_mutex);
     int len = static_cast<int>(g_ime_text.size());
@@ -627,7 +627,7 @@ extern "C" int cordial_ime_state_text(char* buf, int n) {
     buf[len] = '\0';
     return len;
 }
-extern "C" void cordial_ime_state_selection(int* start, int* end) {
+extern "C" void roblox_ime_state_selection(int* start, int* end) {
     std::lock_guard<std::mutex> lock(g_ime_mutex);
     if (start) *start = g_ime_selection_start;
     if (end) *end = g_ime_selection_end;
@@ -639,7 +639,7 @@ extern "C" void cordial_ime_state_selection(int* start, int* end) {
 /// `restartInput` on. On real Android this is constructed by `GameActivity`'s
 /// Java side inside `onCreateInputConnection` and handed to native code via
 /// `setInputConnectionNative`; Cordial has no Android view system to trigger
-/// that callback, so `cordial_game_activity_set_input_connection` (below)
+/// that callback, so `roblox_game_activity_set_input_connection` (below)
 /// constructs one directly and drives `setInputConnectionNative` itself,
 /// simulating what the platform would have done. One instance for the
 /// process's life, the same reasoning as `shared_activity`/`shared_surface`.
@@ -648,13 +648,13 @@ public:
     void setState(ENV*, std::shared_ptr<TextInputState> state) {
         if (!state) return;
         std::string text = state->text ? static_cast<std::string>(*state->text) : std::string();
-        cordial_ime_set_state(text.c_str(), state->selectionStart, state->selectionEnd,
+        roblox_ime_set_state(text.c_str(), state->selectionStart, state->selectionEnd,
                               state->composingRegionStart, state->composingRegionEnd);
     }
     void setSoftKeyboardActive(ENV*, jboolean active, jint flags) {
-        cordial_ime_set_soft_keyboard_active(active ? 1 : 0, flags);
+        roblox_ime_set_soft_keyboard_active(active ? 1 : 0, flags);
     }
-    void restartInput(ENV*) { cordial_ime_restart_input(); }
+    void restartInput(ENV*) { roblox_ime_restart_input(); }
 
     static void Register(ENV* env) {
         env->GetClass<InputConnection>("com/google/androidgamesdk/gametextinput/InputConnection");
@@ -871,18 +871,18 @@ extern "C" {
 
 /// Install what `GameActivity.bootstrapTheApp()` should run.
 ///
-/// Must be called before `cordial_game_activity_init`: the engine calls
+/// Must be called before `roblox_game_activity_init`: the engine calls
 /// `bootstrapTheApp` from inside `initializeNativeCode` and reads the flags
 /// verdict on the very next line, so anything installed afterwards is too late
 /// by construction — which is exactly the bug this exists to fix.
-void cordial_set_bootstrap(void (*fn)()) { cordial::g_bootstrap = fn; }
+void roblox_set_bootstrap(void (*fn)()) { cordial::g_bootstrap = fn; }
 
 /// Call `initializeNativeCode` and return its handle, or 0.
 ///
 /// `err` receives a message on failure. Exceptions are contained here for the
 /// same reason as in jni_shim.cpp: one crossing the Rust boundary is a core dump
 /// with no explanation.
-long cordial_game_activity_init(void* fn, const char* internal_path, const char* obb_path,
+long roblox_game_activity_init(void* fn, const char* internal_path, const char* obb_path,
                                 const char* external_path, char* err, size_t err_len) {
     using Init = jlong (*)(JNIEnv*, jobject, jstring, jstring, jstring, jobject, jbyteArray,
                            jobject);
@@ -964,7 +964,7 @@ extern "C" {
 /// because a startup that wedges 80% of the time on a signed-in profile is the
 /// symptom mocktail describes and nobody here has ever run the arm without it.
 ///
-/// **Not to be confused with `CORDIAL_SKIP_AGDK`**, which is a far larger
+/// **Not to be confused with `RBX_RUNTIME_SKIP_AGDK`**, which is a far larger
 /// switch: it drops `initializeNativeCode` too, and that is what brings the
 /// TaskScheduler up. The engine will not load flags behind a live scheduler,
 /// so that path dies on `Can't initialize the TaskScheduler before flags have
@@ -976,13 +976,13 @@ extern "C" {
 /// the build it was taken on.
 static bool skip_agdk_surface()
 {
-    static const bool skip = getenv("CORDIAL_SKIP_AGDK_SURFACE") != nullptr;
+    static const bool skip = getenv("RBX_RUNTIME_SKIP_AGDK_SURFACE") != nullptr;
     return skip;
 }
 
 static bool skip_agdk_lifecycle()
 {
-    static const bool skip = getenv("CORDIAL_SKIP_AGDK_LIFECYCLE") != nullptr;
+    static const bool skip = getenv("RBX_RUNTIME_SKIP_AGDK_LIFECYCLE") != nullptr;
     return skip;
 }
 
@@ -1012,8 +1012,8 @@ static bool skip_agdk_lifecycle()
 /// this freeze: nine events delivered on the command pipe, a tenth that never
 /// arrives, and the write end of that pipe open in the same process.
 ///
-/// So these two arms answer different questions. `CORDIAL_SKIP_AGDK_STATE`
-/// drops only the pair that can block. `CORDIAL_SKIP_AGDK_FOCUS` drops only
+/// So these two arms answer different questions. `RBX_RUNTIME_SKIP_AGDK_STATE`
+/// drops only the pair that can block. `RBX_RUNTIME_SKIP_AGDK_FOCUS` drops only
 /// the one that cannot, and is the control for it -- if the freeze moves when
 /// focus alone goes, the blocking-ack account is wrong and should be dropped.
 ///
@@ -1025,13 +1025,13 @@ static bool skip_agdk_lifecycle()
 /// still reads plausibly is exactly the one somebody re-derives.
 static bool skip_agdk_state()
 {
-    static const bool skip = getenv("CORDIAL_SKIP_AGDK_STATE") != nullptr;
+    static const bool skip = getenv("RBX_RUNTIME_SKIP_AGDK_STATE") != nullptr;
     return skip || skip_agdk_lifecycle();
 }
 
 static bool skip_agdk_focus()
 {
-    static const bool skip = getenv("CORDIAL_SKIP_AGDK_FOCUS") != nullptr;
+    static const bool skip = getenv("RBX_RUNTIME_SKIP_AGDK_FOCUS") != nullptr;
     return skip || skip_agdk_lifecycle();
 }
 
@@ -1043,7 +1043,7 @@ static bool skip_agdk_focus()
 /// JNI method table rather than `dlsym`.
 ///
 /// Every call carries the handle `initializeNativeCode` returned.
-int cordial_game_activity_start(long handle, int width, int height, int format,
+int roblox_game_activity_start(long handle, int width, int height, int format,
                                 char* err, size_t err_len) {
     auto* env = cordial::process_env();
     if (!env || handle == 0) {
@@ -1172,7 +1172,7 @@ extern "C" {
 ///
 /// Returns 0 on success, -1 on error (`err` populated), or -2 if
 /// `native_name` was never registered.
-int cordial_game_activity_lifecycle(long handle, const char* native_name, char* err,
+int roblox_game_activity_lifecycle(long handle, const char* native_name, char* err,
                                     size_t err_len) {
     auto* env = cordial::process_env();
     if (!env || handle == 0) {
@@ -1209,11 +1209,11 @@ int cordial_game_activity_lifecycle(long handle, const char* native_name, char* 
 }
 
 /// `onWindowFocusChangedNative(J Z)V`, callable in both directions: `true` at
-/// bring-up (see `cordial_game_activity_start`, which still drives that call
+/// bring-up (see `roblox_game_activity_start`, which still drives that call
 /// inline) and `false` at teardown — Android sends this immediately before
 /// `onPauseNative` when a run ends, the same way it sends the `true` case
 /// immediately after `onResumeNative` when one starts.
-int cordial_game_activity_window_focus(long handle, int focused, char* err, size_t err_len) {
+int roblox_game_activity_window_focus(long handle, int focused, char* err, size_t err_len) {
     auto* env = cordial::process_env();
     if (!env || handle == 0) {
         snprintf(err, err_len, "no JavaVM, or no native handle");
@@ -1259,7 +1259,7 @@ int cordial_game_activity_window_focus(long handle, int focused, char* err, size
 /// Uses the *existing* surface (`make_new=false`) — this does not start a new
 /// surface lifetime, it re-announces the current one, exactly as Android does
 /// when asking an already-created surface to be redrawn.
-int cordial_game_activity_surface_redraw_needed(long handle, char* err, size_t err_len) {
+int roblox_game_activity_surface_redraw_needed(long handle, char* err, size_t err_len) {
     auto* env = cordial::process_env();
     if (!env || handle == 0) {
         snprintf(err, err_len, "no JavaVM, or no native handle");
@@ -1332,7 +1332,7 @@ extern "C" {
 /// Delivers the field's entire contents, not a keystroke. The caller owns the
 /// buffer and sends the whole thing each time it changes, which is what the real
 /// Android implementation does when an IME edits the text.
-int cordial_game_activity_text_input(long handle, const char* text, int sel_start, int sel_end,
+int roblox_game_activity_text_input(long handle, const char* text, int sel_start, int sel_end,
                                      char* err, size_t err_len) {
     auto* env = cordial::process_env();
     if (!env || handle == 0) {
@@ -1383,7 +1383,7 @@ int cordial_game_activity_text_input(long handle, const char* text, int sel_star
 /// Returns 0 on success, -1 on error (`err` populated), or -2 if
 /// `setInputConnectionNative` has not been registered yet, the same
 /// not-yet-vs-failed distinction `touch`/`key` make.
-int cordial_game_activity_set_input_connection(long handle, char* err, size_t err_len) {
+int roblox_game_activity_set_input_connection(long handle, char* err, size_t err_len) {
     auto* env = cordial::process_env();
     if (!env || handle == 0) {
         snprintf(err, err_len, "no JavaVM, or no native handle");
@@ -1422,7 +1422,7 @@ int cordial_game_activity_set_input_connection(long handle, char* err, size_t er
 /// Roblox's own keyboard path, the counterpart to `nativePassMouseButton`. AGDK's
 /// `onKeyDownNative` is accepted and ignored by the interface in exactly the way
 /// `onTouchEventNative` was.
-int cordial_input_key_event(void* fn, int down, int key_code, int modifiers, int is_repeat,
+int roblox_input_key_event(void* fn, int down, int key_code, int modifiers, int is_repeat,
                             char* err, size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jboolean, jint, jint, jboolean);
     auto* env = cordial::process_env();
@@ -1447,7 +1447,7 @@ int cordial_input_key_event(void* fn, int down, int key_code, int modifiers, int
 
 /// `NativeGLInterface.nativePassText(J, String, Z, I)` — text entered into a
 /// focused text box, which is a different thing from a key being pressed.
-int cordial_input_pass_text(void* fn, long long which, const char* text, int flag, int cursor,
+int roblox_input_pass_text(void* fn, long long which, const char* text, int flag, int cursor,
                             char* err, size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jlong, jstring, jboolean, jint);
     auto* env = cordial::process_env();
@@ -1482,7 +1482,7 @@ int cordial_input_pass_text(void* fn, long long which, const char* text, int fla
 /// returns the one the engine already has, because this is the same surface
 /// changing size rather than a replacement. Passing a fresh object would read
 /// to the engine as a surface it has never seen.
-int cordial_game_activity_surface_resized(long long handle, int format, int width, int height,
+int roblox_game_activity_surface_resized(long long handle, int format, int width, int height,
                                           char* err, size_t err_len) {
     auto* env = cordial::process_env();
     if (!env) {
@@ -1536,7 +1536,7 @@ int cordial_game_activity_surface_resized(long long handle, int format, int widt
 /// Cordial reports a zero-height keyboard: there is no soft keyboard taking up
 /// screen space on a desktop, and a non-zero height would make the engine shift
 /// its layout up to avoid something that is not there.
-int cordial_input_update_keyboard_size(void* fn, int visible, int x, int y, int w, int h,
+int roblox_input_update_keyboard_size(void* fn, int visible, int x, int y, int w, int h,
                                        char* err, size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jboolean, jint, jint, jint, jint);
     auto* env = cordial::process_env();
@@ -1568,7 +1568,7 @@ int cordial_input_update_keyboard_size(void* fn, int visible, int x, int y, int 
 ///
 /// Driving only `nativePassText` left the login form's fields empty even with a
 /// correct handle, which is what sent this looking at the declared shapes.
-int cordial_input_sync_textbox(void* fn, const char* text, int cursor, char* err,
+int roblox_input_sync_textbox(void* fn, const char* text, int cursor, char* err,
                                size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jstring, jint);
     auto* env = cordial::process_env();
@@ -1591,7 +1591,7 @@ int cordial_input_sync_textbox(void* fn, const char* text, int cursor, char* err
     }
 }
 
-int cordial_input_mouse_move(void* fn, float x, float y, float dx, float dy, char* err,
+int roblox_input_mouse_move(void* fn, float x, float y, float dx, float dy, char* err,
                              size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jfloat, jfloat, jfloat, jfloat);
     auto* env = cordial::process_env();
@@ -1613,7 +1613,7 @@ int cordial_input_mouse_move(void* fn, float x, float y, float dx, float dy, cha
     }
 }
 
-int cordial_input_mouse_button(void* fn, float x, float y, int down, int button, char* err,
+int roblox_input_mouse_button(void* fn, float x, float y, int down, int button, char* err,
                                size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jfloat, jfloat, jboolean, jint);
     auto* env = cordial::process_env();
@@ -1637,7 +1637,7 @@ int cordial_input_mouse_button(void* fn, float x, float y, int down, int button,
 
 /// `NativeInputInterface.nativePassMouseWheel(F,F,F)`.
 ///
-/// The wheel's counterpart to `cordial_input_mouse_button`, and the reason the
+/// The wheel's counterpart to `roblox_input_mouse_button`, and the reason the
 /// scroll wheel did nothing at all: the export exists, the dex declares it, and
 /// nothing here had ever called it. The dex strips parameter names, so which
 /// float is which is not readable — but every `nativePassMouse*` in that class
@@ -1648,7 +1648,7 @@ int cordial_input_mouse_button(void* fn, float x, float y, int down, int button,
 /// `delta` is in detents, positive away from the user. See
 /// `android::input::pass_mouse_wheel` for why that unit and that sign, and for
 /// the knob that flips it without a rebuild.
-int cordial_input_mouse_wheel(void* fn, float x, float y, float delta, char* err, size_t err_len) {
+int roblox_input_mouse_wheel(void* fn, float x, float y, float delta, char* err, size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jfloat, jfloat, jfloat);
     auto* env = cordial::process_env();
     if (!fn || !env) {
@@ -1683,14 +1683,14 @@ int cordial_input_mouse_wheel(void* fn, float x, float y, float delta, char* err
 /// `MotionEvent`'s, where UP is 1 and MOVE is 2. Nothing readable in this build
 /// settles which of the two this native wants, and one session on a machine
 /// with a touchscreen would. Until that happens the mapping is `INFERRED` and
-/// `CORDIAL_NO_TOUCH=1` is how a user turns off a wrong one.
+/// `RBX_RUNTIME_NO_TOUCH=1` is how a user turns off a wrong one.
 ///
 /// `width`/`height` are the surface the coordinates are in. Passed rather than
 /// assumed because the engine has been told the canvas size separately through
 /// `onSurfaceChangedNative` and the two disagreeing during a resize is a
 /// mis-scaled touch, not a crash — which is the kind of bug that gets blamed on
 /// the mapping above.
-int cordial_input_pass_input(void* fn, int pointer_id, float x, float y, int action, int width,
+int roblox_input_pass_input(void* fn, int pointer_id, float x, float y, int action, int width,
                              int height, char* err, size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jint, jfloat, jfloat, jint, jint, jint);
     auto* env = cordial::process_env();
@@ -1750,7 +1750,7 @@ int cordial_input_pass_input(void* fn, int pointer_id, float x, float y, int act
 /// against `(II)` here, and `nativeSetTVRemoteSupportedKey(IIZ)` against
 /// `(IIZI)`. Three for three is a structural control rather than a hunch, but it
 /// is still not an observation.
-int cordial_input_gamepad_connect(void* fn, int id, int gamepad_type, char* err, size_t err_len) {
+int roblox_input_gamepad_connect(void* fn, int id, int gamepad_type, char* err, size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jint, jint);
     auto* env = cordial::process_env();
     if (!fn || !env) {
@@ -1776,7 +1776,7 @@ int cordial_input_gamepad_connect(void* fn, int id, int gamepad_type, char* err,
 ///
 /// The only one of the six that carries no type, which is itself the evidence
 /// that the engine keeps the type it was handed at connect.
-int cordial_input_gamepad_disconnect(void* fn, int id, char* err, size_t err_len) {
+int roblox_input_gamepad_disconnect(void* fn, int id, char* err, size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jint);
     auto* env = cordial::process_env();
     if (!fn || !env) {
@@ -1805,7 +1805,7 @@ int cordial_input_gamepad_disconnect(void* fn, int id, char* err, size_t err_len
 /// the one the Android platform contract implies, because the Java caller on a
 /// real device is handed a `KeyEvent` from an `InputDevice` and has
 /// `getKeyCode()` and `getAction()` to forward. Nothing here observed it.
-int cordial_input_gamepad_button(void* fn, int id, int key_code, int action, char* err,
+int roblox_input_gamepad_button(void* fn, int id, int key_code, int action, char* err,
                                  size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jint, jint, jint);
     auto* env = cordial::process_env();
@@ -1837,7 +1837,7 @@ int cordial_input_gamepad_button(void* fn, int id, int key_code, int action, cha
 /// structural supporting this one. `android::gamepad` sends the unused
 /// components as 0.0 rather than repeating a value into them, because an
 /// invented number is harder to recognise as wrong than a zero.
-int cordial_input_gamepad_axis(void* fn, int id, int axis, float x, float y, float z, char* err,
+int roblox_input_gamepad_axis(void* fn, int id, int axis, float x, float y, float z, char* err,
                                size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jint, jint, jfloat, jfloat, jfloat);
     auto* env = cordial::process_env();
@@ -1869,7 +1869,7 @@ int cordial_input_gamepad_axis(void* fn, int id, int axis, float x, float y, flo
 ///
 /// Slots INFERRED from the difference against `nativeSetTVRemoteSupportedKey(IIZ)`,
 /// which is this method minus the trailing type.
-int cordial_input_gamepad_supported_key(void* fn, int id, int key_code, int supported,
+int roblox_input_gamepad_supported_key(void* fn, int id, int key_code, int supported,
                                         int gamepad_type, char* err, size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jint, jint, jboolean, jint);
     auto* env = cordial::process_env();
@@ -1902,7 +1902,7 @@ int cordial_input_gamepad_supported_key(void* fn, int id, int key_code, int supp
 /// INFERRED, and the argument names in this signature are a hypothesis rather
 /// than a reading. If a logcat capture taken with a pad attached ever lands in
 /// `docs/traces/`, this is the line it settles first.
-int cordial_input_gamepad_supported_motion(void* fn, int id, int axis, int source, int supported,
+int roblox_input_gamepad_supported_motion(void* fn, int id, int axis, int source, int supported,
                                            int gamepad_type, char* err, size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jint, jint, jint, jboolean, jint);
     auto* env = cordial::process_env();
@@ -1930,11 +1930,11 @@ int cordial_input_gamepad_supported_motion(void* fn, int id, int axis, int sourc
 /// The same both-pipes policy the button and move paths already follow: AGDK's
 /// contract is real and the engine consumes it, it is simply not what
 /// hit-tests the Lua UI. Unlike those two this one is unpacked by hand rather
-/// than sharing `cordial_game_activity_touch`, because a scroll carries no
+/// than sharing `roblox_game_activity_touch`, because a scroll carries no
 /// pressed button and no gesture start — see `MotionEvent::CreateScroll`.
 ///
-/// Returns 0 / -1 / -2 exactly as `cordial_game_activity_touch` does.
-int cordial_game_activity_scroll(long handle, float x, float y, float hscroll, float vscroll,
+/// Returns 0 / -1 / -2 exactly as `roblox_game_activity_touch` does.
+int roblox_game_activity_scroll(long handle, float x, float y, float hscroll, float vscroll,
                                  long long event_time_ms, int* consumed, char* err,
                                  size_t err_len) {
     return cordial::deliver_motion(
@@ -1946,7 +1946,7 @@ int cordial_game_activity_scroll(long handle, float x, float y, float hscroll, f
         consumed, err, err_len);
 }
 
-int cordial_game_activity_touch(long handle, int action, float x, float y, int button_state,
+int roblox_game_activity_touch(long handle, int action, float x, float y, int button_state,
                                 int action_button, long long event_time_ms,
                                 long long down_time_ms, int* consumed, char* err,
                                 size_t err_len) {
@@ -1961,7 +1961,7 @@ int cordial_game_activity_touch(long handle, int action, float x, float y, int b
 
 /// Deliver a set of finger contacts through `onTouchEventNative`.
 ///
-/// The multi-contact counterpart to `cordial_game_activity_touch`, and the
+/// The multi-contact counterpart to `roblox_game_activity_touch`, and the
 /// reason `MotionEvent` grew a contact vector: the single-contact path hard-
 /// coded `pointerCount=1`, `getPointerId` ignored its index argument and
 /// returned 0, and `getPointerCount` returned the literal 1 — so a second
@@ -1975,8 +1975,8 @@ int cordial_game_activity_touch(long handle, int action, float x, float y, int b
 /// two `_POINTER_` actions; see `android::input`, which owns that arithmetic
 /// and has the tests for it.
 ///
-/// Returns 0 / -1 / -2 exactly as `cordial_game_activity_touch` does.
-int cordial_game_activity_touch_multi(long handle, int action,
+/// Returns 0 / -1 / -2 exactly as `roblox_game_activity_touch` does.
+int roblox_game_activity_touch_multi(long handle, int action,
                                       const struct CordialTouchContact* contacts, int count,
                                       long long event_time_ms, long long down_time_ms,
                                       int* consumed, char* err, size_t err_len) {
@@ -1996,9 +1996,9 @@ int cordial_game_activity_touch_multi(long handle, int action,
 /// Deliver a synthesised key event through `onKeyDownNative`/`onKeyUpNative`.
 ///
 /// `down` selects which of the two natives is called; both share the single
-/// `(J, KeyEvent) -> Z` signature. See `cordial_game_activity_touch`'s doc
+/// `(J, KeyEvent) -> Z` signature. See `roblox_game_activity_touch`'s doc
 /// comment for the return-code convention and the local-frame wrapping.
-int cordial_game_activity_key(long handle, int down, int key_code, int scan_code, int meta_state,
+int roblox_game_activity_key(long handle, int down, int key_code, int scan_code, int meta_state,
                               int repeat_count, int unicode_char, long long event_time_ms,
                               long long down_time_ms, int* consumed, char* err, size_t err_len) {
     auto* env = cordial::process_env();
@@ -2070,7 +2070,7 @@ int cordial_game_activity_key(long handle, int down, int key_code, int scan_code
 //
 // Now there is, and it costs one call: the answer to "is this path dead or is
 // Cordial simply not on it" is a list rather than an argument.
-extern "C" int cordial_registered_natives(const char* class_name, char* out, size_t out_len) {
+extern "C" int roblox_registered_natives(const char* class_name, char* out, size_t out_len) {
     if (!class_name || !out || out_len == 0) return -1;
     out[0] = '\0';
     jnivm::ENV* env = cordial::process_env();

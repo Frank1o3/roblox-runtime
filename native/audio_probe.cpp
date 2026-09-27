@@ -21,7 +21,7 @@
 //
 // Built out of tree on purpose, and never by `cargo build`:
 //
-//     clang++ -std=c++17 -DCORDIAL_HAVE_PIPEWIRE=1 \
+//     clang++ -std=c++17 -DRBX_RUNTIME_HAVE_PIPEWIRE=1 \
 //         -I/usr/include/pipewire-0.3 -I/usr/include/spa-0.2 \
 //         native/opensles.cpp native/pipewire_backend.cpp native/aaudio.cpp \
 //         native/alsa_backend.cpp native/pulse_backend.cpp native/oss_backend.cpp \
@@ -762,7 +762,7 @@ struct CordialAAudioSymbol {
     const char* name;
     void* address;
 };
-const CordialAAudioSymbol* cordial_aaudio_symbols(size_t* count);
+const CordialAAudioSymbol* roblox_aaudio_symbols(size_t* count);
 }
 
 namespace aa {
@@ -800,7 +800,7 @@ int32_t (*getXRunCount)(stream_t*) = nullptr;
 
 void* find(const char* name) {
     size_t count = 0;
-    const CordialAAudioSymbol* table = cordial_aaudio_symbols(&count);
+    const CordialAAudioSymbol* table = roblox_aaudio_symbols(&count);
     for (size_t i = 0; i < count; ++i) {
         if (std::strcmp(table[i].name, name) == 0) return table[i].address;
     }

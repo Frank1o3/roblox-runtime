@@ -7,13 +7,13 @@
 //
 // An early spec (§9a) put `onJoin`, `onLeave` and `onLogLine` in the plugin
 // event schema and said they were parsed from exactly this stream. None of the
-// three exists. `cordial_plugins::core_events::ALL` is a closed table of five
+// three exists. `roblox_plugins::core_events::ALL` is a closed table of five
 // names, none of them these, and nothing anywhere parses this stream for them.
 //
 // Corrected rather than deleted because the claim stood here long enough to be
 // believed, and was repeated into two design documents from this comment. The
 // parsing that would make something like it true is being written against the
-// engine's own log file instead -- `cordial_runtime::bloxstrap_rpc` reads
+// engine's own log file instead -- `roblox_runtime::bloxstrap_rpc` reads
 // `appData/logs/*_Player_*.log`, which is a file with a settled format, and
 // not this stderr channel, whose shape is Cordial's own narration.
 //
@@ -80,10 +80,10 @@ char priority_letter(int prio) {
 ///
 /// VERBOSE is still off by default, and that one is genuinely chatty. Anything
 /// hidden by default should be cheap to reveal and loudly documented, which is
-/// what `CORDIAL_LOG_LEVEL` is for.
+/// what `RBX_RUNTIME_LOG_LEVEL` is for.
 int minimum_priority() {
     static const int level = [] {
-        const char* v = getenv("CORDIAL_LOG_LEVEL");
+        const char* v = getenv("RBX_RUNTIME_LOG_LEVEL");
         if (!v) return (int)ANDROID_LOG_DEBUG;
         switch (v[0]) {
             case 'v': case 'V': return (int)ANDROID_LOG_VERBOSE;
@@ -207,7 +207,7 @@ extern "C" struct CordialSymbol {
     void* addr;
 };
 
-extern "C" const CordialSymbol* cordial_liblog_symbols(size_t* count) {
+extern "C" const CordialSymbol* roblox_liblog_symbols(size_t* count) {
     static const CordialSymbol table[] = {
         {"__android_log_write", (void*)&__android_log_write},
         {"__android_log_buf_write", (void*)&__android_log_buf_write},

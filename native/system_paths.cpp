@@ -44,9 +44,9 @@ namespace {
 char g_root[PATH_MAX];
 size_t g_root_len = 0;
 
-/// `CORDIAL_TRACE_PATHS=1`. Every function here is fixed-arity except `open`,
+/// `RBX_RUNTIME_TRACE_PATHS=1`. Every function here is fixed-arity except `open`,
 /// which is forwarded properly, so this is safe to leave on — unlike
-/// `CORDIAL_TRACE=1`, which wraps variadics with fixed-arity declarations and
+/// `RBX_RUNTIME_TRACE=1`, which wraps variadics with fixed-arity declarations and
 /// makes the engine abort.
 ///
 /// These wrappers are the only place the path calls are intercepted. An earlier
@@ -146,7 +146,7 @@ char* s_realpath(const char* path, char* resolved) {
         //
         // This is exactly what feeds Roblox's cURL-based HTTP stack the
         // CA-bundle path (`./exe/cacert.pem`, resolved once per connection
-        // going by `CORDIAL_TRACE_PATHS=1`): confirmed live under lldb with a
+        // going by `RBX_RUNTIME_TRACE_PATHS=1`): confirmed live under lldb with a
         // breakpoint on this function — `resolved` is null, the host
         // `realpath` call mallocs, and the pointer it returns is the exact
         // address that later faults on the `HttpClient` thread with
@@ -189,7 +189,7 @@ FILE* s_fopen(const char* path, const char* mode) {
 
 /// `open` is variadic: the mode argument exists only for `O_CREAT`/`O_TMPFILE`.
 /// Reading it unconditionally would walk the register save area for an argument
-/// the caller never pushed, which is the mistake that makes `CORDIAL_TRACE=1`
+/// the caller never pushed, which is the mistake that makes `RBX_RUNTIME_TRACE=1`
 /// abort the engine.
 int s_open(const char* path, int flags, ...) {
     unsigned mode = 0;
@@ -211,7 +211,7 @@ int s_open(const char* path, int flags, ...) {
 ///
 /// **It was not path-translated.** Every other path-taking call here is; this
 /// one went straight to the host with whatever the engine built, and because it
-/// was not in the table it did not appear in `CORDIAL_TRACE_PATHS=1` output
+/// was not in the table it did not appear in `RBX_RUNTIME_TRACE_PATHS=1` output
 /// either. A trace that cannot see a call is not evidence the call did not
 /// happen, and a conclusion in flag-init.md §23.2 -- "storage is never
 /// attempted, 19,296 path calls and none of them `rbx-storage`" -- was drawn
@@ -274,7 +274,7 @@ extern "C" struct CordialSystemSymbol {
 };
 
 /// Point the redirect at a host directory. Passing null or "" disables it.
-extern "C" void cordial_set_system_root(const char* root) {
+extern "C" void roblox_set_system_root(const char* root) {
     if (!root || !*root) {
         g_root_len = 0;
         g_root[0] = '\0';
@@ -291,11 +291,11 @@ extern "C" void cordial_set_system_root(const char* root) {
 
 /// Turn on the path log. Separate from the root so tracing works even when the
 /// redirect is disabled.
-extern "C" void cordial_set_path_trace(int on) {
+extern "C" void roblox_set_path_trace(int on) {
     g_trace = on != 0;
 }
 
-extern "C" const CordialSystemSymbol* cordial_system_symbols(size_t* count) {
+extern "C" const CordialSystemSymbol* roblox_system_symbols(size_t* count) {
     static const CordialSystemSymbol table[] = {
         {"stat", (void*)&s_stat},
         {"lstat", (void*)&s_lstat},

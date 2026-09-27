@@ -12,7 +12,7 @@
 // thinks you're mobile" is really answered — that `isKeyboardDevice`,
 // `isMouseDevice` and `isTouchDevice` decide which input scheme and which UI
 // layout the engine picks. Two thirds of that is false.** Measured with
-// `CORDIAL_TRACE_PARAM_READS=1` on a cold start: the engine reads `isTouchDevice`
+// `RBX_RUNTIME_TRACE_PARAM_READS=1` on a cold start: the engine reads `isTouchDevice`
 // twice and `dpiScale` three times, and reads `isKeyboardDevice` and
 // `isMouseDevice` **not once**. Setting those two to the desktop answer has
 // therefore never told the engine anything. The control in the same run is
@@ -41,7 +41,7 @@
 
 // Defined in android_classes.cpp. Both game-loaded callbacks feed one counter
 // so the join watchdog does not have to know which of them a given build calls.
-extern "C" void cordial_note_game_loaded(long long place_id);
+extern "C" void roblox_note_game_loaded(long long place_id);
 
 namespace cordial {
 class Surface;
@@ -130,7 +130,7 @@ class AndroidActivity;
 std::shared_ptr<Object> make_display_metrics(ENV* env);
 /// Defined below with `Insets`; declared here so game_activity.cpp can
 /// return one without duplicating the class.
-std::shared_ptr<Insets> cordial_make_zero_insets(ENV* env);
+std::shared_ptr<Insets> roblox_make_zero_insets(ENV* env);
 
 /// Which device identity Cordial presents to the engine and to roblox.com.
 ///
@@ -209,14 +209,14 @@ std::shared_ptr<Insets> cordial_make_zero_insets(ENV* env);
 /// does**. That agreement is new. This function used to treat anything it did
 /// not recognise as `pc-windows-11` while `flags.rs` treated the same string
 /// as `android-tablet` -- not even its own default -- so
-/// `CORDIAL_DEVICE_PROFILE=tablett` produced a client reporting one identity
+/// `RBX_RUNTIME_DEVICE_PROFILE=tablett` produced a client reporting one identity
 /// in its log while sending the other to the engine, silently. Both sides now
 /// fall back to `pc-windows-11` and both say so.
 enum class DeviceIdentity { RobloxApp, AndroidTablet, PcWindows11 };
 
 static DeviceIdentity device_identity() {
     static const DeviceIdentity v = [] {
-        const char* e = getenv("CORDIAL_DEVICE_PROFILE");
+        const char* e = getenv("RBX_RUNTIME_DEVICE_PROFILE");
         if (!e) return DeviceIdentity::PcWindows11;
         std::string s(e);
         for (char& c : s) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
@@ -237,7 +237,7 @@ static DeviceIdentity device_identity() {
         // reaches the engine, so a value it did not understand has to be
         // visible from a run of the client alone.
         fprintf(stderr,
-                "[cordial] CORDIAL_DEVICE_PROFILE=\"%s\" is not a device profile; using "
+                "[cordial] RBX_RUNTIME_DEVICE_PROFILE=\"%s\" is not a device profile; using "
                 "pc-windows-11. Known: roblox-app, android-tablet, pc-windows-11\n",
                 e);
         return DeviceIdentity::PcWindows11;
@@ -277,7 +277,7 @@ const char* device_platform_name() {
 /// Exposed (non-static) the same way `S_pub` is: other translation units link
 /// against one accessor rather than copy the profile table. `BuildInfo` in
 /// `unanswered_classes.cpp` is the first consumer — hooking those getters
-/// against a local table would make `CORDIAL_DEVICE_PROFILE` change InitParams
+/// against a local table would make `RBX_RUNTIME_DEVICE_PROFILE` change InitParams
 /// and the User-Agent while leaving WebRTC's BuildInfo on a stale answer.
 ///
 /// Values stay inside Cordial's own honest vocabulary (manufacturer/device
@@ -306,7 +306,7 @@ const DeviceProfile& device_profile() {
                 // line; device/product keep the PC form factor distinct from
                 // the tablet identity so a BuildInfo read can see the switch.
                 return DeviceProfile{"Cordial", "Cordial", "Windows 11 PC",
-                                     "cordial_pc", "cordial_pc", "cordial", "user",
+                                     "roblox_pc", "roblox_pc", "cordial", "user",
                                      "11", "33"};
             case DeviceIdentity::AndroidTablet:
                 return DeviceProfile{"Cordial", "Cordial", "Cordial", "cordial",
@@ -403,7 +403,7 @@ static std::string build_user_agent() {
     // cannot go stale across an APK update the way `nativeSetRobloxVersion`'s
     // literal silently did.
     std::string app = "0.0.0";
-    if (const char* v = getenv("CORDIAL_ENGINE_VERSION")) {
+    if (const char* v = getenv("RBX_RUNTIME_ENGINE_VERSION")) {
         std::string ver(v);
         std::vector<std::string> parts;
         size_t start = 0;
@@ -474,15 +474,15 @@ static std::string build_user_agent() {
 /// copies the same bytes out.
 ///
 /// `buf`/`n` rather than returning a `std::string` across the FFI boundary,
-/// matching every other Rust-facing native in this tree (`cordial_set_display_size`'s
-/// neighbours below, `cordial_messagebus_subscribe` in clipboard.cpp) — none
+/// matching every other Rust-facing native in this tree (`roblox_set_display_size`'s
+/// neighbours below, `roblox_messagebus_subscribe` in clipboard.cpp) — none
 /// of them hand a C++ standard-library object across the boundary, all of
 /// them fill a caller-owned buffer and report how much they needed. Returns
 /// the full length of the User-Agent regardless of whether it fit, the same
 /// convention `snprintf` itself uses, so a caller with too small a buffer can
 /// tell truncation from success rather than silently reading a cut-off
 /// string.
-extern "C" size_t cordial_build_user_agent(char* buf, size_t n) {
+extern "C" size_t roblox_build_user_agent(char* buf, size_t n) {
     std::string ua = cordial::build_user_agent();
     if (buf && n > 0) {
         size_t copy = ua.size() < n - 1 ? ua.size() : n - 1;
@@ -575,7 +575,7 @@ public:
 /// The desktop's dark/light preference as `Configuration.uiMode` night bits.
 jint ui_mode_night_bits();
 /// Whether the display backend found a touchscreen on the seat, resolved
-/// against `CORDIAL_INPUT_TOUCH` before it gets here.
+/// against `RBX_RUNTIME_INPUT_TOUCH` before it gets here.
 bool host_has_touchscreen();
 
 class Configuration : public Object {
@@ -615,7 +615,7 @@ public:
     /// reports the real value, which is why the same account renders dark
     /// there after a restart and light here forever.
     ///
-    /// `cordial_set_ui_mode_night` carries the desktop's actual preference in
+    /// `roblox_set_ui_mode_night` carries the desktop's actual preference in
     /// from the Rust side, which reads it from libadwaita's style manager and
     /// therefore from `org.freedesktop.appearance`'s `color-scheme` -- the
     /// same source the rest of the desktop uses, rather than a second opinion
@@ -773,7 +773,7 @@ public:
     }
 };
 
-std::shared_ptr<Insets> cordial_make_zero_insets(ENV* env) { return Insets::Create(env); }
+std::shared_ptr<Insets> roblox_make_zero_insets(ENV* env) { return Insets::Create(env); }
 
 /// `androidx.core.view.WindowInsetsCompat$Type`
 ///
@@ -1203,7 +1203,7 @@ public:
 ///
 /// The cause of the store never appearing was `nativeSetCacheDirectory` being
 /// called after `GameActivity.initializeNativeCode` instead of before it
-/// (`CORDIAL_EARLY_DIRS`, flag-init.md §46) and had nothing to do with this
+/// (`RBX_RUNTIME_EARLY_DIRS`, flag-init.md §46) and had nothing to do with this
 /// verdict. Naming a second symptom as the consequence of a first, when both
 /// were merely present together, is how this became load-bearing for two
 /// investigations that went nowhere.
@@ -1220,11 +1220,11 @@ public:
 /// Cordial's own synchronous `nativeAppBridgeStartLuaAppDM` /
 /// `nativeAppBridgeV2StartAppWithParams` calls through the same StartLuaAppDM
 /// machinery. Both reporters' logs die between "app bridge initialised" and
-/// the surface handoff — before `CORDIAL_LATE_POST_MS`'s late
+/// the surface handoff — before `RBX_RUNTIME_LATE_POST_MS`'s late
 /// `nativePostClientSettingsLoadedInitialization3` retry (the thing that
 /// actually produces `areFlagsLoaded:true`, flag-init.md §23) ever gets to run.
 /// Reproduced on this machine too, with the same message and signal, using the
-/// existing `CORDIAL_LATE_SETTINGS=1` knob to bias that same race — confirmed
+/// existing `RBX_RUNTIME_LATE_SETTINGS=1` knob to bias that same race — confirmed
 /// live under gdb, crash on the process's original main thread inside
 /// libroblox.so, no symbols. What could not be reproduced here is the race
 /// losing on the *default*, no-env-var path: nine attempts on this host
@@ -1291,7 +1291,7 @@ public:
         // The same counter `gameLoadedCallback` bumps, for the join watchdog.
         // Both callbacks mean the join completed and different builds have been
         // seen to call different ones, so the watchdog waits on either.
-        cordial_note_game_loaded(static_cast<long long>(place_id));
+        roblox_note_game_loaded(static_cast<long long>(place_id));
     }
     /// The argument is a session identifier, not a credential — but this
     /// boundary is next to the one that carries `.ROBLOSECURITY`, so it is
@@ -1510,7 +1510,7 @@ public:
     }
 };
 
-/// `CORDIAL_TRACE_PARAM_READS=1`: name each `PlatformParams` and `DeviceParams`
+/// `RBX_RUNTIME_TRACE_PARAM_READS=1`: name each `PlatformParams` and `DeviceParams`
 /// field the engine actually reads off Cordial's own object.
 ///
 /// This exists to settle a premise the whole "Roblox thinks you're mobile" line
@@ -1534,7 +1534,7 @@ public:
 /// ordinary client keeps the plain field hooks it has always had and the probe
 /// cannot change what it is measuring.
 static bool trace_param_reads() {
-    static const bool on = getenv("CORDIAL_TRACE_PARAM_READS") != nullptr;
+    static const bool on = getenv("RBX_RUNTIME_TRACE_PARAM_READS") != nullptr;
     return on;
 }
 
@@ -1670,7 +1670,7 @@ public:
         // Was a hardcoded `false`, which was true of every machine this has
         // been developed on and false of the ones the client is for. It now
         // reports what the display backend found on the seat, with
-        // `CORDIAL_INPUT_TOUCH` overriding it either way — see
+        // `RBX_RUNTIME_INPUT_TOUCH` overriding it either way — see
         // `android::input::report_touchscreen`, which resolves both into the
         // single answer stored here.
         p->isTouchDevice = cordial::host_has_touchscreen() ? JNI_TRUE : JNI_FALSE;
@@ -1680,7 +1680,7 @@ public:
         // because the right value depends on the display, and nothing here can
         // measure the display's physical size reliably.
         {
-            const char* v = getenv("CORDIAL_DPI_SCALE");
+            const char* v = getenv("RBX_RUNTIME_DPI_SCALE");
             float scale = 1.0f;
             if (v && *v) {
                 float parsed = strtof(v, nullptr);
@@ -1688,7 +1688,7 @@ public:
                     scale = parsed;
                 } else {
                     fprintf(stderr,
-                            "[android] CORDIAL_DPI_SCALE=%s is not a scale between 0 and 8;"
+                            "[android] RBX_RUNTIME_DPI_SCALE=%s is not a scale between 0 and 8;"
                             " using 1.0\n", v);
                 }
             }
@@ -1781,7 +1781,7 @@ public:
         // it goes out on the wire, not into anything grep can reach here.
         // The platform name is printed with the rest because it is answered
         // from `android_classes.cpp`, and a run is the only place the two can
-        // be seen to agree; `CORDIAL_PLATFORM_NAME` shows up here too.
+        // be seen to agree; `RBX_RUNTIME_PLATFORM_NAME` shows up here too.
         const char* platform_name();  // native/android_classes.cpp
         std::string ua = build_user_agent();
         fprintf(stderr,
@@ -1996,7 +1996,7 @@ void register_init_params_classes(ENV* env) {
 extern "C" {
 
 /// Call `MainGameActivity.nativeAppBridgeSetInitParams(InitParams)`.
-int cordial_set_init_params(void* fn, const char* assets, int width, int height, char* err,
+int roblox_set_init_params(void* fn, const char* assets, int width, int height, char* err,
                             size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jobject);
     auto* env = cordial::process_env();
@@ -2030,7 +2030,7 @@ extern "C" {
 /// This is how the engine gets its asset manager. Without it the engine has no
 /// way to read its own content, which is why nothing downstream ever starts:
 /// no assets, no app shell, no reason to open a socket or draw a frame.
-int cordial_asset_manager_init(void* fn, char* err, size_t err_len) {
+int roblox_asset_manager_init(void* fn, char* err, size_t err_len) {
     using Call = void (*)(JNIEnv*, jclass, jobject);
     auto* env = cordial::process_env();
     if (!fn || !env) {
@@ -2054,7 +2054,7 @@ int cordial_asset_manager_init(void* fn, char* err, size_t err_len) {
 }
 
 /// `LocalStorageManager.initStorageManagerNativeV3(AssetManager, String, String)`
-int cordial_storage_init(void* fn, const char* a, const char* b, char* err, size_t err_len) {
+int roblox_storage_init(void* fn, const char* a, const char* b, char* err, size_t err_len) {
     using Call = void (*)(JNIEnv*, jclass, jobject, jstring, jstring);
     auto* env = cordial::process_env();
     if (!fn || !env) {
@@ -2093,7 +2093,7 @@ int cordial_storage_init(void* fn, const char* a, const char* b, char* err, size
 ///
 /// The signatures come from the shipping APK's own declarations, read out of the
 /// dex — the host app's side of a contract Cordial is reimplementing.
-int cordial_call_static_strings(void* fn, const char* class_name, const char* const* args,
+int roblox_call_static_strings(void* fn, const char* class_name, const char* const* args,
                                 size_t n, char* err, size_t err_len) {
     auto* env = cordial::process_env();
     if (!fn || !env || !class_name) {
@@ -2153,7 +2153,7 @@ int cordial_call_static_strings(void* fn, const char* class_name, const char* co
 ///
 /// A task scheduler left in background mode is a scheduler that has been told
 /// not to render.
-int cordial_call_static_bool_string(void* fn, const char* class_name, int flag, const char* text,
+int roblox_call_static_bool_string(void* fn, const char* class_name, int flag, const char* text,
                                     char* err, size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jboolean, jstring);
     auto* env = cordial::process_env();
@@ -2183,7 +2183,7 @@ int cordial_call_static_bool_string(void* fn, const char* class_name, int flag, 
 /// The dedicated path for telling the engine what it is running on. Cordial only
 /// ever delivered `DeviceParams` nested inside `InitParams`, and never called
 /// this at all.
-int cordial_set_device_info(void* fn, int width, int height, char* err, size_t err_len) {
+int roblox_set_device_info(void* fn, int width, int height, char* err, size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jobject);
     auto* env = cordial::process_env();
     if (!fn || !env) {
@@ -2228,7 +2228,7 @@ int cordial_set_device_info(void* fn, int width, int height, char* err, size_t e
 /// engine is already given separately by `nativeSetBaseDataDirectories(files,
 /// cache)` and the shapes match. If that is wrong, the engine's own RbxStorage
 /// logging is what will say so.
-int cordial_init_storage_manager(void* fn, const char* a, const char* b, char* err,
+int roblox_init_storage_manager(void* fn, const char* a, const char* b, char* err,
                                  size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jobject, jstring, jstring);
     auto* env = cordial::process_env();
@@ -2244,7 +2244,7 @@ int cordial_init_storage_manager(void* fn, const char* a, const char* b, char* e
         // which is what a *static* native expects and is a different thing
         // entirely from an instance of that class.
         //
-        // Nothing threw, so `cordial_init_storage_manager` returned 0 and
+        // Nothing threw, so `roblox_init_storage_manager` returned 0 and
         // Cordial has been logging `initStorageManagerNativeV3 ok` on every
         // run while handing the engine a receiver of the wrong kind. That is
         // the same failure as the static-vs-instance mismatch on
@@ -2280,7 +2280,7 @@ int cordial_init_storage_manager(void* fn, const char* a, const char* b, char* e
 }
 
 /// A native taking only `(JNIEnv*, jobject)` — `nativeRetryInit`.
-int cordial_call_bare(void* fn, char* err, size_t err_len) {
+int roblox_call_bare(void* fn, char* err, size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject);
     auto* env = cordial::process_env();
     if (!fn || !env) {
@@ -2304,9 +2304,9 @@ int cordial_call_bare(void* fn, char* err, size_t err_len) {
 /// observe `NativeSettingsInterface.nativeIsLuaLoginEnabled()`'s own verdict,
 /// diagnostic-only instrumentation for `docs/design/sign-in.md`. This does not
 /// drive any UI or enter any credentials; it only reads the engine's boolean
-/// answer. Mirrors `cordial_call_static_strings`'s convention: a static
+/// answer. Mirrors `roblox_call_static_strings`'s convention: a static
 /// native's receiver is the `Class` object itself, per JNI.
-int cordial_call_static_bare_bool(void* fn, const char* class_name, int* out_result,
+int roblox_call_static_bare_bool(void* fn, const char* class_name, int* out_result,
                                    char* err, size_t err_len) {
     using Call = jboolean (*)(JNIEnv*, jobject);
     auto* env = cordial::process_env();
@@ -2346,7 +2346,7 @@ extern "C" {
 /// An empty array means "no overrides": the engine falls back to the defaults
 /// compiled into it. That is the honest starting point — inventing flag values
 /// would change engine behaviour in ways nothing here could account for.
-int cordial_init_flags(void* fn, const char* settings_json, char* err, size_t err_len) {
+int roblox_init_flags(void* fn, const char* settings_json, char* err, size_t err_len) {
     using Call = jobject (*)(JNIEnv*, jclass, jobjectArray);
     auto* env = cordial::process_env();
     if (!fn || !env) {
@@ -2441,7 +2441,7 @@ extern "C" {
 /// The choice of *which* rate, when a window is on two outputs at once, is made
 /// in `crates/cordial-runtime/src/refresh.rs` and tested there. These two only
 /// carry the answer across.
-int cordial_pass_current_refresh_rate(void* fn, float hz, char* err, size_t err_len) {
+int roblox_pass_current_refresh_rate(void* fn, float hz, char* err, size_t err_len) {
     using Call = void (*)(JNIEnv*, jclass, jfloat);
     auto* env = cordial::process_env();
     if (!fn || !env) {
@@ -2462,7 +2462,7 @@ int cordial_pass_current_refresh_rate(void* fn, float hz, char* err, size_t err_
     }
 }
 
-int cordial_pass_supported_refresh_rates(void* fn, const float* rates, size_t count, char* err,
+int roblox_pass_supported_refresh_rates(void* fn, const float* rates, size_t count, char* err,
                                          size_t err_len) {
     using Call = void (*)(JNIEnv*, jclass, jfloatArray);
     auto* env = cordial::process_env();
@@ -2488,7 +2488,7 @@ int cordial_pass_supported_refresh_rates(void* fn, const float* rates, size_t co
     }
 }
 
-int cordial_read_local_flags(void* fn, char* err, size_t err_len) {
+int roblox_read_local_flags(void* fn, char* err, size_t err_len) {
     using Call = jobject (*)(JNIEnv*, jclass);
     auto* env = cordial::process_env();
     if (!fn || !env) {
@@ -2529,7 +2529,7 @@ extern "C" {
 /// wrapper passes them through as given so the caller can supply candidates
 /// and read the `int` back, which is a far more reliable signal than
 /// anything printed to the log.
-int cordial_init_client_settings(void* fn, const char* a, const char* b, const char* c,
+int roblox_init_client_settings(void* fn, const char* a, const char* b, const char* c,
                                  jint* out_result, char* err, size_t err_len) {
     using Call = jint (*)(JNIEnv*, jclass, jstring, jstring, jstring);
     auto* env = cordial::process_env();
@@ -2589,7 +2589,7 @@ int cordial_init_client_settings(void* fn, const char* a, const char* b, const c
 /// is the honest default rather than a guess.
 static std::atomic<int> g_ui_mode_night{-1};
 
-extern "C" void cordial_set_ui_mode_night(int night) {
+extern "C" void roblox_set_ui_mode_night(int night) {
     g_ui_mode_night.store(night, std::memory_order_relaxed);
 }
 
@@ -2608,13 +2608,13 @@ static std::atomic<int> g_touchscreen_present{-1};
 /// **This is latched for the session in practice, and the reason is ordering
 /// rather than policy.** `android::input::report_touchscreen` runs from the
 /// display backend's `open()`, which `load.rs` calls before
-/// `cordial_appbridge_init`/`cordial_set_init_params`; the engine reads
+/// `roblox_appbridge_init`/`roblox_set_init_params`; the engine reads
 /// `isTouchDevice` during that initialisation and there is no call anywhere in
 /// this build by which a platform revises it afterwards. So a touchscreen
 /// plugged in after startup gets its events routed — `android::input` decides
 /// that per event — but arrives too late to change what the engine was told
 /// about the device. Writing it later is harmless and simply has no reader.
-extern "C" void cordial_set_touchscreen_present(int present) {
+extern "C" void roblox_set_touchscreen_present(int present) {
     g_touchscreen_present.store(present ? 1 : 0, std::memory_order_relaxed);
 }
 
@@ -2655,7 +2655,7 @@ jint ui_mode_night_bits() {
 } // namespace cordial
 } // extern "C++"
 
-extern "C" void cordial_set_display_size(int width, int height) {
+extern "C" void roblox_set_display_size(int width, int height) {
     if (width > 0 && height > 0) {
         cordial::set_display_size(width, height);
     }
@@ -2665,7 +2665,7 @@ extern "C" void cordial_set_display_size(int width, int height) {
 /// above which refuses it. The difference is deliberate: a display with no
 /// pixels is a bug, a display with no *reported millimetres* is an ordinary
 /// thing for a compositor to say.
-extern "C" void cordial_set_display_physical_mm(int width_mm, int height_mm) {
+extern "C" void roblox_set_display_physical_mm(int width_mm, int height_mm) {
     cordial::set_display_physical_mm(width_mm > 0 ? width_mm : 0,
                                      height_mm > 0 ? height_mm : 0);
 }
@@ -2684,7 +2684,7 @@ extern "C" void cordial_set_display_physical_mm(int width_mm, int height_mm) {
 /// The second argument is the default the engine returns when the flag is not
 /// registered, so passing a sentinel distinguishes "set to zero" from "not a
 /// flag" — a distinction the log alone cannot make.
-int cordial_get_fint(void* fn, const char* name, jint fallback, jint* out_result,
+int roblox_get_fint(void* fn, const char* name, jint fallback, jint* out_result,
                      char* err, size_t err_len) {
     using Call = jint (*)(JNIEnv*, jclass, jstring, jint);
     auto* env = cordial::process_env();
@@ -2732,7 +2732,7 @@ int cordial_get_fint(void* fn, const char* name, jint fallback, jint* out_result
 /// The trailing `long` and `boolean` are passed through as given rather than
 /// guessed at, for the same reason the three strings are: the caller can vary
 /// them and read the `int` back, which is a better signal than the log.
-int cordial_init_client_settings_cached_compressed(void* fn, const void* data, size_t len,
+int roblox_init_client_settings_cached_compressed(void* fn, const void* data, size_t len,
                                                    const char* a, const char* b, const char* c,
                                                    long long when, int flag, jint* out_result,
                                                    char* err, size_t err_len) {
@@ -2778,7 +2778,7 @@ int cordial_init_client_settings_cached_compressed(void* fn, const void* data, s
 /// The finishing step of the client-settings handshake on the real app's
 /// side. Called with an empty `ArrayList` — the honest starting point, since
 /// nothing here knows what real elements the list would otherwise carry.
-int cordial_post_client_settings_loaded(void* fn, char* err, size_t err_len) {
+int roblox_post_client_settings_loaded(void* fn, char* err, size_t err_len) {
     using Call = void (*)(JNIEnv*, jclass, jobject);
     auto* env = cordial::process_env();
     if (!fn || !env) {
@@ -2815,7 +2815,7 @@ extern "C" {
 /// shapes (a flat `{"FlagName":"value"}` map vs. the doubly-wrapped
 /// `{"applicationSettings":{...}}` shape the real `ClientSettings` endpoint
 /// returns) and compare the resulting JNI trace / flags verdict.
-int cordial_preload_flag_overrides(void* fn, const char* json, char* err, size_t err_len) {
+int roblox_preload_flag_overrides(void* fn, const char* json, char* err, size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jstring);
     auto* env = cordial::process_env();
     if (!fn || !env) {
@@ -2823,7 +2823,7 @@ int cordial_preload_flag_overrides(void* fn, const char* json, char* err, size_t
         return -1;
     }
     try {
-        // An instance native (per `cordial_set_init_params`'s precedent just
+        // An instance native (per `roblox_set_init_params`'s precedent just
         // above): the second argument is an Activity instance, not the class.
         auto activity = std::make_shared<jnivm::Object>();
         auto s = cordial::S_pub(json ? json : "");
@@ -2852,7 +2852,7 @@ extern "C" {
 /// `MainGameActivity`, which the manifest marks `exported=false`. The chain that
 /// actually brings the client up runs through here, not through
 /// `MainGameActivity.nativeAppBridgeSetInitParams`.
-int cordial_appbridge_init(void* fn, const char* assets, int width, int height, char* err,
+int roblox_appbridge_init(void* fn, const char* assets, int width, int height, char* err,
                            size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jobject);
     auto* env = cordial::process_env();
@@ -2882,7 +2882,7 @@ int cordial_appbridge_init(void* fn, const char* assets, int width, int height, 
 /// `NativeGLInterface` — which is why searching the GL interface for it kept
 /// coming up empty. The Waydroid capture shows the real client calling it first,
 /// before `nativeAppBridgeV2Init`.
-int cordial_appbridge_call_bare_cls(void* fn, const char* class_name, char* err, size_t err_len) {
+int roblox_appbridge_call_bare_cls(void* fn, const char* class_name, char* err, size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject);
     auto* env = cordial::process_env();
     if (!fn || !env || !class_name) {
@@ -2907,7 +2907,7 @@ int cordial_appbridge_call_bare_cls(void* fn, const char* class_name, char* err,
 /// "Start Lua App DataModel": the Lua app shell is what Roblox actually renders
 /// on this platform, so this is the call that turns a live engine into a drawing
 /// one.
-int cordial_appbridge_call_bare(void* fn, char* err, size_t err_len) {
+int roblox_appbridge_call_bare(void* fn, char* err, size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject);
     auto* env = cordial::process_env();
     if (!fn || !env) {
@@ -2934,7 +2934,7 @@ extern "C" {
 /// `NativeGLInterface.nativeAppBridgeV2StartAppWithParams(StartAppParams)`
 ///
 /// The call that hands the engine its window. Everything before it is setup.
-int cordial_appbridge_start_app(void* fn, const char* assets, int width, int height, char* err,
+int roblox_appbridge_start_app(void* fn, const char* assets, int width, int height, char* err,
                                 size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jobject);
     auto* env = cordial::process_env();
@@ -3017,12 +3017,12 @@ static int update_surface(void* fn, const char* assets, int width, int height, b
     }
 }
 
-int cordial_appbridge_update_surface_app(void* fn, const char* assets, int width, int height,
+int roblox_appbridge_update_surface_app(void* fn, const char* assets, int width, int height,
                                          char* err, size_t err_len) {
     return update_surface(fn, assets, width, height, /*with_activity=*/false, err, err_len);
 }
 
-int cordial_appbridge_update_surface_game(void* fn, const char* assets, int width, int height,
+int roblox_appbridge_update_surface_game(void* fn, const char* assets, int width, int height,
                                           char* err, size_t err_len) {
     return update_surface(fn, assets, width, height, /*with_activity=*/true, err, err_len);
 }
@@ -3039,7 +3039,7 @@ extern "C" {
 /// including the JNI environment it later reaches through — when it does.
 /// Nothing in Cordial was driving them, which is why the engine held a null
 /// environment on the game thread and faulted calling FindClass through it.
-int cordial_activity_lifecycle(void* fn, const char* activity, char* err, size_t err_len) {
+int roblox_activity_lifecycle(void* fn, const char* activity, char* err, size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jstring);
     auto* env = cordial::process_env();
     if (!fn || !env) {

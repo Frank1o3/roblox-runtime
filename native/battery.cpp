@@ -48,7 +48,7 @@
 // under-claim (nothing here uses fields the engine ignores as evidence they
 // exist) but it also has not been watched happen. Confirming that, or finding
 // out some of these fifteen are never read, is `tools/hook_descriptors.py`'s
-// job for spelling and `CORDIAL_JNI_TRACE=1` in a real run for the rest.
+// job for spelling and `RBX_RUNTIME_JNI_TRACE=1` in a real run for the rest.
 
 #include <jnivm.h>
 
@@ -216,7 +216,7 @@ public:
 };
 
 /// Registers the box types and `BatteryStatus`. Called once, from
-/// `android_classes.cpp`'s `cordial_register_android_classes` — see that
+/// `android_classes.cpp`'s `roblox_register_android_classes` — see that
 /// file's own list of `register_*_classes` calls, which this joins rather than
 /// duplicates the pattern of.
 void register_battery_classes(jnivm::ENV* env) {
@@ -232,7 +232,7 @@ void register_battery_classes(jnivm::ENV* env) {
 // --------------------------------------------------------------- extern "C"
 //
 // The Rust-facing surface, matching the shape `init_params.cpp`'s
-// `cordial_pass_current_refresh_rate` and friends already establish: resolve
+// `roblox_pass_current_refresh_rate` and friends already establish: resolve
 // the exported native by symbol name on the Rust side, hand the function
 // pointer in here, and this file does the `jnivm::ENV`/`jobject` plumbing Rust
 // cannot name.
@@ -244,7 +244,7 @@ extern "C" {
 /// `status` and `plugged` are Android's own `BatteryManager` raw values — see
 /// this file's header and `crates/cordial-runtime/src/battery.rs` for where
 /// that reading came from and what about it is `INFERRED`.
-int cordial_report_battery_state_changed(void* fn, int status, int plugged, char* err,
+int roblox_report_battery_state_changed(void* fn, int status, int plugged, char* err,
                                           size_t err_len) {
     using Call = void (*)(JNIEnv*, jclass, jint, jint);
     auto* env = cordial::process_env();
@@ -306,7 +306,7 @@ struct CordialBatteryStatus {
 };
 
 /// `NativeGLInterface.reportBatteryStatus(Lcom/roblox/engine/jni/model/BatteryStatus;)V`.
-int cordial_report_battery_status(void* fn, const CordialBatteryStatus* in, char* err,
+int roblox_report_battery_status(void* fn, const CordialBatteryStatus* in, char* err,
                                    size_t err_len) {
     using Call = void (*)(JNIEnv*, jclass, jobject);
     auto* env = cordial::process_env();

@@ -119,7 +119,7 @@ pub fn placeholder(what: &str, returned: &str) {
 /// `detail` must be a NUL-terminated C string valid for the duration of the
 /// call. It is copied before returning.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn cordial_unimplemented_record(kind: u32, detail: *const c_char) {
+pub unsafe extern "C" fn roblox_unimplemented_record(kind: u32, detail: *const c_char) {
     if detail.is_null() {
         return;
     }
@@ -151,7 +151,7 @@ fn report_path() -> PathBuf {
     // is the profile's data dir; the engine resolves it itself. This mirrors it
     // rather than deriving it, because the profile in force is `profile.rs`'s
     // answer and this module has no business re-deriving it wrongly.
-    std::env::var_os("CORDIAL_UNIMPLEMENTED_LOG")
+    std::env::var_os("RBX_RUNTIME_UNIMPLEMENTED_LOG")
         .map(PathBuf::from)
         .unwrap_or_else(|| {
             std::path::Path::new("files/appData/logs/cordial-unimplemented.log")
@@ -206,7 +206,7 @@ fn render_from(seen: &BTreeMap<(Kind, String), u64>) -> String {
         out.push_str(
             "No JNI gaps are listed, and that is NOT evidence there were none: libjnivm only\n\
              emits `Constructed Unresolved symbol` when built with the JNI trace on. Rebuild\n\
-             with -DCORDIAL_JNI_TRACE=ON to populate that section. It is very slow.\n\n",
+             with -DRBX_RUNTIME_JNI_TRACE=ON to populate that section. It is very slow.\n\n",
         );
     }
 
@@ -314,7 +314,7 @@ mod tests {
         // `#ifdef JNI_TRACE` and the trace was off".
         let text = render_from(&map(&[(Kind::LibcStub, "anything", 1)]));
         assert!(text.contains("NOT evidence there were none"), "{text}");
-        assert!(text.contains("CORDIAL_JNI_TRACE"), "{text}");
+        assert!(text.contains("RBX_RUNTIME_JNI_TRACE"), "{text}");
 
         // And it does not say it when the section has something in it.
         let with_jni = render_from(&map(&[(Kind::Jni, "Class=`X`, Method=`y`", 1)]));
@@ -331,7 +331,7 @@ mod tests {
         // cannot be disturbed by, or disturb, anything else in the register.
         let name = std::ffi::CString::new("from_cpp_marker").unwrap();
         // SAFETY: a live, NUL-terminated string for the duration of the call.
-        unsafe { cordial_unimplemented_record(0, name.as_ptr()) };
+        unsafe { roblox_unimplemented_record(0, name.as_ptr()) };
         let seen = SEEN.lock().unwrap_or_else(|e| e.into_inner());
         assert_eq!(
             seen.get(&(Kind::Jni, "from_cpp_marker".to_string())),

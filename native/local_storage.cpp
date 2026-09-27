@@ -75,7 +75,7 @@
 // edit. So `crates/cordial-runtime/src/bin/load.rs` carries a second, small
 // implementation of the same *reasoning* -- keyring first, honest fallback,
 // nothing ever printed -- under its own schema, reachable from here only
-// through the four `cordial_local_storage_*` externs below. That module's own
+// through the four `roblox_local_storage_*` externs below. That module's own
 // header says why it is not simply a third `Kind`.
 //
 // **Never make a stub lie.** A value that was never stored, or that the
@@ -122,7 +122,7 @@ std::shared_ptr<String> S(const char* v) {
 }
 } // namespace
 
-/// `CORDIAL_TRACE_LOCAL_STORAGE=1` -- did the engine ever call this interface?
+/// `RBX_RUNTIME_TRACE_LOCAL_STORAGE=1` -- did the engine ever call this interface?
 ///
 /// `docs/analysis/flag-init.md` §40 established that handing the platform
 /// implementation over stops the engine's "Not available on the current
@@ -137,7 +137,7 @@ std::shared_ptr<String> S(const char* v) {
 /// `secrets.rs`'s. Key names and byte counts only, which is the same line the
 /// Rust side draws.
 static bool trace_local_storage() {
-    static const bool on = getenv("CORDIAL_TRACE_LOCAL_STORAGE") != nullptr;
+    static const bool on = getenv("RBX_RUNTIME_TRACE_LOCAL_STORAGE") != nullptr;
     return on;
 }
 
@@ -169,17 +169,17 @@ bool identity_known();
 //
 // Return codes, shared by all four: `0` succeeded (a "not found" read is a
 // success that found nothing, not a failure); anything negative is a reason
-// to answer the engine honestly rather than to guess. `cordial_local_storage_get`
+// to answer the engine honestly rather than to guess. `roblox_local_storage_get`
 // additionally distinguishes "absent" (`1` not set) from "present" (`1` set,
 // `*out_len` gives the length written) so the caller never has to infer one
 // from the other.
 extern "C" {
-int cordial_local_storage_get(long long user_id, const char* key, char* out, size_t out_cap,
+int roblox_local_storage_get(long long user_id, const char* key, char* out, size_t out_cap,
                                int* found, size_t* out_len);
-int cordial_local_storage_set(long long user_id, const char* key, const char* value,
+int roblox_local_storage_set(long long user_id, const char* key, const char* value,
                               size_t value_len);
-int cordial_local_storage_delete(long long user_id, const char* key);
-int cordial_local_storage_delete_user(long long user_id);
+int roblox_local_storage_delete(long long user_id, const char* key);
+int roblox_local_storage_delete_user(long long user_id);
 } // extern "C"
 
 // ---------------------------------------------------------------------------
@@ -218,7 +218,7 @@ jlong current_user_locked() {
 /// `setPlatformImpl` crashed the process for as long as it was enabled.
 /// `docs/analysis/flag-init.md` §39 inferred that libjnivm's own
 /// `NewWeakGlobalRef` was returning null and djinni was asserting on that.
-/// **That inference is wrong and §40 retracts it.** A `CORDIAL_JNI_TRACE=ON`
+/// **That inference is wrong and §40 retracts it.** A `RBX_RUNTIME_JNI_TRACE=ON`
 /// run with a print added to `NewWeakGlobalRef` shows it is never called at
 /// all -- not once, in a run that throws `djinni (djinni_support.cpp:529):
 /// weakRef` thirteen times. What the trace shows instead, in the last dozen
@@ -340,7 +340,7 @@ public:
 
 /// `com.roblox.protocols.localstorageplatforminterface.generated.IPlatformLocalStorageHandler`
 ///
-/// One instance, constructed once by `cordial_local_storage_set_platform_impl`
+/// One instance, constructed once by `roblox_local_storage_set_platform_impl`
 /// below and held by the engine for the life of the process -- the same
 /// lifetime `cookies.cpp`'s `g_handler` documents for the same reason: the
 /// engine calls back into this from its own thread, long after the call that
@@ -408,13 +408,13 @@ public:
         }
         jlong user = current_user();
         std::string k(*key);
-        int rc = cordial_local_storage_delete(static_cast<long long>(user), k.c_str());
+        int rc = roblox_local_storage_delete(static_cast<long long>(user), k.c_str());
         return rc == 0 ? JNI_TRUE : JNI_FALSE;
     }
 
     jboolean deleteUserValues(ENV*, jlong userId) {
         note_call("deleteUserValues", nullptr);
-        int rc = cordial_local_storage_delete_user(static_cast<long long>(userId));
+        int rc = roblox_local_storage_delete_user(static_cast<long long>(userId));
         std::lock_guard<std::mutex> lock(g_users_mutex);
         g_known_users.erase(userId);
         return rc == 0 ? JNI_TRUE : JNI_FALSE;
@@ -474,7 +474,7 @@ private:
         std::vector<char> buf(kMaxValue);
         int found = 0;
         size_t len = 0;
-        int rc = cordial_local_storage_get(static_cast<long long>(userId), k.c_str(), buf.data(),
+        int rc = roblox_local_storage_get(static_cast<long long>(userId), k.c_str(), buf.data(),
                                            buf.size(), &found, &len);
         if (rc != 0 || !found) {
             // Absent, a locked keyring, a value too large for `kMaxValue`, or
@@ -500,14 +500,14 @@ private:
         if (v.size() > kMaxValue) {
             return JNI_FALSE;
         }
-        int rc = cordial_local_storage_set(static_cast<long long>(userId), k.c_str(), v.c_str(),
+        int rc = roblox_local_storage_set(static_cast<long long>(userId), k.c_str(), v.c_str(),
                                            v.size());
         return rc == 0 ? JNI_TRUE : JNI_FALSE;
     }
 };
 
 /// The descriptors this file actually registered, printed under
-/// `CORDIAL_TRACE_LOCAL_STORAGE=1`.
+/// `RBX_RUNTIME_TRACE_LOCAL_STORAGE=1`.
 ///
 /// Not decoration. libjnivm derives every hook's signature from the C++ types
 /// of the function it is handed, by way of a `typeid`-keyed map that any other
@@ -619,7 +619,7 @@ extern "C" {
 /// rather than merely failing quietly. §40 records it.
 ///
 /// It does not produce an `rbx-storage.db`; see §40's closing note.
-int cordial_local_storage_set_platform_impl(void* fn, char* err, size_t err_len) {
+int roblox_local_storage_set_platform_impl(void* fn, char* err, size_t err_len) {
     using Call = jobject (*)(JNIEnv*, jclass, jobject);
     auto* env = cordial::process_env();
     if (!fn || !env) {
@@ -650,7 +650,7 @@ int cordial_local_storage_set_platform_impl(void* fn, char* err, size_t err_len)
             jni->ExceptionDescribe();
             jni->ExceptionClear();
         }
-        if (getenv("CORDIAL_TRACE_LOCAL_STORAGE")) {
+        if (getenv("RBX_RUNTIME_TRACE_LOCAL_STORAGE")) {
             fprintf(stderr, "[cordial] local storage: setPlatformImpl returned %s%s\n",
                     core ? "a core" : "null", pending ? ", exception pending" : "");
         }
@@ -679,7 +679,7 @@ int cordial_local_storage_set_platform_impl(void* fn, char* err, size_t err_len)
 /// same width/height comparison. Duplicated here rather than shared through a
 /// header, which is this directory's usual reason: one header for two
 /// constants would be the only one in `native/`.
-int cordial_update_screen_orientation(void* fn, int width, int height, char* err, size_t err_len) {
+int roblox_update_screen_orientation(void* fn, int width, int height, char* err, size_t err_len) {
     constexpr jint kOrientationPortrait = 1;
     constexpr jint kOrientationLandscape = 2;
     using Call = void (*)(JNIEnv*, jclass, jint);

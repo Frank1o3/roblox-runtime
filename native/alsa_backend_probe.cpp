@@ -24,7 +24,7 @@
 // Build and run it by hand; it needs a live PulseAudio server, which
 // `pipewire-pulse` also provides:
 //
-//     clang++ -std=c++20 -O1 -DCORDIAL_HAVE_ALSA=1 -I native \
+//     clang++ -std=c++20 -O1 -DRBX_RUNTIME_HAVE_ALSA=1 -I native \
 //       native/alsa_backend_probe.cpp native/alsa_backend.cpp -ldl -lpthread -o /tmp/alsa-probe
 #include "pipewire_backend.h"
 #include <cmath>

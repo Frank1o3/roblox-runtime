@@ -1647,7 +1647,7 @@ static const CordialSymbol kSymbols[] = {
     {"SL_IID_ANDROIDCONFIGURATION", &SL_IID_ANDROIDCONFIGURATION},
 };
 
-const CordialSymbol* cordial_opensles_symbols(size_t* count) {
+const CordialSymbol* roblox_opensles_symbols(size_t* count) {
     if (count) *count = sizeof(kSymbols) / sizeof(kSymbols[0]);
     return kSymbols;
 }

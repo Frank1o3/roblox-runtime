@@ -4,7 +4,7 @@
 //! launch attempt produce a *prioritised* list of what to implement — which is
 //! considerably more useful than a list of everything Roblox references.
 //!
-//! `CORDIAL_STUB_ABORT=1` aborts on the first hit instead, for bisecting a
+//! `RBX_RUNTIME_STUB_ABORT=1` aborts on the first hit instead, for bisecting a
 //! specific failure.
 
 use std::sync::Mutex;
@@ -21,11 +21,11 @@ struct Hits {
 static HITS: Mutex<Option<Hits>> = Mutex::new(None);
 
 fn abort_on_hit() -> bool {
-    std::env::var_os("CORDIAL_STUB_ABORT").is_some()
+    std::env::var_os("RBX_RUNTIME_STUB_ABORT").is_some()
 }
 
 fn quiet() -> bool {
-    std::env::var_os("CORDIAL_STUB_QUIET").is_some()
+    std::env::var_os("RBX_RUNTIME_STUB_QUIET").is_some()
 }
 
 /// Called by every generated stub.
@@ -61,7 +61,7 @@ pub fn hit(index: usize) -> i64 {
     }
     if abort_on_hit() {
         eprintln!(
-            "[stub] CORDIAL_STUB_ABORT set — aborting on {}",
+            "[stub] RBX_RUNTIME_STUB_ABORT set — aborting on {}",
             SYMBOLS[index].0
         );
         report();

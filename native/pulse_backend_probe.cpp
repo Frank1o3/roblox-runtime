@@ -16,7 +16,7 @@
 // Build and run it by hand; it needs a live PulseAudio server, which
 // `pipewire-pulse` also provides:
 //
-//     clang++ -std=c++20 -O1 -DCORDIAL_HAVE_PULSE=1 -I native \
+//     clang++ -std=c++20 -O1 -DRBX_RUNTIME_HAVE_PULSE=1 -I native \
 //       native/pulse_backend_probe.cpp native/pulse_backend.cpp -ldl -o /tmp/pulse-probe
 #include "pipewire_backend.h"
 #include <cmath>

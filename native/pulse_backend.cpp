@@ -66,7 +66,7 @@
 #include <memory>
 #include <string>
 
-#ifdef CORDIAL_HAVE_PULSE
+#ifdef RBX_RUNTIME_HAVE_PULSE
 
 #include <dlfcn.h>
 #include <pulse/pulseaudio.h>
@@ -340,7 +340,7 @@ bool PulseStream::open(uint32_t, bool, const char* node_description,
 
     // `nullptr` for the sink means "follow the server's default", and — like
     // PipeWire's empty target — it keeps following it when the default changes.
-    // That property is the reason `CORDIAL_AUDIO_SINK` means what it does, and
+    // That property is the reason `RBX_RUNTIME_AUDIO_SINK` means what it does, and
     // it is the one property ADR-023 records as surviving into this backend and
     // no further: ALSA resolves `default` once and never moves a live stream.
     const char* sink = (target_node_name && target_node_name[0]) ? target_node_name : nullptr;
@@ -447,7 +447,7 @@ std::unique_ptr<OutputStream> make_pulse_stream() { return std::make_unique<Puls
 
 } // namespace cordial::audio
 
-#else // !CORDIAL_HAVE_PULSE
+#else // !RBX_RUNTIME_HAVE_PULSE
 
 namespace cordial::audio {
 
@@ -459,4 +459,4 @@ std::unique_ptr<OutputStream> make_pulse_stream() { return nullptr; }
 
 } // namespace cordial::audio
 
-#endif // CORDIAL_HAVE_PULSE
+#endif // RBX_RUNTIME_HAVE_PULSE
