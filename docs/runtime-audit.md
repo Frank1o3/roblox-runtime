@@ -236,7 +236,16 @@ then attempts engine constructors, JNI/GameActivity initialization and the
 initial surface handoff. `roblox-android` now implements Android `ALooper`
 prepare/acquire/release, fd registration and callbacks, polling, removal and
 wake entry points over epoll/eventfd. Negative-timeout polls are capped at
-50 ms to bound recovery after a missed wake. This API implementation has not
-been exercised against Roblox yet. The runtime still has no render context or
-host event pump, so successful startup calls alone do not establish a playable
-game.
+50 ms to bound recovery after a missed wake. The client now prepares the
+GameActivity thread's looper before `initializeNativeCode` and polls it from the
+host event loop so AGDK command callbacks can run. It also installs the
+`bootstrapTheApp` callback before GameActivity startup, forwarding caller
+settings and Fast Flag JSON through engine JNI exports and registering the
+native flag names captured from the matching Android startup trace.
+
+This advances startup under the explicitly ABI-unsafe `--host-libc` diagnostic
+resolver to a non-null GameActivity handle. A local launch still segfaults in
+the engine after that point, and the default resolver still faults during the
+first pre-constructor directory setter. The bootstrap and event-pump paths have
+not been observed reaching a rendered frame, so this is not yet a playable
+runtime. The default resolver's bionic compatibility gap remains a blocker.
