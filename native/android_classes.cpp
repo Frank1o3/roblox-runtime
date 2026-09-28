@@ -1956,7 +1956,7 @@ extern "C" void roblox_register_android_classes(void* env_ptr) {
     roblox_runtime::register_platform_classes(env);
     roblox_runtime::register_battery_classes(env);
     if (getenv("RBX_RUNTIME_JNI_TRACE")) {
-        fprintf(stderr, "[classes] Cordial's Java side registered\n");
+        fprintf(stderr, "[classes] Android Java compatibility classes registered\n");
     }
 }
 
