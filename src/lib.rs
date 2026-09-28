@@ -199,9 +199,9 @@ impl LoadedEngine {
         Ok(())
     }
 
-    /// Create the JavaVM, prepare the engine-owned storage directories, and
-    /// deliver the four directory setters which `RbxStorage` reads from ELF
-    /// constructors. This must run before [`Self::run_constructors`].
+    /// Create the JavaVM and prepare storage directories before running the
+    /// engine's ELF constructors. NativeSettingsInterface is delivered after
+    /// JNI_OnLoad, when the engine has initialised its JNI-side state.
     #[allow(unsafe_code)]
     pub fn prepare_before_constructors(&mut self) -> Result<(), JniError> {
         if !self.constructors_pending {
@@ -230,39 +230,6 @@ impl LoadedEngine {
             self.vm_initialized = true;
         }
 
-        const SETTINGS_CLASS: &str = "com/roblox/engine/jni/NativeSettingsInterface";
-        let files = self.files_dir.to_string_lossy().into_owned();
-        let cache = self.cache_dir.to_string_lossy().into_owned();
-        let external = self.external_dir.to_string_lossy().into_owned();
-        let setters: [(&str, Vec<&str>); 4] = [
-            (
-                "Java_com_roblox_engine_jni_NativeSettingsInterface_nativeSetFilesDirectory",
-                vec![files.as_str()],
-            ),
-            (
-                "Java_com_roblox_engine_jni_NativeSettingsInterface_nativeSetCacheDirectory",
-                vec![cache.as_str()],
-            ),
-            (
-                "Java_com_roblox_engine_jni_NativeSettingsInterface_nativeSetExternalDirectory",
-                vec![external.as_str()],
-            ),
-            (
-                "Java_com_roblox_engine_jni_NativeSettingsInterface_nativeSetBaseDataDirectories",
-                vec![files.as_str(), cache.as_str()],
-            ),
-        ];
-        for (name, args) in setters {
-            let native = self
-                .symbol(name)
-                .ok_or(JniError::MissingPreConstructorNative(name))?;
-            // SAFETY: this export belongs to the mapped engine and the VM above
-            // is live. The JNI shim supplies its current JNIEnv.
-            unsafe {
-                roblox_jni::game_activity::call_static_strings(native, SETTINGS_CLASS, &args)
-            }
-            .map_err(|error| JniError::PreConstructorNative(format!("{name}: {error}")))?;
-        }
         self.constructors_ready = true;
         Ok(())
     }
@@ -291,7 +258,46 @@ impl LoadedEngine {
         let version =
             unsafe { roblox_jni::jni::call_on_load(on_load) }.map_err(JniError::OnLoad)?;
         self.jni_initialized = true;
+        self.initialize_storage_directories()?;
         Ok(version)
+    }
+
+    /// Deliver the storage roots once libroblox has initialised its JNI state.
+    #[allow(unsafe_code)]
+    fn initialize_storage_directories(&self) -> Result<(), JniError> {
+        const SETTINGS_CLASS: &str = "com/roblox/engine/jni/NativeSettingsInterface";
+        let files = self.files_dir.to_string_lossy().into_owned();
+        let cache = self.cache_dir.to_string_lossy().into_owned();
+        let external = self.external_dir.to_string_lossy().into_owned();
+        let setters: [(&str, Vec<&str>); 4] = [
+            (
+                "Java_com_roblox_engine_jni_NativeSettingsInterface_nativeSetFilesDirectory",
+                vec![files.as_str()],
+            ),
+            (
+                "Java_com_roblox_engine_jni_NativeSettingsInterface_nativeSetCacheDirectory",
+                vec![cache.as_str()],
+            ),
+            (
+                "Java_com_roblox_engine_jni_NativeSettingsInterface_nativeSetExternalDirectory",
+                vec![external.as_str()],
+            ),
+            (
+                "Java_com_roblox_engine_jni_NativeSettingsInterface_nativeSetBaseDataDirectories",
+                vec![files.as_str(), cache.as_str()],
+            ),
+        ];
+        for (name, args) in setters {
+            let native = self
+                .symbol(name)
+                .ok_or(JniError::MissingPreConstructorNative(name))?;
+            // SAFETY: JNI_OnLoad returned successfully and the process VM is live.
+            unsafe {
+                roblox_jni::game_activity::call_static_strings(native, SETTINGS_CLASS, &args)
+            }
+            .map_err(|error| JniError::PreConstructorNative(format!("{name}: {error}")))?;
+        }
+        Ok(())
     }
 
     /// Call AGDK's `initializeNativeCode` through the ported JNI layer.

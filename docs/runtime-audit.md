@@ -215,12 +215,15 @@ check only: the workspace does not yet create a renderer or EGL context.
 The client owns creation, visibility and destruction of the host window. The
 runtime accepts Xlib handles or same-connection Wayland display/surface plus a
 `wl_egl_window`; those objects must outlive the runtime surface. `rusty-blox`
-does not yet instantiate winit or hand off these handles. Host events will
-enter through a runtime input API, where Android `MotionEvent` and `KeyEvent`
-delivery remains implemented; no host event loop belongs in the runtime core.
+now creates a winit window and hands these handles to the runtime, retaining
+the Wayland EGL window for the surface lifetime. It runs the JNI/GameActivity
+and app-bridge startup sequence, forwards resize events and sends mouse plus a
+mapped keyboard subset through the engine's native input interface. It also
+passes caller-provided Fast Flags and Client Settings paths/values. IME text
+forwarding and the runtime looper/event pump remain pending.
 `rusty-blox` now discovers Sober's base and x86-64 split APK, imports both into
 its managed data root and extracts native libraries from the split. The client
-builds a `RuntimeConfig` and prepares Android filesystem paths, but window
-creation, invoking the JNI/GameActivity startup methods, surface handoff and
-event forwarding are pending; the runtime has no graphics-backed game-start
-method yet.
+builds a `RuntimeConfig`, prepares Android filesystem paths and APK assets,
+then attempts engine constructors, JNI/GameActivity initialization and the
+initial surface handoff. The runtime still has no render context or event pump,
+so successful startup calls alone do not establish a playable game.
