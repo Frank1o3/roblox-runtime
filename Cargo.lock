@@ -65,6 +65,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "roblox-android"
+version = "0.1.0"
+dependencies = [
+ "roblox-linker",
+]
+
+[[package]]
 name = "roblox-jni"
 version = "0.1.0"
 dependencies = [
@@ -83,6 +90,7 @@ name = "roblox-runtime"
 version = "0.1.0"
 dependencies = [
  "roblox-abi",
+ "roblox-android",
  "roblox-jni",
  "roblox-linker",
  "serde_json",

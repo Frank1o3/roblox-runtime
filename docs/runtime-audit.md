@@ -52,6 +52,7 @@ requirement even though its present implementation comes from the shell.
 | `android/looper.rs`, `frame_pacing.rs` | ALooper API, event pump, frame pacing and census | Yes | Bootstrap event loop | `crates/android` initially | epoll, input, display lifecycle | move | Runtime lifecycle and event dispatch. |
 | `android/accessibility.rs`, `clipboard.rs`, `capture.rs`, `editor_font.rs` | Android-facing accessibility, clipboard, capture and editor-font behavior | Yes where called by Roblox | JNI/native callbacks and host UI | `crates/android` with host interfaces | zbus, GTK host window, fontconfig | adapt | These are live runtime integrations; don't discard because they appear desktop-oriented. |
 | `android/config.rs`, `system.rs`, `asset.rs`, `window.rs` | Android configuration, system property and window/asset APIs | Yes | Android ABI callbacks | `crates/android` | platform and filesystem | move | API behavior is required by the Android client. |
+| `android/config.rs`, `system.rs`, `battery.rs` | Device configuration, caller-provided files/cache paths, host `/system` font tree, battery ABI values | Yes | Framework callbacks and launch setup | `crates/android` | native `roblox_liblog` bridge | move / adapt | Extracted into `roblox-android`; `/system` cache path now comes from `RuntimeConfig`, not Cordial's XDG lookup. |
 | `bionic/*` | pthread, signals, sysconf tables, trace/fault handling and libc compatibility | Yes | ABI exports and linker | `crates/abi` | libc, linker callback surface | move | Core compatibility boundary. |
 | `elf.rs`, `symtab.rs`, `linking.rs`, `stubs.rs`, `unimplemented.rs`, `ffi_util.rs` | ELF inspection, dynamic symbol resolution, loading glue, ABI stubs and FFI helpers | Yes | Bootstrap and linker callbacks | `crates/linker` / `crates/abi` | `cordial-linker-sys`, libc | split | Linker orchestration separated from Android/Bionic function implementations. |
 | `graphics.rs`, `headless.rs`, `refresh.rs` | Graphics selection, headless probing, refresh-rate integration | Yes in runtime launch | Loader and host display | `crates/graphics` / `crates/platform` | Android graphics and shell display | split | Policy/orchestration stays small; concrete renderers remain separate. |
@@ -141,11 +142,13 @@ same local implementation and both native dependencies are represented by
 their source-pinned submodules.
 
 The root API currently defines caller-supplied APK, native-library, data,
-cache, Fast Flag, and settings inputs and validates empty paths. It does not yet
-launch Roblox. Android, graphics, Wayland, input, platform, and runtime
-orchestration have not yet been extracted, and the native Android compatibility
-shims still share the linker crate's CMake build. Therefore this is an audited
-workspace foundation, not runtime parity; no client launch claim is made.
+cache, Fast Flag, and settings inputs and validates empty paths. It prepares the
+initial Android configuration, files directory, and `/system` font tree from
+those supplied paths; it does not yet launch Roblox. The remaining Android
+surface, graphics, Wayland, input, platform, and runtime orchestration have not
+yet been extracted, and native Android compatibility shims still share the
+linker crate's CMake build. Therefore this is an audited workspace foundation,
+not runtime parity; no client launch claim is made.
 
 At this stage `cargo fmt --all -- --check`, `cargo check --workspace`, and
 `cargo test --workspace` pass. Strict Clippy was run and remains failing in

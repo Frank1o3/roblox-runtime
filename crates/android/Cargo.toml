@@ -1,0 +1,17 @@
+[package]
+name = "roblox-android"
+description = "Android framework compatibility APIs for the Roblox runtime"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+build = "build.rs"
+
+[dependencies]
+roblox-linker = { path = "../linker" }
+
+[lints.rust]
+unsafe_code = "allow"
+unsafe_op_in_unsafe_fn = "deny"
+
+[lints.clippy]
+undocumented_unsafe_blocks = "warn"

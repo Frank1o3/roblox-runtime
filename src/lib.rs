@@ -5,6 +5,8 @@
 
 use std::path::{Path, PathBuf};
 
+pub use roblox_android as android;
+
 /// Paths and options supplied by the embedding client.
 #[derive(Clone, Debug)]
 pub struct RuntimeConfig {
@@ -43,6 +45,14 @@ impl RuntimeConfig {
             }
         }
         Ok(())
+    }
+
+    /// Set up Android-visible paths using only locations supplied by the
+    /// embedding client. Returns the host-backed `/system` tree.
+    pub fn prepare_android_environment(&self) -> Result<PathBuf, ConfigError> {
+        self.validate_paths()?;
+        android::system::set_files_dir(&self.data_dir);
+        Ok(android::system::install(&self.cache_dir))
     }
 }
 
