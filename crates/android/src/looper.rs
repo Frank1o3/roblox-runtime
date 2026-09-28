@@ -121,6 +121,17 @@ extern "C" fn prepare(_options: c_int) -> *mut c_void {
     })
 }
 
+/// Prepare Android's looper for the calling thread, as the framework does for
+/// an Activity's UI thread before calling into native GameActivity code.
+///
+/// `ALooper_forThread` intentionally remains a lookup and returns null when a
+/// thread has not been prepared. Embedders that call GameActivity from their
+/// own UI thread must prepare it first; AGDK returns a null native handle if
+/// no looper is associated with that thread.
+pub fn prepare_for_current_thread() -> bool {
+    !prepare(0).is_null()
+}
+
 extern "C" fn for_thread_c() -> *mut c_void {
     for_thread().map_or(std::ptr::null_mut(), |looper| {
         (looper as *const Looper).cast_mut().cast()
