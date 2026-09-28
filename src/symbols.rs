@@ -8,10 +8,13 @@ use roblox_linker::elf::Binding;
 
 const ANDROID_PREFIXES: &[(&str, &str)] = &[
     ("AMedia", "libmediandk.so"),
+    ("AMEDIA", "libmediandk.so"),
     ("AImage", "libmediandk.so"),
+    ("AIMAGE", "libmediandk.so"),
     ("AndroidBitmap", "libjnigraphics.so"),
     ("__android_log", "liblog.so"),
     ("android_set_abort_message", "liblog.so"),
+    ("android_get_device_api_level", "liblog.so"),
     ("ANative", "libandroid.so"),
     ("AAsset", "libandroid.so"),
     ("AInput", "libandroid.so"),
@@ -25,6 +28,8 @@ const ANDROID_PREFIXES: &[(&str, &str)] = &[
     ("AHardwareBuffer", "libandroid.so"),
     ("ASharedMemory", "libandroid.so"),
     ("AStorageManager", "libandroid.so"),
+    ("APerformanceHint", "libandroid.so"),
+    ("AObb", "libandroid.so"),
     ("ASurface", "libandroid.so"),
     ("AFont", "libandroid.so"),
     ("ASystemFont", "libandroid.so"),

@@ -94,7 +94,11 @@ pub fn host_symbol(library: &str, symbol: &str) -> Option<*mut c_void> {
     let stem = library
         .split_once(".so")
         .map_or(library, |(stem, _)| &library[..stem.len() + 3]);
-    basename.starts_with(stem).then_some(address)
+    // glibc exposes time-related libc calls from the vDSO. Cordial's host
+    // resolver accepts those as libc implementations; rejecting them here
+    // turns otherwise usable calls into generated stubs in the runtime.
+    let is_vdso_libc = library.starts_with("libc.") && basename.starts_with("linux-vdso");
+    (basename.starts_with(stem) || is_vdso_libc).then_some(address)
 }
 
 mod host_ffi {
