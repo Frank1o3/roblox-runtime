@@ -220,10 +220,15 @@ the Wayland EGL window for the surface lifetime. It runs the JNI/GameActivity
 and app-bridge startup sequence, forwards resize events and sends mouse plus a
 mapped keyboard subset through the engine's native input interface. It also
 passes caller-provided Fast Flags and Client Settings paths/values. IME text
-forwarding and the runtime looper/event pump remain pending.
+forwarding remains pending.
 `rusty-blox` now discovers Sober's base and x86-64 split APK, imports both into
 its managed data root and extracts native libraries from the split. The client
 builds a `RuntimeConfig`, prepares Android filesystem paths and APK assets,
 then attempts engine constructors, JNI/GameActivity initialization and the
-initial surface handoff. The runtime still has no render context or event pump,
-so successful startup calls alone do not establish a playable game.
+initial surface handoff. `roblox-android` now implements Android `ALooper`
+prepare/acquire/release, fd registration and callbacks, polling, removal and
+wake entry points over epoll/eventfd. Negative-timeout polls are capped at
+50 ms to bound recovery after a missed wake. This API implementation has not
+been exercised against Roblox yet. The runtime still has no render context or
+host event pump, so successful startup calls alone do not establish a playable
+game.

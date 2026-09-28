@@ -9,6 +9,7 @@ pub mod asset;
 pub mod battery;
 pub mod config;
 pub mod local_storage;
+pub mod looper;
 pub mod native_window;
 pub mod system;
 
@@ -34,6 +35,7 @@ pub fn overrides() -> Vec<(&'static str, *mut c_void)> {
     local_storage::link_symbols();
     let mut symbols = asset::overrides();
     symbols.extend(config::overrides());
+    symbols.extend(looper::overrides());
     symbols.extend(native_window::overrides());
     symbols
 }
