@@ -190,14 +190,14 @@ dependencies = [
 
 [[package]]
 name = "roblox-abi"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "roblox-linker",
 ]
 
 [[package]]
 name = "roblox-android"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "roblox-linker",
  "serde_json",
@@ -206,28 +206,28 @@ dependencies = [
 
 [[package]]
 name = "roblox-graphics-vulkan"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "ash",
 ]
 
 [[package]]
 name = "roblox-jni"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "roblox-linker",
 ]
 
 [[package]]
 name = "roblox-linker"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "cmake",
 ]
 
 [[package]]
 name = "roblox-runtime"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "roblox-abi",
  "roblox-android",
