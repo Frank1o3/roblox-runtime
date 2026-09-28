@@ -199,9 +199,9 @@ impl LoadedEngine {
         Ok(())
     }
 
-    /// Create the JavaVM and prepare storage directories before JNI_OnLoad and
-    /// the engine's ELF constructors. JNI_OnLoad must precede the directory
-    /// natives, while those natives must precede constructors that read them.
+    /// Create the JavaVM, prepare the engine-owned storage directories, and
+    /// deliver the four directory setters which `RbxStorage` reads from ELF
+    /// constructors. This must run before [`Self::run_constructors`].
     #[allow(unsafe_code)]
     pub fn prepare_before_constructors(&mut self) -> Result<(), JniError> {
         if !self.constructors_pending {
@@ -229,39 +229,6 @@ impl LoadedEngine {
             roblox_jni::jni::create_vm().ok_or(JniError::VmAlreadyExists)?;
             self.vm_initialized = true;
         }
-
-        Ok(())
-    }
-
-    fn data_dir_for_storage(&self) -> PathBuf {
-        self.files_dir
-            .parent()
-            .unwrap_or(self.files_dir.as_path())
-            .to_path_buf()
-    }
-
-    /// Create libjnivm's JavaVM and call Roblox's `JNI_OnLoad` export. The
-    /// directory natives are delivered next, before the deferred constructors.
-    #[allow(unsafe_code)]
-    pub fn initialize_jni(&mut self) -> Result<i32, JniError> {
-        let on_load = self.symbol("JNI_OnLoad").ok_or(JniError::MissingOnLoad)?;
-        if !self.vm_initialized {
-            roblox_jni::jni::create_vm().ok_or(JniError::VmAlreadyExists)?;
-            self.vm_initialized = true;
-        }
-        // SAFETY: the function pointer is this live library's JNI_OnLoad;
-        // the native shim contains exceptions at the FFI boundary.
-        let version =
-            unsafe { roblox_jni::jni::call_on_load(on_load) }.map_err(JniError::OnLoad)?;
-        self.jni_initialized = true;
-        self.initialize_storage_directories()?;
-        self.constructors_ready = true;
-        Ok(version)
-    }
-
-    /// Deliver the storage roots once libroblox has initialised its JNI state.
-    #[allow(unsafe_code)]
-    fn initialize_storage_directories(&self) -> Result<(), JniError> {
         const SETTINGS_CLASS: &str = "com/roblox/engine/jni/NativeSettingsInterface";
         let files = self.files_dir.to_string_lossy().into_owned();
         let cache = self.cache_dir.to_string_lossy().into_owned();
@@ -288,13 +255,42 @@ impl LoadedEngine {
             let native = self
                 .symbol(name)
                 .ok_or(JniError::MissingPreConstructorNative(name))?;
-            // SAFETY: JNI_OnLoad returned successfully and the process VM is live.
+            // SAFETY: this export belongs to the mapped engine and the VM above
+            // is live. The JNI shim supplies its current JNIEnv.
             unsafe {
                 roblox_jni::game_activity::call_static_strings(native, SETTINGS_CLASS, &args)
             }
             .map_err(|error| JniError::PreConstructorNative(format!("{name}: {error}")))?;
         }
+        self.constructors_ready = true;
         Ok(())
+    }
+
+    fn data_dir_for_storage(&self) -> PathBuf {
+        self.files_dir
+            .parent()
+            .unwrap_or(self.files_dir.as_path())
+            .to_path_buf()
+    }
+
+    /// Create libjnivm's JavaVM and call Roblox's `JNI_OnLoad` export.
+    /// Constructors must have run first.
+    #[allow(unsafe_code)]
+    pub fn initialize_jni(&mut self) -> Result<i32, JniError> {
+        if self.constructors_pending {
+            return Err(JniError::ConstructorsDeferred);
+        }
+        let on_load = self.symbol("JNI_OnLoad").ok_or(JniError::MissingOnLoad)?;
+        if !self.vm_initialized {
+            roblox_jni::jni::create_vm().ok_or(JniError::VmAlreadyExists)?;
+            self.vm_initialized = true;
+        }
+        // SAFETY: the function pointer is this live library's JNI_OnLoad;
+        // the native shim contains exceptions at the FFI boundary.
+        let version =
+            unsafe { roblox_jni::jni::call_on_load(on_load) }.map_err(JniError::OnLoad)?;
+        self.jni_initialized = true;
+        Ok(version)
     }
 
     /// Call AGDK's `initializeNativeCode` through the ported JNI layer.
