@@ -4,6 +4,8 @@
 //! crate deliberately does not discover or download an APK.
 
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 pub use roblox_abi as abi;
 pub use roblox_android as android;
@@ -11,6 +13,75 @@ pub use roblox_jni as jni;
 pub use roblox_linker::elf::{Binding as ImportBinding, Imports as EngineImports};
 pub mod graphics;
 mod symbols;
+
+struct StartupBootstrap {
+    preload_native: usize,
+    settings_native: usize,
+    flags_native: usize,
+    settings: String,
+    fast_flags: String,
+    delivered: AtomicBool,
+}
+
+static STARTUP_BOOTSTRAP: OnceLock<StartupBootstrap> = OnceLock::new();
+
+#[allow(unsafe_code)]
+extern "C" fn run_startup_bootstrap() {
+    let Some(plan) = STARTUP_BOOTSTRAP.get() else {
+        eprintln!("[runtime] GameActivity bootstrap has no startup plan");
+        return;
+    };
+    if plan.delivered.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        // GameActivity invokes this on its native startup thread. Deliver the
+        // host-supplied settings from inside that callback, before Roblox
+        // evaluates its flags verdict.
+        if plan.preload_native != 0 && plan.fast_flags != "{}" && plan.fast_flags != "null" {
+            // SAFETY: this symbol is from the mapped engine; JSON remains alive
+            // for the duration of the JNI call.
+            match unsafe {
+                roblox_jni::game_activity::preload_flag_overrides(
+                    plan.preload_native as *mut std::ffi::c_void,
+                    &plan.fast_flags,
+                )
+            } {
+                Ok(()) => eprintln!("[runtime] nativePreloadFlagOverrides completed"),
+                Err(error) => eprintln!("[runtime] nativePreloadFlagOverrides failed: {error}"),
+            }
+        }
+        if plan.settings_native != 0 {
+            // SAFETY: this symbol is from the mapped engine, which remains
+            // loaded for the process lifetime; JNI is active before callback.
+            match unsafe {
+                roblox_jni::game_activity::init_client_settings(
+                    plan.settings_native as *mut std::ffi::c_void,
+                    &plan.settings,
+                    "",
+                    "",
+                )
+            } {
+                Ok(code) => eprintln!("[runtime] nativeInitClientSettings -> {code}"),
+                Err(error) => eprintln!("[runtime] nativeInitClientSettings failed: {error}"),
+            }
+        }
+        if plan.flags_native != 0 {
+            // An empty name list registers the engine's default flag provider;
+            // callers supply actual value overrides through RuntimeConfig.
+            // SAFETY: same mapped-library and live-JNI guarantees as above.
+            match unsafe {
+                roblox_jni::game_activity::init_flags(
+                    plan.flags_native as *mut std::ffi::c_void,
+                    "",
+                )
+            } {
+                Ok(()) => eprintln!("[runtime] nativeInitializeNativeFlags completed"),
+                Err(error) => eprintln!("[runtime] nativeInitializeNativeFlags failed: {error}"),
+            }
+        }
+    }));
+}
 
 /// Paths and options supplied by the embedding client.
 #[derive(Clone, Debug)]
@@ -273,6 +344,39 @@ impl LoadedEngine {
         Ok(())
     }
 
+    /// Install the host's settings delivery before GameActivity starts.
+    /// Android normally invokes this work from `GameActivity.bootstrapTheApp`;
+    /// a desktop embedding has no framework Activity to do it for us.
+    pub fn install_startup_bootstrap(
+        &self,
+        settings: String,
+        fast_flags: String,
+    ) -> Result<(), JniError> {
+        let preload_native = self
+            .symbol("Java_com_roblox_client_startup_MainGameActivity_nativePreloadFlagOverrides")
+            .map_or(0, |address| address as usize);
+        let settings_native = self
+            .symbol("Java_com_roblox_engine_jni_NativeGLInterface_nativeInitClientSettings")
+            .ok_or(JniError::MissingBootstrapNative("nativeInitClientSettings"))?;
+        let flags_native = self
+            .symbol("Java_com_roblox_client_flags_FlagJniInterface_nativeInitializeNativeFlags")
+            .ok_or(JniError::MissingBootstrapNative(
+                "nativeInitializeNativeFlags",
+            ))?;
+        STARTUP_BOOTSTRAP
+            .set(StartupBootstrap {
+                preload_native,
+                settings_native: settings_native as usize,
+                flags_native: flags_native as usize,
+                settings,
+                fast_flags,
+                delivered: AtomicBool::new(false),
+            })
+            .map_err(|_| JniError::BootstrapAlreadyInstalled)?;
+        roblox_jni::game_activity::set_bootstrap(Some(run_startup_bootstrap));
+        Ok(())
+    }
+
     fn data_dir_for_storage(&self) -> PathBuf {
         self.files_dir
             .parent()
@@ -412,6 +516,8 @@ pub enum JniError {
     JniNotInitialized,
     MissingOnLoad,
     MissingGameActivityInit,
+    MissingBootstrapNative(&'static str),
+    BootstrapAlreadyInstalled,
     MissingPreConstructorNative(&'static str),
     MissingSurfaceUpdateNative(&'static str),
     DirectorySetup(String),
@@ -438,6 +544,12 @@ impl std::fmt::Display for JniError {
             Self::MissingOnLoad => f.write_str("libroblox.so does not export JNI_OnLoad"),
             Self::MissingGameActivityInit => {
                 f.write_str("GameActivity.initializeNativeCode is not exported")
+            }
+            Self::MissingBootstrapNative(name) => {
+                write!(f, "required startup native is not exported: {name}")
+            }
+            Self::BootstrapAlreadyInstalled => {
+                f.write_str("GameActivity startup bootstrap is already installed")
             }
             Self::MissingPreConstructorNative(name) => {
                 write!(f, "required pre-constructor native is not exported: {name}")
