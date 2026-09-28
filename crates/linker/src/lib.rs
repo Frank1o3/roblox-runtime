@@ -1,32 +1,20 @@
 //! Bindings to the AOSP bionic linker, retargeted to the host by
 //! `mcpelauncher-linker` and wrapped in `native/shim.cpp`.
 //!
-//! This crate is deliberately thin: it exposes the linker's operations and
-//! nothing else. Symbol-table policy — what Cordial provides for each Android
-//! library — lives in `cordial-runtime`.
+//! This crate exposes the linker's operations and ELF import inspection.
+//! Symbol-table policy — what the runtime provides for each Android library —
+//! belongs to the runtime layer.
 
 // The other ABI-edge crate: everything here is a `extern "C"` call across
 // into `native/shim.cpp`, or a raw pointer handed back from it. See
 // [ADR-036](../../../docs/adr/ADR-036-unsafe-is-a-boundary-not-a-convention.md).
 #![allow(unsafe_code)]
 
-// Every public function in `game_activity` and `jni` that takes a resolved
-// native function pointer (`native`/`f`: `*mut c_void`) is `unsafe fn` with a
-// `# Safety` doc, rather than wrapping the pointer in a handle newtype. Both
-// were considered (see ADR-036's "A pre-existing clippy failure" section and
-// the issue it links): the newtype was rejected because the pointer is not
-// held here at all -- every call site in `cordial-runtime` resolves it once
-// via `Library::symbol` and stores it as a raw `usize` in its own long-lived
-// state (a bootstrap plan, a `OnceLock`, an `AtomicPtr`), re-casting it back
-// to `*mut c_void` at each call. A newtype would have to live in that storage
-// to buy anything, which means rewriting the zero-checks and struct fields
-// those 84 call sites already use rather than just marking the call unsafe --
-// a behaviour-risking change for a lint fix that is not supposed to change
-// behaviour at all. Marking the function `unsafe` and documenting the
-// contract puts the obligation where the pointer's real origin already is:
-// the caller that resolved it.
-
 use std::ffi::{CStr, CString, c_char, c_int, c_void};
+use std::sync::{Mutex, OnceLock};
+
+/// ELF inspection used to enumerate native-library imports before loading.
+pub mod elf;
 
 mod ffi {
     use std::ffi::{c_char, c_int, c_void};
@@ -41,12 +29,11 @@ mod ffi {
         ) -> *mut c_void;
         pub fn roblox_linker_update_ld_library_path(path: *const c_char);
         pub fn roblox_linker_dlopen(filename: *const c_char, flags: c_int) -> *mut c_void;
-        // EXPERIMENTAL, cordial-agent-defer: see docs/analysis/flag-init.md
-        // §26 and patches/README.md. Not called from the default load path.
+        // Optional constructor control for staged runtime initialisation.
         pub fn roblox_linker_defer_next_ctors(defer: c_int);
         pub fn roblox_linker_run_deferred_ctors(handle: *mut c_void);
-        // docs/analysis/flag-init.md §31. Metadata only — see the comment on
-        // the Rust wrapper below.
+        pub fn roblox_linker_constructor_deferral_available() -> c_int;
+        // Override the path reported by dladdr without reopening the object.
         pub fn roblox_linker_set_realpath(handle: *mut c_void, path: *const c_char);
         pub fn roblox_linker_dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
         pub fn roblox_linker_dlerror() -> *const c_char;
@@ -59,10 +46,87 @@ mod ffi {
     }
 }
 
-/// `RTLD_NOW` — resolve every relocation at load time. Cordial always uses this:
+/// `RTLD_NOW` — resolve every relocation at load time. The runtime uses this:
 /// a lazy load would report success and then fail later on an unrelated call.
 pub const RTLD_NOW: c_int = 2;
 pub const RTLD_LAZY: c_int = 1;
+
+/// Look up a symbol in one explicitly selected host library.
+///
+/// The loader handle remains open for the process lifetime because registered
+/// bionic symbols retain the returned address.
+pub fn host_symbol(library: &str, symbol: &str) -> Option<*mut c_void> {
+    static LIBRARIES: OnceLock<Mutex<std::collections::BTreeMap<String, usize>>> = OnceLock::new();
+    let name = CString::new(library).ok()?;
+    let symbol = CString::new(symbol).ok()?;
+    let libraries = LIBRARIES.get_or_init(|| Mutex::new(std::collections::BTreeMap::new()));
+    let mut libraries = libraries
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let handle = if let Some(handle) = libraries.get(library) {
+        *handle as *mut c_void
+    } else {
+        // SAFETY: the library name is NUL-terminated and RTLD_NOW resolves its
+        // relocations before any address from it is exposed.
+        let handle = unsafe { host_ffi::dlopen(name.as_ptr(), RTLD_NOW | 0x100) };
+        if handle.is_null() {
+            return None;
+        }
+        libraries.insert(library.to_owned(), handle as usize);
+        handle
+    };
+    // SAFETY: the handle is a live host loader handle and the symbol name is
+    // NUL-terminated for this call.
+    let address = unsafe { host_ffi::dlsym(handle, symbol.as_ptr()) };
+    if address.is_null() {
+        return None;
+    }
+    let mut info = host_ffi::DlInfo::default();
+    // SAFETY: the symbol came from the host loader and `info` is writable.
+    if unsafe { host_ffi::dladdr(address, &mut info) } == 0 || info.filename.is_null() {
+        return None;
+    }
+    // A handle lookup searches dependencies too. Require the selected library
+    // itself to define the symbol.
+    // SAFETY: dladdr returned a live NUL-terminated filename.
+    let filename = unsafe { CStr::from_ptr(info.filename) }.to_string_lossy();
+    let basename = filename.rsplit('/').next().unwrap_or(&filename);
+    let stem = library
+        .split_once(".so")
+        .map_or(library, |(stem, _)| &library[..stem.len() + 3]);
+    basename.starts_with(stem).then_some(address)
+}
+
+mod host_ffi {
+    use std::ffi::{c_char, c_int, c_void};
+
+    unsafe extern "C" {
+        #[link_name = "dlopen"]
+        pub fn dlopen(filename: *const c_char, flags: c_int) -> *mut c_void;
+        #[link_name = "dlsym"]
+        pub fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
+        pub fn dladdr(address: *mut c_void, info: *mut DlInfo) -> c_int;
+    }
+
+    #[repr(C)]
+    pub struct DlInfo {
+        pub filename: *const c_char,
+        pub base: *mut c_void,
+        pub symbol_name: *const c_char,
+        pub symbol_address: *mut c_void,
+    }
+
+    impl Default for DlInfo {
+        fn default() -> Self {
+            Self {
+                filename: std::ptr::null(),
+                base: std::ptr::null_mut(),
+                symbol_name: std::ptr::null(),
+                symbol_address: std::ptr::null_mut(),
+            }
+        }
+    }
+}
 
 /// A library loaded by, or registered with, the bionic linker.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -114,7 +178,7 @@ pub fn init() {
 }
 
 /// Register a virtual library: an soname that exists only as the symbol table
-/// given here. This is how Cordial provides `libc.so`, `libandroid.so`,
+/// given here. This is how the runtime provides `libc.so`, `libandroid.so`,
 /// `libEGL.so` and the rest — the loaded object's `DT_NEEDED` entries resolve
 /// against these instead of against anything on disk.
 pub fn register(name: &str, symbols: &[(String, *mut c_void)]) -> Result<Library, Error> {
@@ -175,23 +239,15 @@ pub fn dlopen(soname: &str, flags: c_int) -> Result<Library, Error> {
     }
 }
 
-/// EXPERIMENTAL, cordial-agent-defer: make the *next* [`dlopen`] call map and
-/// relocate the object without running its ELF constructors. The caller must
-/// follow up with [`run_deferred_ctors`] on the returned [`Library`] once it
-/// wants them to run — nothing else runs them.
-///
-/// This exists to test whether `libroblox.so`'s constructors (which is where
-/// `RbxStorage::init` lives — see `docs/analysis/flag-init.md` §26) can be
-/// deferred past Cordial's own directory setup, which currently happens only
-/// after `dlopen` returns. It is not wired into the default load path in
-/// `cordial-run`; nothing calls this outside an explicit experiment.
+/// Make the next [`dlopen`] call map and relocate the object without running
+/// its ELF constructors. Follow up with [`run_deferred_ctors`] when the
+/// embedding runtime is ready for constructors to execute.
 pub fn defer_next_ctors(defer: bool) {
     // SAFETY: the native shim accepts a scalar process-global setting.
     unsafe { ffi::roblox_linker_defer_next_ctors(defer as c_int) }
 }
 
-/// EXPERIMENTAL, cordial-agent-defer: run whatever construction
-/// [`defer_next_ctors`] left pending for `lib`. Idempotent — the underlying
+/// Run any construction [`defer_next_ctors`] left pending for `lib`. Idempotent — the underlying
 /// `soinfo::call_constructors()` is itself guarded, so calling this on a
 /// library that was never deferred (or already constructed) is harmless.
 pub fn run_deferred_ctors(lib: Library) {
@@ -200,8 +256,22 @@ pub fn run_deferred_ctors(lib: Library) {
     unsafe { ffi::roblox_linker_run_deferred_ctors(lib.0) }
 }
 
-/// docs/analysis/flag-init.md §31: overrides what `dladdr()` reports as
-/// `lib`'s own path (`Dl_info::dli_fname`), by writing the linker's internal
+/// Whether this build's native linker can stage ELF constructors.
+pub fn constructor_deferral_available() -> bool {
+    // SAFETY: this reads whether the two weak native linker hooks are present.
+    unsafe { ffi::roblox_linker_constructor_deferral_available() != 0 }
+}
+
+#[cfg(test)]
+mod host_lookup_tests {
+    #[test]
+    fn lookup_rejects_symbols_from_a_library_dependency() {
+        assert!(super::host_symbol("libm.so.6", "sin").is_some());
+        assert!(super::host_symbol("libm.so.6", "memcpy").is_none());
+    }
+}
+
+/// Overrides what `dladdr()` reports as `lib`'s own path (`Dl_info::dli_fname`), by writing the linker's internal
 /// `soinfo::realpath_` directly. Nothing is reopened, remapped, or copied —
 /// every byte the engine reads still comes from wherever it was actually
 /// mapped from. Meant to be called after [`defer_next_ctors`] +

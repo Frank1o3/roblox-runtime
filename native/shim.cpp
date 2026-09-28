@@ -94,6 +94,10 @@ void roblox_linker_run_deferred_ctors(void* handle) {
     }
 }
 
+int roblox_linker_constructor_deferral_available() {
+    return mcpelauncher_defer_next_ctors && mcpelauncher_run_deferred_ctors;
+}
+
 // docs/analysis/flag-init.md §31: overrides what dladdr() reports for a
 // loaded library's own path, called between defer_next_ctors and
 // run_deferred_ctors above so the override is visible to constructor-time

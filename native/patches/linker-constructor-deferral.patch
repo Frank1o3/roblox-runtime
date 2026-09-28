@@ -1,0 +1,47 @@
+--- a/bionic/linker/linker.cpp
++++ b/bionic/linker/linker.cpp
+@@ -2175,6 +2175,23 @@
+                                         info->library_namespace : nullptr);
+ }
+ 
++// Defer one library's static initialisers until the runtime has prepared the
++// Android services they call. The flag is consumed by the next do_dlopen().
++static bool g_defer_next_ctors = false;
++
++soinfo* soinfo_from_handle(void* handle);
++
++extern "C" void mcpelauncher_defer_next_ctors(int defer) {
++  g_defer_next_ctors = defer != 0;
++}
++
++extern "C" void mcpelauncher_run_deferred_ctors(void* handle) {
++  soinfo* si = soinfo_from_handle(handle);
++  if (si != nullptr) {
++    si->call_constructors();
++  }
++}
++
+ void* do_dlopen(const char* name, int flags,
+                 const android_dlextinfo* extinfo,
+                 const void* caller_addr) {
+@@ -2284,10 +2301,17 @@
+ 
+   if (si != nullptr) {
+     void* handle = si->to_handle();
+-    LD_LOG(kLogDlopen,
+-           "... dlopen calling constructors: realpath=\"%s\", soname=\"%s\", handle=%p",
+-           si->get_realpath(), si->get_soname(), handle);
+-    si->call_constructors();
++    if (g_defer_next_ctors) {
++      g_defer_next_ctors = false;
++      LD_LOG(kLogDlopen,
++             "... dlopen deferring constructors: realpath=\"%s\", soname=\"%s\", handle=%p",
++             si->get_realpath(), si->get_soname(), handle);
++    } else {
++      LD_LOG(kLogDlopen,
++             "... dlopen calling constructors: realpath=\"%s\", soname=\"%s\", handle=%p",
++             si->get_realpath(), si->get_soname(), handle);
++      si->call_constructors();
++    }
+     if(extinfo && extinfo->flags & ANDROID_DLEXT_MCPELAUNCHER_HOOKS) {
+       for(auto&& sym : si->symbols) {

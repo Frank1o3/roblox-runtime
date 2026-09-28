@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 use std::ffi::{CStr, c_char, c_int, c_void};
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::{Read, Seek, SeekFrom};
 use std::os::unix::fs::FileExt;
 use std::path::{Path, PathBuf};
@@ -135,6 +135,116 @@ pub fn set_apks(paths: &[PathBuf]) -> Result<(), String> {
 /// Read one `assets/` entry, retaining its buffer for the process lifetime.
 pub fn read_asset(name: &str) -> Option<&'static [u8]> {
     MANAGER.get()?.read(name)
+}
+
+/// Extract the `assets/` trees from the supplied APK set into a managed cache.
+///
+/// A completion stamp keys the tree to APK file metadata. Extraction occurs in
+/// a sibling directory and is published only after every entry was written;
+/// replacing an APK set also removes files that were present only in an older
+/// set.
+pub fn extract_to(apks: &[PathBuf], destination: &Path) -> Result<PathBuf, String> {
+    if apks.is_empty() {
+        return Err("at least one APK is required".into());
+    }
+    let stamp = apk_set_stamp(apks)?;
+    let marker = destination.join(".roblox-runtime-apk-set");
+    if fs::read_to_string(&marker).is_ok_and(|existing| existing == stamp) {
+        return Ok(destination.to_path_buf());
+    }
+
+    let parent = destination
+        .parent()
+        .ok_or_else(|| format!("asset cache path has no parent: {}", destination.display()))?;
+    fs::create_dir_all(parent).map_err(|error| format!("{}: {error}", parent.display()))?;
+    let name = destination
+        .file_name()
+        .and_then(|part| part.to_str())
+        .ok_or_else(|| format!("invalid asset cache path: {}", destination.display()))?;
+    let staging = destination.with_file_name(format!(".{name}.staging-{}", std::process::id()));
+    let backup = destination.with_file_name(format!(".{name}.previous-{}", std::process::id()));
+    if staging.exists() {
+        fs::remove_dir_all(&staging).map_err(|error| error.to_string())?;
+    }
+    fs::create_dir(&staging).map_err(|error| error.to_string())?;
+
+    let extracted = extract_apk_assets(apks, &staging, &stamp);
+    if let Err(error) = extracted {
+        let _ = fs::remove_dir_all(&staging);
+        return Err(error);
+    }
+
+    if backup.exists() {
+        fs::remove_dir_all(&backup).map_err(|error| error.to_string())?;
+    }
+    let had_previous = destination.exists();
+    if had_previous {
+        fs::rename(destination, &backup).map_err(|error| error.to_string())?;
+    }
+    if let Err(error) = fs::rename(&staging, destination) {
+        if had_previous {
+            let _ = fs::rename(&backup, destination);
+        }
+        return Err(error.to_string());
+    }
+    if had_previous {
+        fs::remove_dir_all(backup).map_err(|error| error.to_string())?;
+    }
+    Ok(destination.to_path_buf())
+}
+
+fn apk_set_stamp(apks: &[PathBuf]) -> Result<String, String> {
+    use std::os::unix::fs::MetadataExt;
+
+    let mut stamp = String::new();
+    for apk in apks {
+        let metadata = fs::metadata(apk).map_err(|error| format!("{}: {error}", apk.display()))?;
+        stamp.push_str(&format!(
+            "{:?}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
+            apk,
+            metadata.dev(),
+            metadata.ino(),
+            metadata.size(),
+            metadata.mtime(),
+            metadata.mtime_nsec(),
+            metadata.ctime(),
+            metadata.ctime_nsec()
+        ));
+    }
+    Ok(stamp)
+}
+
+fn extract_apk_assets(apks: &[PathBuf], destination: &Path, stamp: &str) -> Result<(), String> {
+    for apk in apks {
+        let file = File::open(apk).map_err(|error| format!("{}: {error}", apk.display()))?;
+        let mut archive = zip::ZipArchive::new(file).map_err(|error| error.to_string())?;
+        for index in 0..archive.len() {
+            let mut entry = archive.by_index(index).map_err(|error| error.to_string())?;
+            let Some(path) = entry.enclosed_name() else {
+                continue;
+            };
+            let Ok(relative) = path.strip_prefix("assets") else {
+                continue;
+            };
+            if relative.as_os_str().is_empty()
+                || relative
+                    .components()
+                    .any(|component| !matches!(component, std::path::Component::Normal(_)))
+                || entry.is_dir()
+            {
+                continue;
+            }
+            let output = destination.join(relative);
+            if let Some(parent) = output.parent() {
+                fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+            }
+            let temporary = output.with_extension(format!("runtime-{}", std::process::id()));
+            let mut file = File::create(&temporary).map_err(|error| error.to_string())?;
+            std::io::copy(&mut entry, &mut file).map_err(|error| error.to_string())?;
+            fs::rename(&temporary, &output).map_err(|error| error.to_string())?;
+        }
+    }
+    fs::write(destination.join(".roblox-runtime-apk-set"), stamp).map_err(|error| error.to_string())
 }
 
 unsafe fn c_string(pointer: *const c_char) -> Option<String> {
@@ -275,7 +385,7 @@ pub fn overrides() -> Vec<(&'static str, *mut c_void)> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Apk, Manager};
+    use super::{Apk, Manager, extract_to};
     use std::fs::{self, File};
     use std::io::Write;
     use std::path::Path;
@@ -336,6 +446,50 @@ mod tests {
         assert_eq!(manager.read("shared.txt"), Some(&b"base"[..]));
         assert_eq!(manager.read("split.txt"), Some(&b"only-split"[..]));
         assert_eq!(manager.read("missing.txt"), None);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn extraction_replaces_stale_files_when_the_apk_set_changes() {
+        let _lock = fixture_lock();
+        let root = std::env::temp_dir().join(format!(
+            "roblox-runtime-asset-extract-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        let base_path = root.join("base.apk");
+        let split_path = root.join("split_config.x86_64.apk");
+        let destination = root.join("extracted");
+        write_apk(
+            &base_path,
+            &[
+                ("assets/keep.txt", b"old"),
+                ("assets/removed.txt", b"stale"),
+            ],
+        );
+        write_apk(&split_path, &[("assets/override.txt", b"split-v1")]);
+
+        extract_to(&[base_path.clone(), split_path.clone()], &destination).unwrap();
+        assert_eq!(fs::read(destination.join("keep.txt")).unwrap(), b"old");
+        assert_eq!(
+            fs::read(destination.join("override.txt")).unwrap(),
+            b"split-v1"
+        );
+
+        write_apk(&base_path, &[("assets/keep.txt", b"new-value")]);
+        write_apk(&split_path, &[("assets/override.txt", b"split-v2")]);
+        extract_to(&[base_path, split_path], &destination).unwrap();
+
+        assert_eq!(
+            fs::read(destination.join("keep.txt")).unwrap(),
+            b"new-value"
+        );
+        assert_eq!(
+            fs::read(destination.join("override.txt")).unwrap(),
+            b"split-v2"
+        );
+        assert!(!destination.join("removed.txt").exists());
         let _ = fs::remove_dir_all(root);
     }
 }

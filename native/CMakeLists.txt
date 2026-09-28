@@ -18,6 +18,33 @@ endif()
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../third_party/mcpelauncher-linker
                  ${CMAKE_CURRENT_BINARY_DIR}/mcpelauncher-linker)
 
+# Keep the constructor staging change in this repository rather than in the
+# pinned upstream submodule. The engine's static initialisers currently call
+# compatibility APIs before the runtime has finished preparing them.
+find_program(PATCH_EXECUTABLE patch REQUIRED)
+set(_linker_source
+    ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/mcpelauncher-linker/bionic/linker/linker.cpp)
+set(_linker_build_dir ${CMAKE_CURRENT_BINARY_DIR}/linker-with-deferred-constructors)
+file(MAKE_DIRECTORY ${_linker_build_dir}/bionic/linker)
+configure_file(${_linker_source}
+               ${_linker_build_dir}/bionic/linker/linker.cpp COPYONLY)
+execute_process(
+  COMMAND ${PATCH_EXECUTABLE} -p1 -i
+          ${CMAKE_CURRENT_SOURCE_DIR}/patches/linker-constructor-deferral.patch
+  WORKING_DIRECTORY ${_linker_build_dir}
+  RESULT_VARIABLE _linker_patch_status
+  OUTPUT_VARIABLE _linker_patch_output
+  ERROR_VARIABLE _linker_patch_error)
+if(NOT _linker_patch_status EQUAL 0)
+  message(FATAL_ERROR "Could not apply runtime linker patch: ${_linker_patch_error}")
+endif()
+get_target_property(_linker_sources linker SOURCES)
+list(REMOVE_ITEM _linker_sources bionic/linker/linker.cpp)
+list(APPEND _linker_sources ${_linker_build_dir}/bionic/linker/linker.cpp)
+set_target_properties(linker PROPERTIES SOURCES "${_linker_sources}")
+target_include_directories(linker PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/mcpelauncher-linker/bionic/linker)
+
 # Undo the upstream `-DPATH_MAX=256`, which is a stack overflow waiting for a
 # long enough path.
 #

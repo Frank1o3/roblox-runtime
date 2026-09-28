@@ -134,7 +134,7 @@ never linked that archive.
 * Existing source runtime defects are inherited. Migration changes will be
   limited to API adaptation and regressions introduced by extraction.
 
-## Destination status after the first extraction stage
+## Destination status
 
 The destination workspace now contains `roblox-linker`, `roblox-jni`, and
 `roblox-abi`. JNI, GameActivity, accessibility, and the large GameActivity
@@ -150,16 +150,29 @@ cache, Fast Flag, and settings inputs and validates empty paths. It prepares the
 initial Android configuration, files directory, `/system` font tree, and
 caller-supplied APK asset manager from those paths. `roblox-android` now
 provides the `AAssetManager` buffer, length, close, and file-descriptor calls
-across base and split APKs, with a single symbol override registry for its
-current Android surface. It does not yet launch
-Roblox. The remaining Android surface, graphics, Wayland, input, platform, and
+across base and split APKs, extracts a stamped filesystem asset tree from the
+same APK set, and exposes a single symbol override registry for its current
+Android surface. `roblox-linker` reads the supplied engine ELF's undefined
+dynamic symbols and marks weak imports as optional. The root resolver combines implemented
+ABI/Android addresses, selected host GLES/EGL/math/compression symbols and the
+generated stubs, rejects strong imports with no answer, registers virtual
+Android libraries, and maps `libroblox.so` through bionic with ELF constructors
+deferred. The CMake build applies a small linker patch to a build-tree copy of
+the pinned submodule, leaving the submodule checkout untouched.
+The real Sober APK run reported 565 required and 8 weak imports and mapped the
+112,661,808-byte executable segment successfully. The earlier direct load ran
+constructors before Android setup and exited with SIGSEGV after calls reached
+unimplemented stubs including `pthread_mutex_lock`, `syscall`, and locale APIs;
+constructors therefore remain deferred until those compatibility gaps and
+runtime setup are ready. The runtime does not yet launch Roblox.
+The remaining Android surface, graphics, Wayland, input, platform, and
 runtime orchestration have not yet been extracted, and native Android
 compatibility shims still share the linker crate's CMake build. Therefore this
 is an audited workspace foundation, not runtime parity; no client launch claim
 is made.
 
 At this stage `cargo fmt --all -- --check`, `cargo check --workspace`, and
-`cargo test --workspace` pass. Strict Clippy was run and remains failing in
+`cargo test --workspace` pass, including ELF parser and resolver tests. Strict workspace Clippy remains failing in
 `roblox-abi` on inherited undocumented unsafe blocks and existing style lints
 in the copied bionic/stub code; the linker and JNI crate warnings introduced
 by extraction were corrected. These lint findings are not evidence of runtime
