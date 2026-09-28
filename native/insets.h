@@ -25,7 +25,7 @@
 
 #include <memory>
 
-namespace cordial {
+namespace roblox_runtime {
 
 class Insets : public jnivm::Object {
 public:
@@ -78,4 +78,4 @@ public:
     }
 };
 
-} // namespace cordial
+} // namespace roblox_runtime

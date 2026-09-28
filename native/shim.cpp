@@ -52,7 +52,7 @@ void* roblox_linker_dlopen(const char* filename, int flags) {
     auto us = std::chrono::duration_cast<std::chrono::microseconds>(
                   std::chrono::steady_clock::now() - start)
                   .count();
-    fprintf(stderr, "[cordial] dlopen(%s) -> %s in %lldus\n", filename ? filename : "(null)",
+    fprintf(stderr, "[runtime] dlopen(%s) -> %s in %lldus\n", filename ? filename : "(null)",
             h ? "ok" : "NULL", (long long)us);
     return h;
 }

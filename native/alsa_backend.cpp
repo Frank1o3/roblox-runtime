@@ -48,7 +48,7 @@
 #include <alsa/asoundlib.h>
 #include <dlfcn.h>
 
-namespace cordial::audio {
+namespace roblox_runtime::audio {
 namespace {
 
 /// Everything this file calls in `libasound`, resolved once.
@@ -86,7 +86,7 @@ const Alsa* alsa() {
         void* lib = ::dlopen("libasound.so.2", RTLD_LAZY | RTLD_LOCAL);
         if (!lib) {
             std::fprintf(stderr,
-                "I/Cordial-ALSA            libasound.so.2 is not on this machine; the ALSA "
+                "I/RobloxRuntime-ALSA            libasound.so.2 is not on this machine; the ALSA "
                 "backend is unavailable.\n");
             return nullptr;
         }
@@ -96,7 +96,7 @@ const Alsa* alsa() {
             void* sym = ::dlsym(lib, name);
             if (!sym) {
                 std::fprintf(stderr,
-                    "E/Cordial-ALSA            libasound.so.2 has no %s; refusing to use a "
+                    "E/RobloxRuntime-ALSA            libasound.so.2 has no %s; refusing to use a "
                     "half-resolved backend.\n", name);
                 ok = false;
                 return;
@@ -204,7 +204,7 @@ void AlsaStream::writer() {
             int err = a->recover(pcm_, static_cast<int>(wrote), 1 /* silent */);
             if (err < 0) {
                 std::fprintf(stderr,
-                    "E/Cordial-ALSA            write failed and could not recover: %s; the "
+                    "E/RobloxRuntime-ALSA            write failed and could not recover: %s; the "
                     "stream is stopping.\n", a->strerror(err));
                 return;
             }
@@ -228,7 +228,7 @@ bool AlsaStream::open(uint32_t, bool, const char*, const char* target_node_name,
     int err = a->open(&pcm_, device, SND_PCM_STREAM_PLAYBACK, 0);
     if (err < 0) {
         std::fprintf(stderr,
-            "I/Cordial-ALSA            could not open PCM \"%s\": %s; this backend is "
+            "I/RobloxRuntime-ALSA            could not open PCM \"%s\": %s; this backend is "
             "unavailable for this run.\n", device, a->strerror(err));
         pcm_ = nullptr;
         return false;
@@ -267,7 +267,7 @@ bool AlsaStream::open(uint32_t, bool, const char*, const char* target_node_name,
 
     if (!ok || rate_ == 0 || channels_ == 0 || period_ == 0) {
         std::fprintf(stderr,
-            "E/Cordial-ALSA            \"%s\" would not take float32 interleaved at any rate "
+            "E/RobloxRuntime-ALSA            \"%s\" would not take float32 interleaved at any rate "
             "this backend can offer.\n", device);
         close();
         return false;
@@ -281,7 +281,7 @@ bool AlsaStream::open(uint32_t, bool, const char*, const char* target_node_name,
     thread_ = std::thread([this] { writer(); });
 
     std::fprintf(stderr,
-        "I/Cordial-ALSA            opened %u Hz, %u channel(s), PCM_FLOAT, %u frames per "
+        "I/RobloxRuntime-ALSA            opened %u Hz, %u channel(s), PCM_FLOAT, %u frames per "
         "period, on \"%s\". Rate and channels are what the device granted, not what was "
         "asked for.\n", rate_, channels_, period_, device);
     return true;
@@ -329,17 +329,17 @@ bool alsa_available() {
 
 std::unique_ptr<OutputStream> make_alsa_stream() { return std::make_unique<AlsaStream>(); }
 
-} // namespace cordial::audio
+} // namespace roblox_runtime::audio
 
 #else // !RBX_RUNTIME_HAVE_ALSA
 
-namespace cordial::audio {
+namespace roblox_runtime::audio {
 
 // Built without alsa-lib-devel. Honest rather than absent, so the selector can
 // tell a run that asked for ALSA that it did not get it.
 bool alsa_available() { return false; }
 std::unique_ptr<OutputStream> make_alsa_stream() { return nullptr; }
 
-} // namespace cordial::audio
+} // namespace roblox_runtime::audio
 
 #endif // RBX_RUNTIME_HAVE_ALSA

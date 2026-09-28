@@ -2,7 +2,7 @@
 
 #include <jni.h>
 
-namespace cordial::permissions {
+namespace roblox_runtime::permissions {
 
 using PublishProtocolMethodResponseRaw =
     void (*)(JNIEnv*, jobject, jstring, jstring, jstring, jint, jstring);
@@ -25,4 +25,4 @@ struct ResponseDelivery {
 bool uses_dual_response(bool requested, const char* protocol);
 void deliver_response(const ResponseDelivery& delivery);
 
-} // namespace cordial::permissions
+} // namespace roblox_runtime::permissions

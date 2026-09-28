@@ -9,7 +9,7 @@
 #include <thread>
 #include <vector>
 
-namespace cordial::audio {
+namespace roblox_runtime::audio {
 namespace {
 
 thread_local const InputCallbackDriver* g_current_driver = nullptr;
@@ -124,4 +124,4 @@ bool InputCallbackDriver::is_running() const {
     return impl_ && impl_->running.load(std::memory_order_acquire);
 }
 
-} // namespace cordial::audio
+} // namespace roblox_runtime::audio

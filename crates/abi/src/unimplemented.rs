@@ -146,7 +146,7 @@ fn report_path() -> PathBuf {
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")))
         .unwrap_or_else(std::env::temp_dir)
-        .join("cordial");
+        .join("roblox-runtime");
     // `files/appData/logs` is relative to the client's working directory, which
     // is the profile's data dir; the engine resolves it itself. This mirrors it
     // rather than deriving it, because the profile in force is `profile.rs`'s
@@ -154,15 +154,15 @@ fn report_path() -> PathBuf {
     std::env::var_os("RBX_RUNTIME_UNIMPLEMENTED_LOG")
         .map(PathBuf::from)
         .unwrap_or_else(|| {
-            std::path::Path::new("files/appData/logs/cordial-unimplemented.log")
+            std::path::Path::new("files/appData/logs/runtime-unimplemented.log")
                 .exists()
-                .then(|| PathBuf::from("files/appData/logs/cordial-unimplemented.log"))
+                .then(|| PathBuf::from("files/appData/logs/runtime-unimplemented.log"))
                 .unwrap_or_else(|| {
                     let dir = PathBuf::from("files/appData/logs");
                     if std::fs::create_dir_all(&dir).is_ok() {
-                        dir.join("cordial-unimplemented.log")
+                        dir.join("runtime-unimplemented.log")
                     } else {
-                        base.join("cordial-unimplemented.log")
+                        base.join("runtime-unimplemented.log")
                     }
                 })
         })

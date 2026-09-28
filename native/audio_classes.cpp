@@ -100,12 +100,12 @@
 #include "aaudio.h"
 #include "pipewire_backend.h"
 
-namespace cordial {
+namespace roblox_runtime {
 
 // Defined in `jni_shim.cpp`. Declared here, outside the anonymous namespace
 // below, because a declaration written *inside* it would name a distinct,
 // unique-per-translation-unit symbol rather than the real
-// externally-linked `cordial::process_env` -- a link error waiting to
+// externally-linked `roblox_runtime::process_env` -- a link error waiting to
 // happen the day `WebRtcAudioTrack`'s pump thread below actually needs it,
 // rather than the compile error it should be.
 jnivm::ENV* process_env();
@@ -302,7 +302,7 @@ public:
     /// PipeWire's `node.description` verbatim — "Raptor Lake-P/U/H cAVS
     /// Speaker", the same string the user's own volume control shows. The
     /// point of a device picker is that the user recognises the entry, so
-    /// anything invented here (a tidied-up name, a Cordial-branded one) makes
+    /// anything invented here (a tidied-up name, a RobloxRuntime-branded one) makes
     /// the list worse however much better it reads.
     static std::shared_ptr<CharSequence> getProductName(ENV*, Object* self) {
         return chars(self_of(self)->productName);
@@ -423,7 +423,7 @@ public:
         if (!announced) {
             announced = true;
             std::fprintf(stderr,
-                "I/Cordial-Audio           AudioManager.getDevices(0x%X) called by the engine; "
+                "I/RobloxRuntime-Audio           AudioManager.getDevices(0x%X) called by the engine; "
                 "answering with %zu of %zu PipeWire device(s), default first.\n",
                 flags, chosen.size(), devices.size());
         }
@@ -444,7 +444,7 @@ public:
         if (!announced) {
             announced = true;
             std::fprintf(stderr,
-                "I/Cordial-Audio           AudioManager.getCommunicationDevice called by the "
+                "I/RobloxRuntime-Audio           AudioManager.getCommunicationDevice called by the "
                 "engine.\n");
         }
         for (const audio::DeviceInfo& d : audio::enumerate_devices()) {
@@ -530,7 +530,7 @@ public:
         // shows one of them and hides the rest is a log nobody can count with.
         // Constructing one opens nothing; only `startRecording` does.
         std::fprintf(stderr,
-            "I/Cordial-Audio           android.media.AudioRecord constructed (%d Hz, "
+            "I/RobloxRuntime-Audio           android.media.AudioRecord constructed (%d Hz, "
             "channelConfig 0x%X, format %d); no capture stream until startRecording.\n",
             sampleRateInHz, channelConfig, audioFormat);
         r->sampleRate = sampleRateInHz > 0 ? sampleRateInHz : DEFAULT_SAMPLE_RATE;
@@ -541,7 +541,7 @@ public:
             // later. `getState()` staying UNINITIALIZED is how AudioRecord
             // says this, and every caller checks it before recording.
             std::fprintf(stderr,
-                "E/Cordial-Audio           AudioRecord asked for encoding %d; only "
+                "E/RobloxRuntime-Audio           AudioRecord asked for encoding %d; only "
                 "ENCODING_PCM_16BIT (2) is supported, so this recorder reports "
                 "STATE_UNINITIALIZED and will not open the microphone.\n", audioFormat);
             r->sampleRate = 0; // makes getState() report UNINITIALIZED, below
@@ -604,7 +604,7 @@ public:
             // cost of: the caller would sit reading zero bytes forever with
             // nothing to explain why.
             std::fprintf(stderr,
-                "E/Cordial-Audio           AudioRecord.startRecording could not open a "
+                "E/RobloxRuntime-Audio           AudioRecord.startRecording could not open a "
                 "capture stream; staying stopped rather than reporting a recording that "
                 "is not happening.\n");
             return;
@@ -790,7 +790,7 @@ public:
         if (!said) {
             said = true;
             std::fprintf(stderr,
-                "I/Cordial-Audio           WebRtcAudioManager.init reports %s: WebRtcAudioTrack "
+                "I/RobloxRuntime-Audio           WebRtcAudioManager.init reports %s: WebRtcAudioTrack "
                 "implements the downlink and WebRtcAudioRecord implements the uplink, so a voice "
                 "session can both send and receive.\n", cached ? "success" : "failure");
         }
@@ -923,7 +923,7 @@ bool cache_audio_parameters(ENV* env, Object* self, jlong native_audio_manager) 
                                        "nativeCacheAudioParameters");
     if (!fn) {
         std::fprintf(stderr,
-            "W/Cordial-Audio           WebRtcAudioManager.init: nativeCacheAudioParameters was "
+            "W/RobloxRuntime-Audio           WebRtcAudioManager.init: nativeCacheAudioParameters was "
             "never registered by the engine; its own audio device module will not have these "
             "figures cached, and init() is told so rather than reporting success anyway.\n");
         return false;
@@ -1053,7 +1053,7 @@ public:
         auto* r = as(self);
         if (!r || sample_rate <= 0 || num_channels <= 0) {
             std::fprintf(stderr,
-                "E/Cordial-Audio           WebRtcAudioRecord.initRecording(%d Hz, %d ch): "
+                "E/RobloxRuntime-Audio           WebRtcAudioRecord.initRecording(%d Hz, %d ch): "
                 "refusing an impossible format.\n", sample_rate, num_channels);
             return -1;
         }
@@ -1068,7 +1068,7 @@ public:
         // to migrate a running recording onto a new format, only a refusal.
         if (r->recording.load()) {
             std::fprintf(stderr,
-                "E/Cordial-Audio           WebRtcAudioRecord.initRecording(%d Hz, %d ch): called "
+                "E/RobloxRuntime-Audio           WebRtcAudioRecord.initRecording(%d Hz, %d ch): called "
                 "while already recording; reallocating recordBuffer now would free memory the "
                 "pump thread may be reading, so refusing rather than risking a use-after-free.\n",
                 sample_rate, num_channels);
@@ -1078,7 +1078,7 @@ public:
             env, "org/webrtc/voiceengine/WebRtcAudioRecord", "nativeCacheDirectBufferAddress");
         if (!cache_fn) {
             std::fprintf(stderr,
-                "E/Cordial-Audio           WebRtcAudioRecord.initRecording: "
+                "E/RobloxRuntime-Audio           WebRtcAudioRecord.initRecording: "
                 "nativeCacheDirectBufferAddress was never registered by the engine, so there is "
                 "nobody on the other end of a buffer this would hand over; refusing rather than "
                 "opening a microphone nothing will ever read from.\n");
@@ -1103,7 +1103,7 @@ public:
         reinterpret_cast<CacheFn>(cache_fn)(jni, thiz, jbuf, r->nativeAudioRecord);
 
         std::fprintf(stderr,
-            "I/Cordial-Audio           WebRtcAudioRecord.initRecording(%d Hz, %d ch): %u byte "
+            "I/RobloxRuntime-Audio           WebRtcAudioRecord.initRecording(%d Hz, %d ch): %u byte "
             "buffer cached with the engine; no capture stream until startRecording.\n",
             sample_rate, num_channels, r->bufferBytes);
         return static_cast<jint>(r->bufferBytes);
@@ -1117,7 +1117,7 @@ public:
         auto* r = as(self);
         if (!r || !r->recordBuffer) {
             std::fprintf(stderr,
-                "W/Cordial-Audio           WebRtcAudioRecord.startRecording called before a "
+                "W/RobloxRuntime-Audio           WebRtcAudioRecord.startRecording called before a "
                 "successful initRecording; refusing.\n");
             return false;
         }
@@ -1126,7 +1126,7 @@ public:
             env, "org/webrtc/voiceengine/WebRtcAudioRecord", "nativeDataIsRecorded");
         if (!data_fn) {
             std::fprintf(stderr,
-                "E/Cordial-Audio           WebRtcAudioRecord.startRecording: nativeDataIsRecorded "
+                "E/RobloxRuntime-Audio           WebRtcAudioRecord.startRecording: nativeDataIsRecorded "
                 "was never registered by the engine; there is nowhere to deliver samples, so "
                 "refusing rather than opening a microphone that would record into nothing.\n");
             return false;
@@ -1138,7 +1138,7 @@ public:
         r->targetNode = default_source_node_name();
         if (!r->capture.open(r->sampleRate, r->channels, r->targetNode)) {
             std::fprintf(stderr,
-                "E/Cordial-Audio           WebRtcAudioRecord.startRecording could not open a "
+                "E/RobloxRuntime-Audio           WebRtcAudioRecord.startRecording could not open a "
                 "capture stream; staying stopped rather than reporting a recording that is not "
                 "happening.\n");
             return false;
@@ -1150,7 +1150,7 @@ public:
         auto self_ref = std::static_pointer_cast<WebRtcAudioRecord>(r->shared_from_this());
         r->pump = std::thread([self_ref, data_fn] { self_ref->run_pump(data_fn); });
         std::fprintf(stderr,
-            "I/Cordial-Audio           WebRtcAudioRecord.startRecording: microphone opened at "
+            "I/RobloxRuntime-Audio           WebRtcAudioRecord.startRecording: microphone opened at "
             "%u Hz, %u channel(s).\n", r->sampleRate, r->channels);
         return true;
     }
@@ -1235,7 +1235,7 @@ public:
         capture.close(); // idempotent; covers a stop before any start
         if (was_recording) {
             std::fprintf(stderr,
-                "I/Cordial-Audio           WebRtcAudioRecord: microphone closed.\n");
+                "I/RobloxRuntime-Audio           WebRtcAudioRecord: microphone closed.\n");
         }
     }
 
@@ -1250,7 +1250,7 @@ private:
     /// **Every exit from this function closes `capture`, structurally.**
     /// This used to be an early return's job on the attach-failure path below
     /// -- `recording.store(false); return;`, with no `capture.close()` beside
-    /// it -- and it was reachable in review: `cordial::process_env()` failing
+    /// it -- and it was reachable in review: `roblox_runtime::process_env()` failing
     /// left the object believing it was not recording while the PipeWire
     /// capture stream `startRecording` opened stayed open underneath it. That
     /// is exactly the state the microphone rule at the top of this file exists
@@ -1276,14 +1276,14 @@ private:
 
         // This thread did not exist when the process's `JavaVM` stood up, so
         // without attaching it here every JNI call below finds nothing —
-        // `cordial::process_env()`'s own comment in `jni_shim.cpp` is the
+        // `roblox_runtime::process_env()`'s own comment in `jni_shim.cpp` is the
         // established reason to reach for `AttachCurrentThread` rather than
         // `GetEnv`, exactly as `WebRtcAudioTrack::run_pump` already relies on
         // it for the identical problem on the playback side.
-        auto* thread_env = cordial::process_env();
+        auto* thread_env = roblox_runtime::process_env();
         if (!thread_env) {
             std::fprintf(stderr,
-                "E/Cordial-Audio           WebRtcAudioRecord pump: could not attach to the "
+                "E/RobloxRuntime-Audio           WebRtcAudioRecord pump: could not attach to the "
                 "process JavaVM; recording stops here.\n");
             return; // `closer` clears `recording` and closes `capture` here.
         }
@@ -1438,7 +1438,7 @@ public:
         auto* t = as(self);
         if (!t || sample_rate <= 0 || num_channels <= 0) {
             std::fprintf(stderr,
-                "E/Cordial-Audio           WebRtcAudioTrack.initPlayout(%d Hz, %d ch): refusing "
+                "E/RobloxRuntime-Audio           WebRtcAudioTrack.initPlayout(%d Hz, %d ch): refusing "
                 "an impossible format.\n", sample_rate, num_channels);
             return -1;
         }
@@ -1446,7 +1446,7 @@ public:
             env, "org/webrtc/voiceengine/WebRtcAudioTrack", "nativeCacheDirectBufferAddress");
         if (!cache_fn) {
             std::fprintf(stderr,
-                "E/Cordial-Audio           WebRtcAudioTrack.initPlayout: "
+                "E/RobloxRuntime-Audio           WebRtcAudioTrack.initPlayout: "
                 "nativeCacheDirectBufferAddress was never registered by the engine, so there is "
                 "nobody on the other end of a buffer this would hand over; refusing rather than "
                 "caching one nothing will ever fill.\n");
@@ -1473,7 +1473,7 @@ public:
         reinterpret_cast<CacheFn>(cache_fn)(jni, thiz, jbuf, t->nativeAudioTrack);
 
         std::fprintf(stderr,
-            "I/Cordial-Audio           WebRtcAudioTrack.initPlayout(%d Hz, %d ch, factor=%.2f): "
+            "I/RobloxRuntime-Audio           WebRtcAudioTrack.initPlayout(%d Hz, %d ch, factor=%.2f): "
             "%u byte buffer cached with the engine.\n", sample_rate, num_channels, factor,
             t->bufferBytes);
         return static_cast<jint>(t->bufferBytes);
@@ -1488,7 +1488,7 @@ public:
         auto* t = as(self);
         if (!t || !t->playoutBuffer) {
             std::fprintf(stderr,
-                "W/Cordial-Audio           WebRtcAudioTrack.startPlayout called before a "
+                "W/RobloxRuntime-Audio           WebRtcAudioTrack.startPlayout called before a "
                 "successful initPlayout; refusing.\n");
             return false;
         }
@@ -1497,7 +1497,7 @@ public:
             env, "org/webrtc/voiceengine/WebRtcAudioTrack", "nativeGetPlayoutData");
         if (!pull_fn) {
             std::fprintf(stderr,
-                "E/Cordial-Audio           WebRtcAudioTrack.startPlayout: nativeGetPlayoutData "
+                "E/RobloxRuntime-Audio           WebRtcAudioTrack.startPlayout: nativeGetPlayoutData "
                 "was never registered by the engine; there is nothing to pull data from, so "
                 "refusing rather than opening a stream that would play silence forever.\n");
             return false;
@@ -1506,7 +1506,7 @@ public:
                             /*container_bits=*/16, /*big_endian=*/false,
                             /*max_pending_buffers=*/4, audio::configured_output_device())) {
             std::fprintf(stderr,
-                "E/Cordial-Audio           WebRtcAudioTrack.startPlayout: PipeWire refused a "
+                "E/RobloxRuntime-Audio           WebRtcAudioTrack.startPlayout: PipeWire refused a "
                 "%u Hz, %u channel S16 stream.\n", t->sampleRate, t->channels);
             return false;
         }
@@ -1525,7 +1525,7 @@ public:
         auto self_ref = std::static_pointer_cast<WebRtcAudioTrack>(t->shared_from_this());
         t->pump = std::thread([self_ref, pull_fn] { self_ref->run_pump(pull_fn); });
         std::fprintf(stderr,
-            "I/Cordial-Audio           WebRtcAudioTrack.startPlayout: pulling playout data at "
+            "I/RobloxRuntime-Audio           WebRtcAudioTrack.startPlayout: pulling playout data at "
             "%u Hz, %u channel(s).\n", t->sampleRate, t->channels);
         return true;
     }
@@ -1647,7 +1647,7 @@ public:
             std::lock_guard<std::mutex> guard(lock_);
             owned_.clear();
         }
-        std::fprintf(stderr, "I/Cordial-Audio           WebRtcAudioTrack: playout stream closed.\n");
+        std::fprintf(stderr, "I/RobloxRuntime-Audio           WebRtcAudioTrack: playout stream closed.\n");
     }
 
     ~WebRtcAudioTrack() { stop(); }
@@ -1695,20 +1695,20 @@ private:
                     self->owned_.clear();
                 }
                 std::fprintf(stderr,
-                    "I/Cordial-Audio           WebRtcAudioTrack: playout stream closed (pump "
+                    "I/RobloxRuntime-Audio           WebRtcAudioTrack: playout stream closed (pump "
                     "exited without stop() -- see run_pump's own comment).\n");
             }
         } closer{this};
 
         // This thread did not exist when the process's `JavaVM` stood up, so
         // without attaching it here every JNI call below finds nothing --
-        // `cordial::process_env()`'s own comment in `jni_shim.cpp` is the
+        // `roblox_runtime::process_env()`'s own comment in `jni_shim.cpp` is the
         // established reason to reach for `AttachCurrentThread` rather than
         // `GetEnv` for exactly this situation.
-        auto* thread_env = cordial::process_env();
+        auto* thread_env = roblox_runtime::process_env();
         if (!thread_env) {
             std::fprintf(stderr,
-                "E/Cordial-Audio           WebRtcAudioTrack pump: could not attach to the "
+                "E/RobloxRuntime-Audio           WebRtcAudioTrack pump: could not attach to the "
                 "process JavaVM; playout stops here.\n");
             return; // `closer` clears `open_`/`playing` and closes `stream` here.
         }
@@ -1748,7 +1748,7 @@ private:
                 const uint64_t n = ++dropped;
                 if ((n & (n - 1)) == 0) {
                     std::fprintf(stderr,
-                        "W/Cordial-Audio           WebRtcAudioTrack pump: no room after 500 ms, "
+                        "W/RobloxRuntime-Audio           WebRtcAudioTrack pump: no room after 500 ms, "
                         "dropped %llu buffer(s) so far -- the playback stream is not draining.\n",
                         static_cast<unsigned long long>(n));
                 }
@@ -1791,17 +1791,17 @@ void audio_selftest() {
     if (!std::getenv("RBX_RUNTIME_AUDIO_SELFTEST")) return;
     std::vector<audio::DeviceInfo> devices = audio::enumerate_devices();
     std::fprintf(stderr,
-        "I/Cordial-Audio           selftest: PipeWire reports %zu audio device(s).\n",
+        "I/RobloxRuntime-Audio           selftest: PipeWire reports %zu audio device(s).\n",
         devices.size());
     for (const audio::DeviceInfo& d : devices) {
         auto info = make_device_info(d);
         std::fprintf(stderr,
-            "I/Cordial-Audio           selftest:   id=%d %s%s type=%d productName='%s'\n",
+            "I/RobloxRuntime-Audio           selftest:   id=%d %s%s type=%d productName='%s'\n",
             info->id, d.is_source ? "input " : "output", d.is_default ? " (host default)" : "",
             info->type, info->productName.c_str());
     }
     std::fprintf(stderr,
-        "I/Cordial-Audio           selftest: capture streams open = %u (must be 0: listing "
+        "I/RobloxRuntime-Audio           selftest: capture streams open = %u (must be 0: listing "
         "microphones does not use one).\n", audio::active_capture_streams());
 }
 
@@ -1903,7 +1903,7 @@ public:
         if (!roblox_audio_backend_is_aaudio()) return JNI_FALSE;
         if (!audio::host_backend_available()) {
             std::fprintf(stderr,
-                "W/Cordial-FMOD            AAudio is selected but no PipeWire session is "
+                "W/RobloxRuntime-FMOD            AAudio is selected but no PipeWire session is "
                 "reachable; answering supportsAAudio() false so FMOD keeps its "
                 "AudioDevice fallback. Claiming AAudio here would cost all audio, not just "
                 "the low-latency path -- FMOD does not fall back once a stream it opened "
@@ -1952,12 +1952,12 @@ public:
     /// this refuses instead of opening a stream at 2 Hz.
     jboolean init(jnivm::ENV*, jint channels, jint rate, jint buffer_frames, jint buffer_count) {
         std::fprintf(stderr,
-            "I/Cordial-FMOD            AudioDevice.init(channels=%d, rate=%d, frames=%d, "
+            "I/RobloxRuntime-FMOD            AudioDevice.init(channels=%d, rate=%d, frames=%d, "
             "buffers=%d)\n", channels, rate, buffer_frames, buffer_count);
 
         if (rate < 8000 || rate > 192000 || channels < 1 || channels > 8) {
             std::fprintf(stderr,
-                "E/Cordial-FMOD            AudioDevice.init: refusing (channels=%d, rate=%d). "
+                "E/RobloxRuntime-FMOD            AudioDevice.init: refusing (channels=%d, rate=%d). "
                 "The argument order measured on 2026-08-06 was (channels, rate, frames, "
                 "buffers); this build appears to pass something else. Reporting failure rather "
                 "than opening a stream at a guessed format.\n", channels, rate);
@@ -1990,7 +1990,7 @@ public:
         if (!stream_.open(static_cast<uint32_t>(rate), static_cast<uint32_t>(channels),
                           16, 16, false, depth, audio::configured_output_device())) {
             std::fprintf(stderr,
-                "E/Cordial-FMOD            AudioDevice.init: PipeWire refused a %d Hz, %d "
+                "E/RobloxRuntime-FMOD            AudioDevice.init: PipeWire refused a %d Hz, %d "
                 "channel S16 stream; reporting failure to FMOD.\n", rate, channels);
             return JNI_FALSE;
         }
@@ -2006,7 +2006,7 @@ public:
         pending_depth_ = depth;
         open_ = true;
         std::fprintf(stderr,
-            "I/Cordial-FMOD            AudioDevice.init: PipeWire playback open at %d Hz, %d "
+            "I/RobloxRuntime-FMOD            AudioDevice.init: PipeWire playback open at %d Hz, %d "
             "channel(s), S16.\n", rate, channels);
         return JNI_TRUE;
     }
@@ -2047,7 +2047,7 @@ public:
                 const uint64_t n_dropped = ++dropped;
                 if ((n_dropped & (n_dropped - 1)) == 0) {
                     std::fprintf(stderr,
-                        "W/Cordial-FMOD            AudioDevice.write: no room after 500 ms, "
+                        "W/RobloxRuntime-FMOD            AudioDevice.write: no room after 500 ms, "
                         "dropped %llu buffer(s) so far — the playback stream is not draining.\n",
                         static_cast<unsigned long long>(n_dropped));
                 }
@@ -2112,7 +2112,7 @@ public:
             std::lock_guard<std::mutex> guard(lock_);
             owned_.clear();
         }
-        std::fprintf(stderr, "I/Cordial-FMOD            AudioDevice.close: playback stream closed.\n");
+        std::fprintf(stderr, "I/RobloxRuntime-FMOD            AudioDevice.close: playback stream closed.\n");
     }
 
     static void Register(jnivm::ENV* env) {
@@ -2160,7 +2160,7 @@ private:
     std::mutex lock_;
     std::condition_variable space_;
     bool open_ = false;
-    cordial::audio::PlaybackStream stream_;
+    roblox_runtime::audio::PlaybackStream stream_;
     std::vector<std::unique_ptr<uint8_t[]>> owned_;
 };
 
@@ -2177,4 +2177,4 @@ void register_audio_classes(jnivm::ENV* env) {
     audio_selftest();
 }
 
-} // namespace cordial
+} // namespace roblox_runtime

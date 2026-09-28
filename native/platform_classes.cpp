@@ -81,7 +81,7 @@
 #include <mutex>
 #include <string>
 
-namespace cordial {
+namespace roblox_runtime {
 
 using jnivm::Class;
 using jnivm::ENV;
@@ -202,4 +202,4 @@ void register_platform_classes(ENV* env) {
     register_unanswered_classes(env);
 }
 
-} // namespace cordial
+} // namespace roblox_runtime

@@ -96,7 +96,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace cordial {
+namespace roblox_runtime {
 
 using jnivm::Class;
 using jnivm::ENV;
@@ -133,13 +133,13 @@ std::shared_ptr<String> S(const char* v) {
 // or for ruling the whole feature out as a variable while debugging something
 // unrelated.
 std::atomic<int> g_a11y_bridge_connected{0};
-} // namespace cordial
+} // namespace roblox_runtime
 
 extern "C" void roblox_accessibility_set_bridge_connected(int connected) {
-    cordial::g_a11y_bridge_connected.store(connected ? 1 : 0, std::memory_order_release);
+    roblox_runtime::g_a11y_bridge_connected.store(connected ? 1 : 0, std::memory_order_release);
 }
 
-namespace cordial {
+namespace roblox_runtime {
 namespace {
 bool accessibility_enabled() {
     if (const char* e = getenv("RBX_RUNTIME_ACCESSIBILITY")) {
@@ -669,7 +669,7 @@ void register_accessibility_classes(ENV* env) {
     AccessibilityManager::Register(env);
 }
 
-} // namespace cordial
+} // namespace roblox_runtime
 
 // -------------------------------------------------------------- Rust FFI
 //
@@ -697,7 +697,7 @@ struct RobloxRuntimeA11yNode {
     unsigned action_count;
 };
 
-static void fill_node(const cordial::NodeState& n, RobloxRuntimeA11yNode* out) {
+static void fill_node(const roblox_runtime::NodeState& n, RobloxRuntimeA11yNode* out) {
     out->id = n.id;
     std::snprintf(out->class_name, sizeof(out->class_name), "%s", n.class_name.c_str());
     std::snprintf(out->text, sizeof(out->text), "%s", n.text.c_str());
@@ -720,9 +720,9 @@ static void fill_node(const cordial::NodeState& n, RobloxRuntimeA11yNode* out) {
 /// `roblox_accessibility_node_count` if they need to size the buffer first.
 size_t roblox_accessibility_snapshot(RobloxRuntimeA11yNode* out, size_t max) {
     if (!out || max == 0) return 0;
-    std::lock_guard<std::mutex> lock(cordial::g_registry_mutex);
+    std::lock_guard<std::mutex> lock(roblox_runtime::g_registry_mutex);
     size_t n = 0;
-    for (const auto& kv : cordial::g_registry) {
+    for (const auto& kv : roblox_runtime::g_registry) {
         if (n >= max) break;
         fill_node(kv.second, &out[n]);
         ++n;
@@ -731,12 +731,12 @@ size_t roblox_accessibility_snapshot(RobloxRuntimeA11yNode* out, size_t max) {
 }
 
 size_t roblox_accessibility_node_count() {
-    std::lock_guard<std::mutex> lock(cordial::g_registry_mutex);
-    return cordial::g_registry.size();
+    std::lock_guard<std::mutex> lock(roblox_runtime::g_registry_mutex);
+    return roblox_runtime::g_registry.size();
 }
 
 unsigned roblox_accessibility_generation() {
-    return cordial::g_registry_generation.load(std::memory_order_acquire);
+    return roblox_runtime::g_registry_generation.load(std::memory_order_acquire);
 }
 
 /// Dequeue one pending `sendAccessibilityEvent` call. Returns 1 with
@@ -757,10 +757,10 @@ unsigned roblox_accessibility_generation() {
 unsigned roblox_accessibility_test_seed_node(const char* class_name, const char* text,
                                               const char* content_description, int left, int top,
                                               int right, int bottom, unsigned state) {
-    unsigned id = cordial::g_next_id.fetch_add(1, std::memory_order_relaxed);
+    unsigned id = roblox_runtime::g_next_id.fetch_add(1, std::memory_order_relaxed);
     {
-        std::lock_guard<std::mutex> lock(cordial::g_registry_mutex);
-        auto& n = cordial::locked_node(id);
+        std::lock_guard<std::mutex> lock(roblox_runtime::g_registry_mutex);
+        auto& n = roblox_runtime::locked_node(id);
         n.id = id;
         n.class_name = class_name ? class_name : "";
         n.text = text ? text : "";
@@ -771,24 +771,24 @@ unsigned roblox_accessibility_test_seed_node(const char* class_name, const char*
         n.bottom = bottom;
         n.state = state;
     }
-    cordial::g_registry_generation.fetch_add(1, std::memory_order_acq_rel);
+    roblox_runtime::g_registry_generation.fetch_add(1, std::memory_order_acq_rel);
     return id;
 }
 
 /// Drop every node, seeded or real. Test-only, same reasoning as
 /// `roblox_accessibility_test_seed_node`.
 void roblox_accessibility_test_clear() {
-    std::lock_guard<std::mutex> lock(cordial::g_registry_mutex);
-    cordial::g_registry.clear();
-    cordial::g_registry_generation.fetch_add(1, std::memory_order_acq_rel);
+    std::lock_guard<std::mutex> lock(roblox_runtime::g_registry_mutex);
+    roblox_runtime::g_registry.clear();
+    roblox_runtime::g_registry_generation.fetch_add(1, std::memory_order_acq_rel);
 }
 
 int roblox_accessibility_next_event(int* event_type, char* class_name_buf, int cn_len,
                                      char* text_buf, int text_len) {
-    std::lock_guard<std::mutex> lock(cordial::g_event_mutex);
-    if (cordial::g_event_queue.empty()) return 0;
-    cordial::PendingEvent ev = cordial::g_event_queue.front();
-    cordial::g_event_queue.erase(cordial::g_event_queue.begin());
+    std::lock_guard<std::mutex> lock(roblox_runtime::g_event_mutex);
+    if (roblox_runtime::g_event_queue.empty()) return 0;
+    roblox_runtime::PendingEvent ev = roblox_runtime::g_event_queue.front();
+    roblox_runtime::g_event_queue.erase(roblox_runtime::g_event_queue.begin());
     if (event_type) *event_type = ev.event_type;
     if (class_name_buf && cn_len > 0) {
         std::snprintf(class_name_buf, static_cast<size_t>(cn_len), "%s", ev.class_name.c_str());

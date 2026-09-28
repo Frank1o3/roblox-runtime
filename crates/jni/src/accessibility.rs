@@ -147,6 +147,8 @@ pub mod accessibility {
             return Vec::new();
         }
         let mut buf = vec![RawNode::default(); count];
+        // SAFETY: `buf` has `count` writable, correctly aligned `RawNode`
+        // values and remains alive through the native copy.
         let written = unsafe { roblox_accessibility_snapshot(buf.as_mut_ptr(), buf.len()) };
         buf.truncate(written);
         buf.into_iter().map(Node::from).collect()
@@ -195,6 +197,7 @@ pub mod accessibility {
     /// `roblox_accessibility_test_seed_node`'s own doc comment in
     /// `native/accessibility.cpp` for why this exists and why it is not a
     /// second way for Roblox to reach the registry. Returns the assigned id.
+    #[allow(clippy::too_many_arguments)]
     pub fn test_seed_node(
         class_name: &str,
         text: &str,

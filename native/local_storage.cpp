@@ -97,7 +97,7 @@
 #include <string>
 #include <vector>
 
-namespace cordial {
+namespace roblox_runtime {
 
 using jnivm::Class;
 using jnivm::ENV;
@@ -146,9 +146,9 @@ static void note_call(const char* method, const char* key) {
         return;
     }
     if (key) {
-        fprintf(stderr, "[cordial] local storage: %s key=%s\n", method, key);
+        fprintf(stderr, "[runtime] local storage: %s key=%s\n", method, key);
     } else {
-        fprintf(stderr, "[cordial] local storage: %s\n", method);
+        fprintf(stderr, "[runtime] local storage: %s\n", method);
     }
 }
 
@@ -525,11 +525,11 @@ static void dump_registered(ENV* env, const char* name) {
     }
     auto c = env->GetClass(name);
     if (!c) {
-        fprintf(stderr, "[cordial] local storage: no class %s\n", name);
+        fprintf(stderr, "[runtime] local storage: no class %s\n", name);
         return;
     }
     for (auto& m : c->methods) {
-        fprintf(stderr, "[cordial] local storage: registered %s.%s%s%s\n", name, m->name.data(),
+        fprintf(stderr, "[runtime] local storage: registered %s.%s%s%s\n", name, m->name.data(),
                 m->signature.data(), m->_static ? "  (static)" : "");
     }
 }
@@ -560,7 +560,7 @@ public:
         p->nativeRef = ref;
         to_jni(env, p);
         if (trace_local_storage()) {
-            fprintf(stderr, "[cordial] local storage: ILocalStorageHandlerCore$CppProxy built\n");
+            fprintf(stderr, "[runtime] local storage: ILocalStorageHandlerCore$CppProxy built\n");
         }
         return p;
     }
@@ -590,7 +590,7 @@ void register_local_storage_classes(ENV* env) {
     dump_registered(env, "java/util/HashSet");
 }
 
-} // namespace cordial
+} // namespace roblox_runtime
 
 extern "C" {
 
@@ -621,7 +621,7 @@ extern "C" {
 /// It does not produce an `rbx-storage.db`; see §40's closing note.
 int roblox_local_storage_set_platform_impl(void* fn, char* err, size_t err_len) {
     using Call = jobject (*)(JNIEnv*, jclass, jobject);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env) {
         snprintf(err, err_len, "no JavaVM, or setPlatformImpl is not exported");
         return -1;
@@ -629,11 +629,11 @@ int roblox_local_storage_set_platform_impl(void* fn, char* err, size_t err_len) 
     try {
         auto cls = env->GetClass(
             "com/roblox/protocols/localstorageplatforminterface/generated/ILocalStorageHandlerCore");
-        auto handler = std::make_shared<cordial::PlatformLocalStorageHandler>();
-        cordial::to_jni(env, handler);
+        auto handler = std::make_shared<roblox_runtime::PlatformLocalStorageHandler>();
+        roblox_runtime::to_jni(env, handler);
         jobject core = reinterpret_cast<Call>(fn)(env->GetJNIEnv(),
-                                                  (jclass)cordial::to_jni(env, cls),
-                                                  (jobject)cordial::to_jni(env, handler));
+                                                  (jclass)roblox_runtime::to_jni(env, cls),
+                                                  (jobject)roblox_runtime::to_jni(env, handler));
         // The return was discarded until now and the discard hid a fact worth
         // having: djinni's `setPlatformImpl` returns the core it built, so a
         // null here means the engine declined to build one and everything
@@ -651,7 +651,7 @@ int roblox_local_storage_set_platform_impl(void* fn, char* err, size_t err_len) 
             jni->ExceptionClear();
         }
         if (getenv("RBX_RUNTIME_TRACE_LOCAL_STORAGE")) {
-            fprintf(stderr, "[cordial] local storage: setPlatformImpl returned %s%s\n",
+            fprintf(stderr, "[runtime] local storage: setPlatformImpl returned %s%s\n",
                     core ? "a core" : "null", pending ? ", exception pending" : "");
         }
         return 0;
@@ -683,7 +683,7 @@ int roblox_update_screen_orientation(void* fn, int width, int height, char* err,
     constexpr jint kOrientationPortrait = 1;
     constexpr jint kOrientationLandscape = 2;
     using Call = void (*)(JNIEnv*, jclass, jint);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env) {
         snprintf(err, err_len, "no JavaVM, or nativeUpdateScreenOrientation is not exported");
         return -1;
@@ -691,7 +691,7 @@ int roblox_update_screen_orientation(void* fn, int width, int height, char* err,
     try {
         auto cls = env->GetClass("com/roblox/engine/jni/NativeInputInterface");
         jint orientation = width >= height ? kOrientationLandscape : kOrientationPortrait;
-        reinterpret_cast<Call>(fn)(env->GetJNIEnv(), (jclass)cordial::to_jni(env, cls), orientation);
+        reinterpret_cast<Call>(fn)(env->GetJNIEnv(), (jclass)roblox_runtime::to_jni(env, cls), orientation);
         return 0;
     } catch (const std::exception& e) {
         snprintf(err, err_len, "%s", e.what());

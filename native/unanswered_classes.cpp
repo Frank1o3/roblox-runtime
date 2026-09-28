@@ -52,7 +52,7 @@
 #include <memory>
 #include <string>
 
-namespace cordial {
+namespace roblox_runtime {
 
 using jnivm::Class;
 using jnivm::ENV;
@@ -199,37 +199,37 @@ public:
         static std::atomic<bool> said{false};
         if (!said.exchange(true)) {
             std::fprintf(stderr,
-                "I/Cordial-Voice          AppRtcDeviceWrapper.isValid: yes. Voice uses the "
+                "I/RobloxRuntime-Voice          AppRtcDeviceWrapper.isValid: yes. Voice uses the "
                 "desktop's default input and output; there is no device to route.\n");
         }
         return JNI_TRUE;
     }
 
     jint getSelectedAudioDeviceAsInt(ENV*) {
-        std::fprintf(stderr, "I/Cordial-Voice          AppRtcDeviceWrapper.getSelectedAudioDeviceAsInt -> 0 (SPEAKER_PHONE)\n");
+        std::fprintf(stderr, "I/RobloxRuntime-Voice          AppRtcDeviceWrapper.getSelectedAudioDeviceAsInt -> 0 (SPEAKER_PHONE)\n");
         return 0;
     }
 
     std::shared_ptr<String> getSelectedAudioDeviceName(ENV*) {
-        std::fprintf(stderr, "I/Cordial-Voice          AppRtcDeviceWrapper.getSelectedAudioDeviceName -> SPEAKER_PHONE\n");
+        std::fprintf(stderr, "I/RobloxRuntime-Voice          AppRtcDeviceWrapper.getSelectedAudioDeviceName -> SPEAKER_PHONE\n");
         return std::make_shared<String>("SPEAKER_PHONE");
     }
 
     void wrapStartCommunication(ENV*) {
         std::fprintf(stderr,
-            "I/Cordial-Voice          AppRtcDeviceWrapper.wrapStartCommunication: a voice call "
+            "I/RobloxRuntime-Voice          AppRtcDeviceWrapper.wrapStartCommunication: a voice call "
             "started. Nothing to switch on a desktop; the microphone opens when Roblox starts "
             "recording.\n");
     }
 
     void wrapStopCommunication(ENV*) {
-        std::fprintf(stderr, "I/Cordial-Voice          AppRtcDeviceWrapper.wrapStopCommunication: the voice call ended.\n");
+        std::fprintf(stderr, "I/RobloxRuntime-Voice          AppRtcDeviceWrapper.wrapStopCommunication: the voice call ended.\n");
         audio::voice_muted().store(false);
     }
 
     void wrapSetCommunicationMute(ENV*, jboolean mute) {
         audio::voice_muted().store(mute != JNI_FALSE);
-        std::fprintf(stderr, "I/Cordial-Voice          AppRtcDeviceWrapper.wrapSetCommunicationMute(%s): "
+        std::fprintf(stderr, "I/RobloxRuntime-Voice          AppRtcDeviceWrapper.wrapSetCommunicationMute(%s): "
             "microphone samples are %s.\n", mute ? "true" : "false", mute ? "now silenced" : "passed through");
     }
 
@@ -362,4 +362,4 @@ void register_unanswered_classes(ENV* env) {
     WebRtcAudioTrack::Register(env);
 }
 
-} // namespace cordial
+} // namespace roblox_runtime

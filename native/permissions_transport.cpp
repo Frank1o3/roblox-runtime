@@ -3,7 +3,7 @@
 #include <cstring>
 #include <stdexcept>
 
-namespace cordial::permissions {
+namespace roblox_runtime::permissions {
 
 bool uses_dual_response(bool requested, const char* protocol) {
     return requested && protocol && std::strcmp(protocol, "PermissionsProtocol") == 0;
@@ -23,4 +23,4 @@ void deliver_response(const ResponseDelivery& delivery) {
     delivery.resolve(delivery.env, delivery.bus, delivery.correlation_id, delivery.response);
 }
 
-} // namespace cordial::permissions
+} // namespace roblox_runtime::permissions

@@ -662,6 +662,8 @@ impl Default for RobloxRuntimeBatteryStatus {
         // the all-null `BatteryStatus` the engine gets if a caller sets
         // nothing, which is the honest reading for "nothing was measured"
         // rather than any particular zero being mistaken for a real one.
+        // SAFETY: the repr(C) struct contains only integer fields, for which
+        // all-zero is a valid value.
         unsafe { std::mem::zeroed() }
     }
 }

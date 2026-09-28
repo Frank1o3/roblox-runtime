@@ -43,12 +43,12 @@
 // so the join watchdog does not have to know which of them a given build calls.
 extern "C" void roblox_note_game_loaded(long long place_id);
 
-namespace cordial {
+namespace roblox_runtime {
 class Surface;
 
 /// Convert a C++ object into a `jobject` the way libjnivm expects.
 ///
-/// A raw `cordial::to_jni(env, p)` looks right — libjnivm does
+/// A raw `roblox_runtime::to_jni(env, p)` looks right — libjnivm does
 /// represent a `jobject` as its own `Object*` — but it skips the two things
 /// `ToJNIType` does on the way:
 ///
@@ -237,7 +237,7 @@ static DeviceIdentity device_identity() {
         // reaches the engine, so a value it did not understand has to be
         // visible from a run of the client alone.
         fprintf(stderr,
-                "[cordial] RBX_RUNTIME_DEVICE_PROFILE=\"%s\" is not a device profile; using "
+                "[runtime] RBX_RUNTIME_DEVICE_PROFILE=\"%s\" is not a device profile; using "
                 "pc-windows-11. Known: roblox-app, android-tablet, pc-windows-11\n",
                 e);
         return DeviceIdentity::PcWindows11;
@@ -455,7 +455,7 @@ static std::string build_user_agent() {
     return std::string(buf);
 }
 
-} // namespace cordial
+} // namespace roblox_runtime
 
 /// Hands `build_user_agent`'s exact answer to the Rust side.
 ///
@@ -483,7 +483,7 @@ static std::string build_user_agent() {
 /// tell truncation from success rather than silently reading a cut-off
 /// string.
 extern "C" size_t roblox_build_user_agent(char* buf, size_t n) {
-    std::string ua = cordial::build_user_agent();
+    std::string ua = roblox_runtime::build_user_agent();
     if (buf && n > 0) {
         size_t copy = ua.size() < n - 1 ? ua.size() : n - 1;
         ua.copy(buf, copy);
@@ -492,7 +492,7 @@ extern "C" size_t roblox_build_user_agent(char* buf, size_t n) {
     return ua.size();
 }
 
-namespace cordial {
+namespace roblox_runtime {
 
 /// `android.util.DisplayMetrics`
 ///
@@ -562,11 +562,11 @@ public:
 // Both defined at the bottom of this file, beside their setters, and declared
 // here because the fields that use them are built above that point.
 //
-// **Not wrapped in another `namespace cordial {}`, which is what this used to
-// be.** Everything from `namespace cordial {` a few hundred lines up to
-// `} // namespace cordial` well below is already inside it, so the wrapper
-// declared `cordial::cordial::ui_mode_night_bits` -- a different function from
-// the `cordial::ui_mode_night_bits` defined at the bottom, and one nothing
+// **Not wrapped in another `namespace roblox_runtime {}`, which is what this used to
+// be.** Everything from `namespace roblox_runtime {` a few hundred lines up to
+// `} // namespace roblox_runtime` well below is already inside it, so the wrapper
+// declared `roblox_runtime::roblox_runtime::ui_mode_night_bits` -- a different function from
+// the `roblox_runtime::ui_mode_night_bits` defined at the bottom, and one nothing
 // anywhere defines. It never became a link error because `Configuration::Create`
 // has no callers at all and `--gc-sections` discards the reference before the
 // linker looks at it; adding a second function the same way, called from
@@ -622,7 +622,7 @@ public:
     /// invented here. Unset leaves `kUiModeNightNo`, because a runtime started
     /// without the shell has nothing better to say and guessing dark would be
     /// as wrong as guessing light.
-    jint uiMode = kUiModeTypeNormal | cordial::ui_mode_night_bits();
+    jint uiMode = kUiModeTypeNormal | roblox_runtime::ui_mode_night_bits();
     jint colorMode = kColorModeWideCgNo;
     /// `TOUCHSCREEN_FINGER` when the host has a touchscreen, `NOTOUCH` when it
     /// does not.
@@ -640,7 +640,7 @@ public:
     /// `Configuration::Create` below has no callers anywhere in the tree --
     /// only `Register` does -- so no instance of this class is ever built from
     /// it. The object the engine is actually handed at `initializeNativeCode`
-    /// is a *different* `cordial::Configuration`, the empty one in
+    /// is a *different* `roblox_runtime::Configuration`, the empty one in
     /// `native/game_activity.cpp`, which has no fields at all. So this is a
     /// hardcoded answer made honest in a builder nothing runs, not a fix; the
     /// field it keeps consistent with is `isTouchDevice`, which is measured
@@ -662,7 +662,7 @@ public:
     static std::shared_ptr<Configuration> Create(ENV* env, int width, int height) {
         auto p = std::make_shared<Configuration>();
         p->touchscreen =
-            cordial::host_has_touchscreen() ? kTouchscreenFinger : kTouchscreenNoTouch;
+            roblox_runtime::host_has_touchscreen() ? kTouchscreenFinger : kTouchscreenNoTouch;
         // density is 1.0 at 160 dpi, so dp and px are the same number. Stated
         // rather than multiplied by 1 so the relationship survives a future
         // change to DisplayMetrics::densityDpi — if that moves, this must too.
@@ -1539,7 +1539,7 @@ static bool trace_param_reads() {
 }
 
 static void note_param_read(const char* klass, const char* field) {
-    fprintf(stderr, "[cordial] param read: %s.%s\n", klass, field);
+    fprintf(stderr, "[runtime] param read: %s.%s\n", klass, field);
 }
 
 /// `com.roblox.engine.jni.model.DeviceParams`
@@ -1673,7 +1673,7 @@ public:
         // `RBX_RUNTIME_INPUT_TOUCH` overriding it either way — see
         // `android::input::report_touchscreen`, which resolves both into the
         // single answer stored here.
-        p->isTouchDevice = cordial::host_has_touchscreen() ? JNI_TRUE : JNI_FALSE;
+        p->isTouchDevice = roblox_runtime::host_has_touchscreen() ? JNI_TRUE : JNI_FALSE;
         // Roblox lays its UI out in dp and picks image-asset resolutions from
         // this. At 1.0 it builds the interface for a low-density phone, which
         // is why the app shell looks coarse on a desktop panel. Overridable
@@ -1785,7 +1785,7 @@ public:
         const char* platform_name();  // native/android_classes.cpp
         std::string ua = build_user_agent();
         fprintf(stderr,
-                "[cordial] device identity: %s (isTablet=%s, platform=%s, User-Agent: %s)\n",
+                "[runtime] device identity: %s (isTablet=%s, platform=%s, User-Agent: %s)\n",
                 device_identity_label(),
                 device_identity() == DeviceIdentity::AndroidTablet ? "true" : "false",
                 platform_name(), ua.c_str());
@@ -1895,7 +1895,7 @@ public:
         p->appUserId = identity_user_id();
         p->isUnder13 = identity_is_under13();
         p->membershipType = identity_membership_type();
-        fprintf(stderr, "[cordial] app start as %s\n",
+        fprintf(stderr, "[runtime] app start as %s\n",
                 identity_known() ? "a signed-in user" : "nobody signed in");
         p->vrContext = AndroidActivity::Create(env);
         to_jni(env, p);
@@ -1991,7 +1991,7 @@ void register_init_params_classes(ENV* env) {
     StartAppParams::Register(env);
 }
 
-} // namespace cordial
+} // namespace roblox_runtime
 
 extern "C" {
 
@@ -1999,17 +1999,17 @@ extern "C" {
 int roblox_set_init_params(void* fn, const char* assets, int width, int height, char* err,
                             size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jobject);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env) {
         snprintf(err, err_len, "no JavaVM, or nativeAppBridgeSetInitParams is not exported");
         return -1;
     }
     try {
-        auto params = cordial::InitParams::Create(env, assets, width, height);
+        auto params = roblox_runtime::InitParams::Create(env, assets, width, height);
         auto activity = std::make_shared<jnivm::Object>();
         reinterpret_cast<Call>(fn)(env->GetJNIEnv(),
-                                   cordial::to_jni(env, activity),
-                                   cordial::to_jni(env, params));
+                                   roblox_runtime::to_jni(env, activity),
+                                   roblox_runtime::to_jni(env, params));
         return 0;
     } catch (const std::exception& e) {
         snprintf(err, err_len, "%s", e.what());
@@ -2032,7 +2032,7 @@ extern "C" {
 /// no assets, no app shell, no reason to open a socket or draw a frame.
 int roblox_asset_manager_init(void* fn, char* err, size_t err_len) {
     using Call = void (*)(JNIEnv*, jclass, jobject);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env) {
         snprintf(err, err_len, "no JavaVM, or initNative is not exported");
         return -1;
@@ -2041,8 +2041,8 @@ int roblox_asset_manager_init(void* fn, char* err, size_t err_len) {
         auto cls = env->GetClass("com/roblox/client/JNIAAssetManagerSetup");
         auto assets = std::make_shared<jnivm::Object>();
         reinterpret_cast<Call>(fn)(env->GetJNIEnv(),
-                                   cordial::to_jni(env, cls),
-                                   cordial::to_jni(env, assets));
+                                   roblox_runtime::to_jni(env, cls),
+                                   roblox_runtime::to_jni(env, assets));
         return 0;
     } catch (const std::exception& e) {
         snprintf(err, err_len, "%s", e.what());
@@ -2056,7 +2056,7 @@ int roblox_asset_manager_init(void* fn, char* err, size_t err_len) {
 /// `LocalStorageManager.initStorageManagerNativeV3(AssetManager, String, String)`
 int roblox_storage_init(void* fn, const char* a, const char* b, char* err, size_t err_len) {
     using Call = void (*)(JNIEnv*, jclass, jobject, jstring, jstring);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env) {
         snprintf(err, err_len, "no JavaVM, or the storage native is not exported");
         return -1;
@@ -2064,13 +2064,13 @@ int roblox_storage_init(void* fn, const char* a, const char* b, char* err, size_
     try {
         auto cls = env->GetClass("com/roblox/client/LocalStorageManager");
         auto assets = std::make_shared<jnivm::Object>();
-        auto s1 = cordial::S_pub(a);
-        auto s2 = cordial::S_pub(b);
+        auto s1 = roblox_runtime::S_pub(a);
+        auto s2 = roblox_runtime::S_pub(b);
         reinterpret_cast<Call>(fn)(env->GetJNIEnv(),
-                                   cordial::to_jni(env, cls),
-                                   cordial::to_jni(env, assets),
-                                   cordial::to_jni(env, s1),
-                                   cordial::to_jni(env, s2));
+                                   roblox_runtime::to_jni(env, cls),
+                                   roblox_runtime::to_jni(env, assets),
+                                   roblox_runtime::to_jni(env, s1),
+                                   roblox_runtime::to_jni(env, s2));
         return 0;
     } catch (const std::exception& e) {
         snprintf(err, err_len, "%s", e.what());
@@ -2095,7 +2095,7 @@ int roblox_storage_init(void* fn, const char* a, const char* b, char* err, size_
 /// dex — the host app's side of a contract Cordial is reimplementing.
 int roblox_call_static_strings(void* fn, const char* class_name, const char* const* args,
                                 size_t n, char* err, size_t err_len) {
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env || !class_name) {
         snprintf(err, err_len, "no JavaVM, or the native is not exported");
         return -1;
@@ -2107,12 +2107,12 @@ int roblox_call_static_strings(void* fn, const char* class_name, const char* con
     try {
         auto cls = env->GetClass(class_name);
         auto* jenv = env->GetJNIEnv();
-        auto self = (jobject)cordial::to_jni(env, cls);
+        auto self = (jobject)roblox_runtime::to_jni(env, cls);
         jstring a[3] = {nullptr, nullptr, nullptr};
-        std::shared_ptr<cordial::String> keep[3];
+        std::shared_ptr<roblox_runtime::String> keep[3];
         for (size_t i = 0; i < n; ++i) {
-            keep[i] = cordial::S_pub(args[i] ? args[i] : "");
-            a[i] = (jstring)cordial::to_jni(env, keep[i]);
+            keep[i] = roblox_runtime::S_pub(args[i] ? args[i] : "");
+            a[i] = (jstring)roblox_runtime::to_jni(env, keep[i]);
         }
         switch (n) {
             case 0:
@@ -2156,18 +2156,18 @@ int roblox_call_static_strings(void* fn, const char* class_name, const char* con
 int roblox_call_static_bool_string(void* fn, const char* class_name, int flag, const char* text,
                                     char* err, size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jboolean, jstring);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env || !class_name) {
         snprintf(err, err_len, "no JavaVM, or the native is not exported");
         return -1;
     }
     try {
         auto cls = env->GetClass(class_name);
-        auto s = cordial::S_pub(text ? text : "");
+        auto s = roblox_runtime::S_pub(text ? text : "");
         reinterpret_cast<Call>(fn)(env->GetJNIEnv(),
-                                   (jobject)cordial::to_jni(env, cls),
+                                   (jobject)roblox_runtime::to_jni(env, cls),
                                    flag ? JNI_TRUE : JNI_FALSE,
-                                   (jstring)cordial::to_jni(env, s));
+                                   (jstring)roblox_runtime::to_jni(env, s));
         return 0;
     } catch (const std::exception& e) {
         snprintf(err, err_len, "%s", e.what());
@@ -2185,17 +2185,17 @@ int roblox_call_static_bool_string(void* fn, const char* class_name, int flag, c
 /// this at all.
 int roblox_set_device_info(void* fn, int width, int height, char* err, size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jobject);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env) {
         snprintf(err, err_len, "no JavaVM, or nativeSetDeviceInfo is not exported");
         return -1;
     }
     try {
         auto cls = env->GetClass("com/roblox/engine/jni/NativeSettingsInterface");
-        auto dev = cordial::DeviceParams::Create(env, width, height);
+        auto dev = roblox_runtime::DeviceParams::Create(env, width, height);
         reinterpret_cast<Call>(fn)(env->GetJNIEnv(),
-                                   (jobject)cordial::to_jni(env, cls),
-                                   (jobject)cordial::to_jni(env, dev));
+                                   (jobject)roblox_runtime::to_jni(env, cls),
+                                   (jobject)roblox_runtime::to_jni(env, dev));
         return 0;
     } catch (const std::exception& e) {
         snprintf(err, err_len, "%s", e.what());
@@ -2231,7 +2231,7 @@ int roblox_set_device_info(void* fn, int width, int height, char* err, size_t er
 int roblox_init_storage_manager(void* fn, const char* a, const char* b, char* err,
                                  size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jobject, jstring, jstring);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env) {
         snprintf(err, err_len, "no JavaVM, or initStorageManagerNativeV3 is not exported");
         return -1;
@@ -2262,13 +2262,13 @@ int roblox_init_storage_manager(void* fn, const char* a, const char* b, char* er
         auto am_cls = env->GetClass("android/content/res/AssetManager");
         auto am = std::make_shared<jnivm::Object>();
         am->clazz = am_cls;
-        auto sa = cordial::S_pub(a ? a : "");
-        auto sb = cordial::S_pub(b ? b : "");
+        auto sa = roblox_runtime::S_pub(a ? a : "");
+        auto sb = roblox_runtime::S_pub(b ? b : "");
         reinterpret_cast<Call>(fn)(env->GetJNIEnv(),
-                                   (jobject)cordial::to_jni(env, self),
-                                   (jobject)cordial::to_jni(env, am),
-                                   (jstring)cordial::to_jni(env, sa),
-                                   (jstring)cordial::to_jni(env, sb));
+                                   (jobject)roblox_runtime::to_jni(env, self),
+                                   (jobject)roblox_runtime::to_jni(env, am),
+                                   (jstring)roblox_runtime::to_jni(env, sa),
+                                   (jstring)roblox_runtime::to_jni(env, sb));
         return 0;
     } catch (const std::exception& e) {
         snprintf(err, err_len, "%s", e.what());
@@ -2282,14 +2282,14 @@ int roblox_init_storage_manager(void* fn, const char* a, const char* b, char* er
 /// A native taking only `(JNIEnv*, jobject)` — `nativeRetryInit`.
 int roblox_call_bare(void* fn, char* err, size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env) {
         snprintf(err, err_len, "no JavaVM, or the native is not exported");
         return -1;
     }
     try {
         auto obj = std::make_shared<jnivm::Object>();
-        reinterpret_cast<Call>(fn)(env->GetJNIEnv(), cordial::to_jni(env, obj));
+        reinterpret_cast<Call>(fn)(env->GetJNIEnv(), roblox_runtime::to_jni(env, obj));
         return 0;
     } catch (const std::exception& e) {
         snprintf(err, err_len, "%s", e.what());
@@ -2309,7 +2309,7 @@ int roblox_call_bare(void* fn, char* err, size_t err_len) {
 int roblox_call_static_bare_bool(void* fn, const char* class_name, int* out_result,
                                    char* err, size_t err_len) {
     using Call = jboolean (*)(JNIEnv*, jobject);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env || !class_name) {
         snprintf(err, err_len, "no JavaVM, or the native is not exported");
         return -1;
@@ -2317,7 +2317,7 @@ int roblox_call_static_bare_bool(void* fn, const char* class_name, int* out_resu
     try {
         auto cls = env->GetClass(class_name);
         jboolean r = reinterpret_cast<Call>(fn)(env->GetJNIEnv(),
-                                                 (jobject)cordial::to_jni(env, cls));
+                                                 (jobject)roblox_runtime::to_jni(env, cls));
         if (out_result) {
             *out_result = r ? 1 : 0;
         }
@@ -2348,7 +2348,7 @@ extern "C" {
 /// would change engine behaviour in ways nothing here could account for.
 int roblox_init_flags(void* fn, const char* settings_json, char* err, size_t err_len) {
     using Call = jobject (*)(JNIEnv*, jclass, jobjectArray);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env) {
         snprintf(err, err_len, "no JavaVM, or nativeInitializeNativeFlags is not exported");
         return -1;
@@ -2400,8 +2400,8 @@ int roblox_init_flags(void* fn, const char* settings_json, char* err, size_t err
         }
         reinterpret_cast<Call>(fn)(
             env->GetJNIEnv(),
-            (jclass)cordial::to_jni(env, cls),
-            (jobjectArray)cordial::to_jni(env, arr));
+            (jclass)roblox_runtime::to_jni(env, cls),
+            (jobjectArray)roblox_runtime::to_jni(env, arr));
         return 0;
     } catch (const std::exception& e) {
         snprintf(err, err_len, "%s", e.what());
@@ -2443,14 +2443,14 @@ extern "C" {
 /// carry the answer across.
 int roblox_pass_current_refresh_rate(void* fn, float hz, char* err, size_t err_len) {
     using Call = void (*)(JNIEnv*, jclass, jfloat);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env) {
         snprintf(err, err_len, "no JavaVM, or nativePassCurrentDisplayRefreshRate is not exported");
         return -1;
     }
     try {
         auto cls = env->GetClass("com/roblox/engine/jni/NativeGLInterface");
-        reinterpret_cast<Call>(fn)(env->GetJNIEnv(), (jclass)cordial::to_jni(env, cls),
+        reinterpret_cast<Call>(fn)(env->GetJNIEnv(), (jclass)roblox_runtime::to_jni(env, cls),
                                    static_cast<jfloat>(hz));
         return 0;
     } catch (const std::exception& e) {
@@ -2465,7 +2465,7 @@ int roblox_pass_current_refresh_rate(void* fn, float hz, char* err, size_t err_l
 int roblox_pass_supported_refresh_rates(void* fn, const float* rates, size_t count, char* err,
                                          size_t err_len) {
     using Call = void (*)(JNIEnv*, jclass, jfloatArray);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env || (!rates && count)) {
         snprintf(err, err_len, "no JavaVM, or nativePassSupportedRefreshRates is not exported");
         return -1;
@@ -2476,8 +2476,8 @@ int roblox_pass_supported_refresh_rates(void* fn, const float* rates, size_t cou
         for (size_t i = 0; i < count; ++i) {
             (*arr)[i] = static_cast<jfloat>(rates[i]);
         }
-        reinterpret_cast<Call>(fn)(env->GetJNIEnv(), (jclass)cordial::to_jni(env, cls),
-                                   (jfloatArray)cordial::to_jni(env, arr));
+        reinterpret_cast<Call>(fn)(env->GetJNIEnv(), (jclass)roblox_runtime::to_jni(env, cls),
+                                   (jfloatArray)roblox_runtime::to_jni(env, arr));
         return 0;
     } catch (const std::exception& e) {
         snprintf(err, err_len, "%s", e.what());
@@ -2490,14 +2490,14 @@ int roblox_pass_supported_refresh_rates(void* fn, const float* rates, size_t cou
 
 int roblox_read_local_flags(void* fn, char* err, size_t err_len) {
     using Call = jobject (*)(JNIEnv*, jclass);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env) {
         snprintf(err, err_len, "no JavaVM, or readLocalFlags is not exported");
         return -1;
     }
     try {
         auto cls = env->GetClass("com/roblox/engine/jni/NativeGLInterface");
-        reinterpret_cast<Call>(fn)(env->GetJNIEnv(), (jclass)cordial::to_jni(env, cls));
+        reinterpret_cast<Call>(fn)(env->GetJNIEnv(), (jclass)roblox_runtime::to_jni(env, cls));
         return 0;
     } catch (const std::exception& e) {
         snprintf(err, err_len, "%s", e.what());
@@ -2532,22 +2532,22 @@ extern "C" {
 int roblox_init_client_settings(void* fn, const char* a, const char* b, const char* c,
                                  jint* out_result, char* err, size_t err_len) {
     using Call = jint (*)(JNIEnv*, jclass, jstring, jstring, jstring);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env) {
         snprintf(err, err_len, "no JavaVM, or nativeInitClientSettings is not exported");
         return -1;
     }
     try {
         auto cls = env->GetClass("com/roblox/engine/jni/NativeGLInterface");
-        auto sa = cordial::S_pub(a ? a : "");
-        auto sb = cordial::S_pub(b ? b : "");
-        auto sc = cordial::S_pub(c ? c : "");
+        auto sa = roblox_runtime::S_pub(a ? a : "");
+        auto sb = roblox_runtime::S_pub(b ? b : "");
+        auto sc = roblox_runtime::S_pub(c ? c : "");
         jint result = reinterpret_cast<Call>(fn)(
             env->GetJNIEnv(),
-            (jclass)cordial::to_jni(env, cls),
-            (jstring)cordial::to_jni(env, sa),
-            (jstring)cordial::to_jni(env, sb),
-            (jstring)cordial::to_jni(env, sc));
+            (jclass)roblox_runtime::to_jni(env, cls),
+            (jstring)roblox_runtime::to_jni(env, sa),
+            (jstring)roblox_runtime::to_jni(env, sb),
+            (jstring)roblox_runtime::to_jni(env, sc));
         if (out_result) {
             *out_result = result;
         }
@@ -2621,14 +2621,14 @@ extern "C" void roblox_set_touchscreen_present(int present) {
 // `extern "C++"` because this whole region sits inside an `extern "C"` block,
 // and a definition in there acquires C language linkage however deep in a
 // namespace it is: `nm` on the object showed a bare `T ui_mode_night_bits`
-// against a mangled `U cordial::...` at the call site. That is the second half
+// against a mangled `U roblox_runtime::...` at the call site. That is the second half
 // of the same latent link failure the declarations near `Configuration`
 // describe -- `ui_mode_night_bits` has had it since it was written and only
 // escaped notice because its one caller is dead code that `--gc-sections`
 // throws away. The linkage specification is the smallest honest fix; splitting
 // the surrounding block would move a dozen unrelated entry points.
 extern "C++" {
-namespace cordial {
+namespace roblox_runtime {
 bool host_has_touchscreen() {
     int reported = g_touchscreen_present.load(std::memory_order_relaxed);
     // Once, and only from the first caller, because the two fields that ask are
@@ -2652,12 +2652,12 @@ jint ui_mode_night_bits() {
     // and are not reachable from here; they carry the same two values.
     return g_ui_mode_night.load(std::memory_order_relaxed) > 0 ? 0x20 : 0x10;
 }
-} // namespace cordial
+} // namespace roblox_runtime
 } // extern "C++"
 
 extern "C" void roblox_set_display_size(int width, int height) {
     if (width > 0 && height > 0) {
-        cordial::set_display_size(width, height);
+        roblox_runtime::set_display_size(width, height);
     }
 }
 
@@ -2666,7 +2666,7 @@ extern "C" void roblox_set_display_size(int width, int height) {
 /// pixels is a bug, a display with no *reported millimetres* is an ordinary
 /// thing for a compositor to say.
 extern "C" void roblox_set_display_physical_mm(int width_mm, int height_mm) {
-    cordial::set_display_physical_mm(width_mm > 0 ? width_mm : 0,
+    roblox_runtime::set_display_physical_mm(width_mm > 0 ? width_mm : 0,
                                      height_mm > 0 ? height_mm : 0);
 }
 
@@ -2687,18 +2687,18 @@ extern "C" void roblox_set_display_physical_mm(int width_mm, int height_mm) {
 int roblox_get_fint(void* fn, const char* name, jint fallback, jint* out_result,
                      char* err, size_t err_len) {
     using Call = jint (*)(JNIEnv*, jclass, jstring, jint);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env) {
         snprintf(err, err_len, "no JavaVM, or nativeGetFInt is not exported");
         return -1;
     }
     try {
         auto cls = env->GetClass("com/roblox/client/flags/FlagJniInterface");
-        auto sname = cordial::S_pub(name ? name : "");
+        auto sname = roblox_runtime::S_pub(name ? name : "");
         jint result = reinterpret_cast<Call>(fn)(
             env->GetJNIEnv(),
-            (jclass)cordial::to_jni(env, cls),
-            (jstring)cordial::to_jni(env, sname),
+            (jclass)roblox_runtime::to_jni(env, cls),
+            (jstring)roblox_runtime::to_jni(env, sname),
             fallback);
         if (out_result) {
             *out_result = result;
@@ -2737,7 +2737,7 @@ int roblox_init_client_settings_cached_compressed(void* fn, const void* data, si
                                                    long long when, int flag, jint* out_result,
                                                    char* err, size_t err_len) {
     using Call = jint (*)(JNIEnv*, jclass, jbyteArray, jstring, jstring, jstring, jlong, jboolean);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env) {
         snprintf(err, err_len, "no JavaVM, or nativeInitClientSettingsCachedCompressed is not exported");
         return -1;
@@ -2748,16 +2748,16 @@ int roblox_init_client_settings_cached_compressed(void* fn, const void* data, si
         if (len != 0 && data != nullptr) {
             memcpy(bytes->getArray(), data, len);
         }
-        auto sa = cordial::S_pub(a ? a : "");
-        auto sb = cordial::S_pub(b ? b : "");
-        auto sc = cordial::S_pub(c ? c : "");
+        auto sa = roblox_runtime::S_pub(a ? a : "");
+        auto sb = roblox_runtime::S_pub(b ? b : "");
+        auto sc = roblox_runtime::S_pub(c ? c : "");
         jint result = reinterpret_cast<Call>(fn)(
             env->GetJNIEnv(),
-            (jclass)cordial::to_jni(env, cls),
-            (jbyteArray)cordial::to_jni(env, bytes),
-            (jstring)cordial::to_jni(env, sa),
-            (jstring)cordial::to_jni(env, sb),
-            (jstring)cordial::to_jni(env, sc),
+            (jclass)roblox_runtime::to_jni(env, cls),
+            (jbyteArray)roblox_runtime::to_jni(env, bytes),
+            (jstring)roblox_runtime::to_jni(env, sa),
+            (jstring)roblox_runtime::to_jni(env, sb),
+            (jstring)roblox_runtime::to_jni(env, sc),
             static_cast<jlong>(when),
             static_cast<jboolean>(flag ? JNI_TRUE : JNI_FALSE));
         if (out_result) {
@@ -2780,18 +2780,18 @@ int roblox_init_client_settings_cached_compressed(void* fn, const void* data, si
 /// nothing here knows what real elements the list would otherwise carry.
 int roblox_post_client_settings_loaded(void* fn, char* err, size_t err_len) {
     using Call = void (*)(JNIEnv*, jclass, jobject);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env) {
         snprintf(err, err_len, "no JavaVM, or nativePostClientSettingsLoadedInitialization3 is not exported");
         return -1;
     }
     try {
         auto cls = env->GetClass("com/roblox/engine/jni/NativeGLInterface");
-        auto list = cordial::JavaList::ctor(env, nullptr);
+        auto list = roblox_runtime::JavaList::ctor(env, nullptr);
         reinterpret_cast<Call>(fn)(
             env->GetJNIEnv(),
-            (jclass)cordial::to_jni(env, cls),
-            (jobject)cordial::to_jni(env, list));
+            (jclass)roblox_runtime::to_jni(env, cls),
+            (jobject)roblox_runtime::to_jni(env, list));
         return 0;
     } catch (const std::exception& e) {
         snprintf(err, err_len, "%s", e.what());
@@ -2817,7 +2817,7 @@ extern "C" {
 /// returns) and compare the resulting JNI trace / flags verdict.
 int roblox_preload_flag_overrides(void* fn, const char* json, char* err, size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jstring);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env) {
         snprintf(err, err_len, "no JavaVM, or nativePreloadFlagOverrides is not exported");
         return -1;
@@ -2826,11 +2826,11 @@ int roblox_preload_flag_overrides(void* fn, const char* json, char* err, size_t 
         // An instance native (per `roblox_set_init_params`'s precedent just
         // above): the second argument is an Activity instance, not the class.
         auto activity = std::make_shared<jnivm::Object>();
-        auto s = cordial::S_pub(json ? json : "");
+        auto s = roblox_runtime::S_pub(json ? json : "");
         reinterpret_cast<Call>(fn)(
             env->GetJNIEnv(),
-            (jobject)cordial::to_jni(env, activity),
-            (jstring)cordial::to_jni(env, s));
+            (jobject)roblox_runtime::to_jni(env, activity),
+            (jstring)roblox_runtime::to_jni(env, s));
         return 0;
     } catch (const std::exception& e) {
         snprintf(err, err_len, "%s", e.what());
@@ -2855,17 +2855,17 @@ extern "C" {
 int roblox_appbridge_init(void* fn, const char* assets, int width, int height, char* err,
                            size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jobject);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env) {
         snprintf(err, err_len, "no JavaVM, or the app-bridge native is not exported");
         return -1;
     }
     try {
         auto cls = env->GetClass("com/roblox/engine/jni/NativeGLInterface");
-        auto params = cordial::InitParams::Create(env, assets, width, height);
+        auto params = roblox_runtime::InitParams::Create(env, assets, width, height);
         reinterpret_cast<Call>(fn)(env->GetJNIEnv(),
-                                   (jobject)cordial::to_jni(env, cls),
-                                   (jobject)cordial::to_jni(env, params));
+                                   (jobject)roblox_runtime::to_jni(env, cls),
+                                   (jobject)roblox_runtime::to_jni(env, params));
         return 0;
     } catch (const std::exception& e) {
         snprintf(err, err_len, "%s", e.what());
@@ -2884,14 +2884,14 @@ int roblox_appbridge_init(void* fn, const char* assets, int width, int height, c
 /// before `nativeAppBridgeV2Init`.
 int roblox_appbridge_call_bare_cls(void* fn, const char* class_name, char* err, size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env || !class_name) {
         snprintf(err, err_len, "no JavaVM, or the native is not exported");
         return -1;
     }
     try {
         auto cls = env->GetClass(class_name);
-        reinterpret_cast<Call>(fn)(env->GetJNIEnv(), (jobject)cordial::to_jni(env, cls));
+        reinterpret_cast<Call>(fn)(env->GetJNIEnv(), (jobject)roblox_runtime::to_jni(env, cls));
         return 0;
     } catch (const std::exception& e) {
         snprintf(err, err_len, "%s", e.what());
@@ -2909,14 +2909,14 @@ int roblox_appbridge_call_bare_cls(void* fn, const char* class_name, char* err, 
 /// one.
 int roblox_appbridge_call_bare(void* fn, char* err, size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env) {
         snprintf(err, err_len, "no JavaVM, or the native is not exported");
         return -1;
     }
     try {
         auto cls = env->GetClass("com/roblox/engine/jni/NativeGLInterface");
-        reinterpret_cast<Call>(fn)(env->GetJNIEnv(), (jobject)cordial::to_jni(env, cls));
+        reinterpret_cast<Call>(fn)(env->GetJNIEnv(), (jobject)roblox_runtime::to_jni(env, cls));
         return 0;
     } catch (const std::exception& e) {
         snprintf(err, err_len, "%s", e.what());
@@ -2937,7 +2937,7 @@ extern "C" {
 int roblox_appbridge_start_app(void* fn, const char* assets, int width, int height, char* err,
                                 size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jobject);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env) {
         snprintf(err, err_len, "no JavaVM, or StartAppWithParams is not exported");
         return -1;
@@ -2946,11 +2946,11 @@ int roblox_appbridge_start_app(void* fn, const char* assets, int width, int heig
         auto cls = env->GetClass("com/roblox/engine/jni/NativeGLInterface");
         // Reuses the android/view/Surface type registered in game_activity.cpp —
         // registering a second C++ class for the same Java name makes libjnivm throw.
-        auto surface = cordial::AppSurface::Create(env);
-        auto params = cordial::StartAppParams::Create(env, assets, width, height, surface);
+        auto surface = roblox_runtime::AppSurface::Create(env);
+        auto params = roblox_runtime::StartAppParams::Create(env, assets, width, height, surface);
         reinterpret_cast<Call>(fn)(env->GetJNIEnv(),
-                                   (jobject)cordial::to_jni(env, cls),
-                                   (jobject)cordial::to_jni(env, params));
+                                   (jobject)roblox_runtime::to_jni(env, cls),
+                                   (jobject)roblox_runtime::to_jni(env, params));
         return 0;
     } catch (const std::exception& e) {
         snprintf(err, err_len, "%s", e.what());
@@ -2982,7 +2982,7 @@ static int update_surface(void* fn, const char* assets, int width, int height, b
                           char* err, size_t err_len) {
     using CallApp = void (*)(JNIEnv*, jobject, jobject, jobject);
     using CallGame = void (*)(JNIEnv*, jobject, jobject, jobject, jobject);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env) {
         snprintf(err, err_len, "no JavaVM, or the UpdateSurface native is not exported");
         return -1;
@@ -2992,20 +2992,20 @@ static int update_surface(void* fn, const char* assets, int width, int height, b
         // The same Surface and PlatformParams `StartAppWithParams` builds — one
         // registered `android/view/Surface` C++ class for the one Java name, or
         // libjnivm throws on the second registration.
-        auto surface = cordial::AppSurface::Create(env);
-        auto params = cordial::PlatformParams::Create(env, assets, width, height);
+        auto surface = roblox_runtime::AppSurface::Create(env);
+        auto params = roblox_runtime::PlatformParams::Create(env, assets, width, height);
         if (with_activity) {
-            auto activity = cordial::AndroidActivity::Create(env);
+            auto activity = roblox_runtime::AndroidActivity::Create(env);
             reinterpret_cast<CallGame>(fn)(env->GetJNIEnv(),
-                                           (jobject)cordial::to_jni(env, cls),
-                                           (jobject)cordial::to_jni(env, surface),
-                                           (jobject)cordial::to_jni(env, params),
-                                           (jobject)cordial::to_jni(env, activity));
+                                           (jobject)roblox_runtime::to_jni(env, cls),
+                                           (jobject)roblox_runtime::to_jni(env, surface),
+                                           (jobject)roblox_runtime::to_jni(env, params),
+                                           (jobject)roblox_runtime::to_jni(env, activity));
         } else {
             reinterpret_cast<CallApp>(fn)(env->GetJNIEnv(),
-                                          (jobject)cordial::to_jni(env, cls),
-                                          (jobject)cordial::to_jni(env, surface),
-                                          (jobject)cordial::to_jni(env, params));
+                                          (jobject)roblox_runtime::to_jni(env, cls),
+                                          (jobject)roblox_runtime::to_jni(env, surface),
+                                          (jobject)roblox_runtime::to_jni(env, params));
         }
         return 0;
     } catch (const std::exception& e) {
@@ -3041,7 +3041,7 @@ extern "C" {
 /// environment on the game thread and faulted calling FindClass through it.
 int roblox_activity_lifecycle(void* fn, const char* activity, char* err, size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jstring);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env) {
         snprintf(err, err_len, "no JavaVM, or the lifecycle native is not exported");
         return -1;
@@ -3049,10 +3049,10 @@ int roblox_activity_lifecycle(void* fn, const char* activity, char* err, size_t 
     try {
         auto cls = env->GetClass(
             "com/roblox/universalapp/activitylifecyclecallbacks/JNIActivityLifecycleCallbacks");
-        auto name = cordial::S_pub(activity);
+        auto name = roblox_runtime::S_pub(activity);
         reinterpret_cast<Call>(fn)(env->GetJNIEnv(),
-                                   (jobject)cordial::to_jni(env, cls),
-                                   (jstring)cordial::to_jni(env, name));
+                                   (jobject)roblox_runtime::to_jni(env, cls),
+                                   (jstring)roblox_runtime::to_jni(env, name));
         return 0;
     } catch (const std::exception& e) {
         snprintf(err, err_len, "%s", e.what());

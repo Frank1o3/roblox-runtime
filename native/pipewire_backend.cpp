@@ -57,7 +57,7 @@
 #include <string>
 #include <vector>
 
-namespace cordial::audio {
+namespace roblox_runtime::audio {
 namespace {
 
 // ----------------------------------------------------------------- library
@@ -118,7 +118,7 @@ bool load_library() {
     if (!handle) handle = dlopen("libpipewire-0.3.so", RTLD_NOW | RTLD_GLOBAL);
     if (!handle) {
         std::fprintf(stderr,
-            "E/Cordial-Audio           libpipewire-0.3 not found (%s); Roblox's audio "
+            "E/RobloxRuntime-Audio           libpipewire-0.3 not found (%s); Roblox's audio "
             "has nowhere to go. Install PipeWire and its client library to enable it.\n",
             dlerror());
         return false;
@@ -156,7 +156,7 @@ bool load_library() {
         *e.slot = dlsym(handle, e.name);
         if (!*e.slot) {
             std::fprintf(stderr,
-                "E/Cordial-Audio           libpipewire-0.3 is missing '%s'; treating the "
+                "E/RobloxRuntime-Audio           libpipewire-0.3 is missing '%s'; treating the "
                 "whole library as unusable rather than calling through a null pointer. "
                 "No audio output.\n", e.name);
             dlclose(handle);
@@ -227,12 +227,12 @@ Session* connect_session() {
     pw_thread_loop* loop = g_lib.thread_loop_new("cordial-pipewire", nullptr);
     if (!loop) {
         std::fprintf(stderr,
-            "E/Cordial-Audio           pw_thread_loop_new failed; no audio output.\n");
+            "E/RobloxRuntime-Audio           pw_thread_loop_new failed; no audio output.\n");
         return nullptr;
     }
     if (g_lib.thread_loop_start(loop) < 0) {
         std::fprintf(stderr,
-            "E/Cordial-Audio           pw_thread_loop_start failed; no audio output.\n");
+            "E/RobloxRuntime-Audio           pw_thread_loop_start failed; no audio output.\n");
         g_lib.thread_loop_destroy(loop);
         return nullptr;
     }
@@ -242,7 +242,7 @@ Session* connect_session() {
     pw_context* context = g_lib.context_new(g_lib.thread_loop_get_loop(loop), nullptr, 0);
     if (!context) {
         std::fprintf(stderr,
-            "E/Cordial-Audio           pw_context_new failed; no audio output.\n");
+            "E/RobloxRuntime-Audio           pw_context_new failed; no audio output.\n");
         g_lib.thread_loop_unlock(loop);
         g_lib.thread_loop_stop(loop);
         g_lib.thread_loop_destroy(loop);
@@ -252,7 +252,7 @@ Session* connect_session() {
     pw_core* core = g_lib.context_connect(context, nullptr, 0);
     if (!core) {
         std::fprintf(stderr,
-            "E/Cordial-Audio           no PipeWire session reachable (is a PipeWire "
+            "E/RobloxRuntime-Audio           no PipeWire session reachable (is a PipeWire "
             "daemon running, and is PIPEWIRE_RUNTIME_DIR/XDG_RUNTIME_DIR set?); "
             "no audio output.\n");
         g_lib.thread_loop_unlock(loop);
@@ -284,7 +284,7 @@ Session* connect_session() {
         e.error = [](void* data, uint32_t id, int, int res, const char* message) {
             auto* s = static_cast<Session*>(data);
             std::fprintf(stderr,
-                "E/Cordial-Audio           PipeWire core reported an error "
+                "E/RobloxRuntime-Audio           PipeWire core reported an error "
                 "(id=%u res=%d %s).\n", id, res, message ? message : "");
             s->sync_failed = true;
             g_lib.thread_loop_signal(s->loop, false);
@@ -300,7 +300,7 @@ Session* connect_session() {
     if (!reachable) {
         if (!session->sync_failed) {
             std::fprintf(stderr,
-                "E/Cordial-Audio           PipeWire did not answer within 3s; treating "
+                "E/RobloxRuntime-Audio           PipeWire did not answer within 3s; treating "
                 "the session as unreachable. No audio output.\n");
         }
         g_lib.thread_loop_lock(loop);
@@ -316,7 +316,7 @@ Session* connect_session() {
 
     // **What this line may say is what just happened, and no more.** It used to
     // finish "OpenSL ES audio players will play through it", tagged
-    // `Cordial-OpenSLES`, and both halves were wrong on most runs: this session
+    // `RobloxRuntime-OpenSLES`, and both halves were wrong on most runs: this session
     // is the one shared session, `pipewire_available()` is what
     // `supportsAAudio()` and the device enumeration in `audio_classes.cpp` both
     // ask, and either of those brings it up. So a run that had selected AAudio
@@ -328,7 +328,7 @@ Session* connect_session() {
     // announced by `roblox_audio_backend_announce` on its own line, from the
     // place that actually decides it.
     std::fprintf(stderr,
-        "I/Cordial-Audio           PipeWire session reachable: the client library loaded "
+        "I/RobloxRuntime-Audio           PipeWire session reachable: the client library loaded "
         "and a core round trip completed. This one session is shared by every audio path "
         "that reaches PipeWire.\n");
     return session;
@@ -489,7 +489,7 @@ struct PlaybackStream::Impl {
         // not, by itself, evidence of anything wrong.
         if (state == PW_STREAM_STATE_ERROR) {
             std::fprintf(stderr,
-                "E/Cordial-OpenSLES         PipeWire stream entered the error state (%s).\n",
+                "E/RobloxRuntime-OpenSLES         PipeWire stream entered the error state (%s).\n",
                 error ? error : "no reason given");
         }
     }
@@ -546,7 +546,7 @@ struct PlaybackStream::Impl {
             if (now - trace_last_report >= std::chrono::seconds(1)) {
                 trace_last_report = now;
                 std::fprintf(stderr,
-                    "D/Cordial-OpenSLES         audio trace: %llu buffers enqueued, %llu process "
+                    "D/RobloxRuntime-OpenSLES         audio trace: %llu buffers enqueued, %llu process "
                     "cycles, %llu drained, %llu underrun frames padded with silence\n",
                     static_cast<unsigned long long>(enqueued_index),
                     static_cast<unsigned long long>(trace_process_cycles),
@@ -629,7 +629,7 @@ std::vector<DeviceInfo> enumerate_devices() {
     if (!registry) {
         g_lib.thread_loop_unlock(session->loop);
         std::fprintf(stderr,
-            "E/Cordial-OpenSLES         pw_core_get_registry failed; reporting no audio "
+            "E/RobloxRuntime-OpenSLES         pw_core_get_registry failed; reporting no audio "
             "devices rather than a guess at what is attached.\n");
         return {};
     }
@@ -719,7 +719,7 @@ std::vector<DeviceInfo> enumerate_devices() {
 
     if (!listed) {
         std::fprintf(stderr,
-            "E/Cordial-OpenSLES         PipeWire did not finish listing its devices; "
+            "E/RobloxRuntime-OpenSLES         PipeWire did not finish listing its devices; "
             "reporting the %zu found so far rather than a fabricated list.\n",
             scan.devices.size());
     }
@@ -764,7 +764,7 @@ const std::string& configured_output_device() {
         // a sink literally called "".
         if (!s.empty()) {
             std::fprintf(stderr,
-                "I/Cordial-OpenSLES         output device: playback will be aimed at PipeWire "
+                "I/RobloxRuntime-OpenSLES         output device: playback will be aimed at PipeWire "
                 "sink '%s' (RBX_RUNTIME_AUDIO_SINK). Unset it to follow the system default.\n",
                 s.c_str());
         }
@@ -792,7 +792,7 @@ std::string resolve_output_target(const std::string& requested) {
         // behaviour; saying nothing about it would make a user's unplugged
         // headset indistinguishable from a Cordial bug.
         std::fprintf(stderr,
-            "W/Cordial-OpenSLES         output device '%s' is not in this PipeWire session "
+            "W/RobloxRuntime-OpenSLES         output device '%s' is not in this PipeWire session "
             "(%zu sink(s) present); falling back to the system default so that audio still "
             "plays somewhere. The choice is kept, so replugging the device and relaunching "
             "will use it again.\n",
@@ -921,7 +921,7 @@ struct CallbackStream::Impl {
         (void)data;
         if (state == PW_STREAM_STATE_ERROR) {
             std::fprintf(stderr,
-                "E/Cordial-AAudio          PipeWire stream entered the error state (%s).\n",
+                "E/RobloxRuntime-AAudio          PipeWire stream entered the error state (%s).\n",
                 error ? error : "no reason given");
         }
     }
@@ -972,7 +972,7 @@ bool CallbackStream::open(uint32_t sample_bits, bool is_float, const char* node_
     spa_audio_format wanted = SPA_AUDIO_FORMAT_F32_LE;
     if (sample_bits != 0 && !map_aaudio_format(sample_bits, is_float, wanted)) {
         std::fprintf(stderr,
-            "E/Cordial-AAudio          no PipeWire format for %u-bit %s samples; refusing to "
+            "E/RobloxRuntime-AAudio          no PipeWire format for %u-bit %s samples; refusing to "
             "open a stream rather than substituting a nearby one.\n",
             sample_bits, is_float ? "float" : "integer");
         return false;
@@ -1019,7 +1019,7 @@ bool CallbackStream::open(uint32_t sample_bits, bool is_float, const char* node_
                                              &Impl::events(), impl_);
     if (!impl_->stream) {
         std::fprintf(stderr,
-            "E/Cordial-AAudio          pw_stream_new_simple failed; no audio.\n");
+            "E/RobloxRuntime-AAudio          pw_stream_new_simple failed; no audio.\n");
         g_lib.thread_loop_unlock(session->loop);
         return false;
     }
@@ -1052,7 +1052,7 @@ bool CallbackStream::open(uint32_t sample_bits, bool is_float, const char* node_
 
     if (rc < 0) {
         std::fprintf(stderr,
-            "E/Cordial-AAudio          pw_stream_connect failed (%s); no audio.\n",
+            "E/RobloxRuntime-AAudio          pw_stream_connect failed (%s); no audio.\n",
             spa_strerror(rc));
         g_lib.stream_destroy(impl_->stream);
         impl_->stream = nullptr;
@@ -1078,7 +1078,7 @@ bool CallbackStream::open(uint32_t sample_bits, bool is_float, const char* node_
                        impl_->burst.load(std::memory_order_relaxed) != 0;
     if (!ready) {
         std::fprintf(stderr,
-            "E/Cordial-AAudio          PipeWire did not negotiate a format and turn a cycle "
+            "E/RobloxRuntime-AAudio          PipeWire did not negotiate a format and turn a cycle "
             "within 3s (format %s, first cycle %s); refusing the stream rather than "
             "reporting a rate nobody agreed to.\n",
             impl_->negotiated.load(std::memory_order_acquire) ? "yes" : "no",
@@ -1167,7 +1167,7 @@ struct CaptureStream::Impl {
         if (state == PW_STREAM_STATE_ERROR) {
             static_cast<Impl*>(data)->failed.store(true, std::memory_order_release);
             std::fprintf(stderr,
-                "E/Cordial-OpenSLES         PipeWire capture stream entered the error state "
+                "E/RobloxRuntime-OpenSLES         PipeWire capture stream entered the error state "
                 "(%s); recording will deliver no samples.\n", error ? error : "no reason given");
         }
     }
@@ -1242,7 +1242,7 @@ bool CaptureStream::open(uint32_t rate_hz, uint32_t channels, const std::string&
     // quieter version of.
     if (g_open_capture_streams.load() != 0) {
         std::fprintf(stderr,
-            "E/Cordial-OpenSLES         refusing a second capture stream while %u is already "
+            "E/RobloxRuntime-OpenSLES         refusing a second capture stream while %u is already "
             "open; Cordial does not support two microphone paths recording at once.\n",
             g_open_capture_streams.load());
         return false;
@@ -1252,7 +1252,7 @@ bool CaptureStream::open(uint32_t rate_hz, uint32_t channels, const std::string&
     if (!session) return false;
     if (channels == 0 || channels > SPA_AUDIO_MAX_CHANNELS || rate_hz == 0) {
         std::fprintf(stderr,
-            "E/Cordial-OpenSLES         refusing to open a capture stream at %u Hz / %u "
+            "E/RobloxRuntime-OpenSLES         refusing to open a capture stream at %u Hz / %u "
             "channels; nothing will be recorded.\n", rate_hz, channels);
         return false;
     }
@@ -1296,7 +1296,7 @@ bool CaptureStream::open(uint32_t rate_hz, uint32_t channels, const std::string&
     if (!impl_->stream) {
         g_lib.thread_loop_unlock(session->loop);
         std::fprintf(stderr,
-            "E/Cordial-OpenSLES         pw_stream_new_simple failed for capture; nothing "
+            "E/RobloxRuntime-OpenSLES         pw_stream_new_simple failed for capture; nothing "
             "will be recorded.\n");
         return false;
     }
@@ -1335,7 +1335,7 @@ bool CaptureStream::open(uint32_t rate_hz, uint32_t channels, const std::string&
 
     if (rc < 0) {
         std::fprintf(stderr,
-            "E/Cordial-OpenSLES         pw_stream_connect failed for capture (%s); nothing "
+            "E/RobloxRuntime-OpenSLES         pw_stream_connect failed for capture (%s); nothing "
             "will be recorded.\n", spa_strerror(rc));
         g_lib.thread_loop_lock(session->loop);
         g_lib.stream_destroy(impl_->stream);
@@ -1346,7 +1346,7 @@ bool CaptureStream::open(uint32_t rate_hz, uint32_t channels, const std::string&
 
     g_open_capture_streams.fetch_add(1);
     std::fprintf(stderr,
-        "I/Cordial-OpenSLES         microphone opened: %u Hz, %u channel(s), source '%s'. "
+        "I/RobloxRuntime-OpenSLES         microphone opened: %u Hz, %u channel(s), source '%s'. "
         "%u capture stream(s) now open.\n",
         rate_hz, channels, target_node_name.empty() ? "(PipeWire default)" : target_node_name.c_str(),
         g_open_capture_streams.load());
@@ -1373,7 +1373,7 @@ void CaptureStream::close() {
     }
     uint32_t remaining = g_open_capture_streams.fetch_sub(1) - 1;
     std::fprintf(stderr,
-        "I/Cordial-OpenSLES         microphone closed; %u capture stream(s) now open.\n",
+        "I/RobloxRuntime-OpenSLES         microphone closed; %u capture stream(s) now open.\n",
         remaining);
 }
 
@@ -1421,13 +1421,13 @@ bool PlaybackStream::open(uint32_t rate_hz, uint32_t channels, uint32_t bits_per
     spa_audio_format format;
     if (!map_format(bits_per_sample, container_bits, big_endian, format)) {
         std::fprintf(stderr,
-            "E/Cordial-OpenSLES         unsupported PCM layout: %u-bit samples in a "
+            "E/RobloxRuntime-OpenSLES         unsupported PCM layout: %u-bit samples in a "
             "%u-bit container; no audio for this player.\n", bits_per_sample, container_bits);
         return false;
     }
     if (channels == 0 || channels > SPA_AUDIO_MAX_CHANNELS) {
         std::fprintf(stderr,
-            "E/Cordial-OpenSLES         unsupported channel count %u; no audio for this "
+            "E/RobloxRuntime-OpenSLES         unsupported channel count %u; no audio for this "
             "player.\n", channels);
         return false;
     }
@@ -1460,7 +1460,7 @@ bool PlaybackStream::open(uint32_t rate_hz, uint32_t channels, uint32_t bits_per
                                              &Impl::events(), impl_);
     if (!impl_->stream) {
         std::fprintf(stderr,
-            "E/Cordial-OpenSLES         pw_stream_new_simple failed; no audio for this "
+            "E/RobloxRuntime-OpenSLES         pw_stream_new_simple failed; no audio for this "
             "player.\n");
         g_lib.thread_loop_unlock(session->loop);
         return false;
@@ -1497,7 +1497,7 @@ bool PlaybackStream::open(uint32_t rate_hz, uint32_t channels, uint32_t bits_per
 
     if (rc < 0) {
         std::fprintf(stderr,
-            "E/Cordial-OpenSLES         pw_stream_connect failed (%s); no audio for this "
+            "E/RobloxRuntime-OpenSLES         pw_stream_connect failed (%s); no audio for this "
             "player.\n", spa_strerror(rc));
         g_lib.thread_loop_lock(session->loop);
         g_lib.stream_destroy(impl_->stream);
@@ -1587,7 +1587,7 @@ PlaybackStream::QueueState PlaybackStream::state() const {
     return {static_cast<uint32_t>(impl_->pending.size()), impl_->enqueued_index};
 }
 
-} // namespace cordial::audio
+} // namespace roblox_runtime::audio
 
 #else // !RBX_RUNTIME_HAVE_PIPEWIRE
 
@@ -1599,12 +1599,12 @@ PlaybackStream::QueueState PlaybackStream::state() const {
 #include <cstdio>
 #include <cstdlib>
 
-namespace cordial::audio {
+namespace roblox_runtime::audio {
 
 bool pipewire_available() {
     static const bool warned = [] {
         std::fprintf(stderr,
-            "E/Cordial-Audio           built without pipewire-devel present at configure "
+            "E/RobloxRuntime-Audio           built without pipewire-devel present at configure "
             "time (see native/CMakeLists.txt); there is no audio at all, by either the "
             "OpenSL ES or the AAudio path -- both reach PipeWire through this. Install "
             "pipewire-devel and reconfigure to enable it.\n");
@@ -1704,7 +1704,7 @@ void PlaybackStream::set_volume_linear(float) {}
 void PlaybackStream::set_mute(bool) {}
 PlaybackStream::QueueState PlaybackStream::state() const { return {0, 0}; }
 
-} // namespace cordial::audio
+} // namespace roblox_runtime::audio
 
 #endif // RBX_RUNTIME_HAVE_PIPEWIRE
 
@@ -1715,7 +1715,7 @@ PlaybackStream::QueueState PlaybackStream::state() const { return {0, 0}; }
 // pipewire-devel gets a `CallbackStream` whose `open` fails honestly, which is
 // exactly what a host with no backend at all should hand back.
 
-namespace cordial::audio {
+namespace roblox_runtime::audio {
 
 const char* host_backend_name() {
     // One reader, and it caches. `aaudio.cpp`'s own `RBX_RUNTIME_AUDIO` parser
@@ -1749,7 +1749,7 @@ const char* host_backend_name() {
         // a run that asked for one should be told it did not get it rather
         // than left to infer it from silence.
         std::fprintf(stderr,
-            "W/Cordial-Audio           RBX_RUNTIME_AUDIO_HOST=%s is not a backend this build has "
+            "W/RobloxRuntime-Audio           RBX_RUNTIME_AUDIO_HOST=%s is not a backend this build has "
             "(pipewire, pulse, alsa, oss); using pipewire. See "
             "docs/adr/ADR-023-host-audio-backends.md.\n",
             value);
@@ -1825,7 +1825,7 @@ std::unique_ptr<OutputStream> make_output_stream() {
             if (auto stream = make_oss_stream()) return stream;
         }
         std::fprintf(stderr,
-            "W/Cordial-Audio           RBX_RUNTIME_AUDIO_HOST=oss, but /dev/dsp would not open "
+            "W/RobloxRuntime-Audio           RBX_RUNTIME_AUDIO_HOST=oss, but /dev/dsp would not open "
             "(set RBX_RUNTIME_AUDIO_DEVICE for another node); using pipewire.\n");
     }
     if (std::strcmp(effective_backend_name(), "alsa") == 0) {
@@ -1833,7 +1833,7 @@ std::unique_ptr<OutputStream> make_output_stream() {
             if (auto stream = make_alsa_stream()) return stream;
         }
         std::fprintf(stderr,
-            "W/Cordial-Audio           RBX_RUNTIME_AUDIO_HOST=alsa, but no ALSA device would "
+            "W/RobloxRuntime-Audio           RBX_RUNTIME_AUDIO_HOST=alsa, but no ALSA device would "
             "open; using pipewire.\n");
     }
     if (std::strcmp(effective_backend_name(), "pulse") == 0) {
@@ -1846,13 +1846,13 @@ std::unique_ptr<OutputStream> make_output_stream() {
             if (auto stream = make_pulse_stream()) return stream;
         }
         std::fprintf(stderr,
-            "W/Cordial-Audio           RBX_RUNTIME_AUDIO_HOST=pulse, but no PulseAudio server "
+            "W/RobloxRuntime-Audio           RBX_RUNTIME_AUDIO_HOST=pulse, but no PulseAudio server "
             "answered; using pipewire.\n");
     }
     return std::make_unique<CallbackStream>();
 }
 
-} // namespace cordial::audio
+} // namespace roblox_runtime::audio
 
 
 // The includes are repeated here rather than hoisted to the top of the file:
@@ -1876,10 +1876,10 @@ size_t roblox_audio_sinks(RuntimeAudioSink** out) {
     if (!out) return 0;
     *out = nullptr;
 
-    std::vector<cordial::audio::DeviceInfo> devices = cordial::audio::enumerate_devices();
+    std::vector<roblox_runtime::audio::DeviceInfo> devices = roblox_runtime::audio::enumerate_devices();
 
     size_t count = 0;
-    for (const cordial::audio::DeviceInfo& d : devices) {
+    for (const roblox_runtime::audio::DeviceInfo& d : devices) {
         if (!d.is_source && !d.node_name.empty()) ++count;
     }
     if (count == 0) return 0;
@@ -1888,7 +1888,7 @@ size_t roblox_audio_sinks(RuntimeAudioSink** out) {
     if (!list) return 0;
 
     size_t i = 0;
-    for (const cordial::audio::DeviceInfo& d : devices) {
+    for (const roblox_runtime::audio::DeviceInfo& d : devices) {
         if (d.is_source || d.node_name.empty()) continue;
         // `strdup` rather than handing out pointers into the vector, which
         // dies at the closing brace. Each string is freed individually below.

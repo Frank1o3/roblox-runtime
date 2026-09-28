@@ -51,9 +51,9 @@ static bool fill(void* dst, uint32_t frames, void*) {
 }
 
 int main() {
-    std::printf("alsa_available(): %s\n", cordial::audio::alsa_available() ? "yes" : "NO");
-    if (!cordial::audio::alsa_available()) return 1;
-    auto stream = cordial::audio::make_alsa_stream();
+    std::printf("alsa_available(): %s\n", roblox_runtime::audio::alsa_available() ? "yes" : "NO");
+    if (!roblox_runtime::audio::alsa_available()) return 1;
+    auto stream = roblox_runtime::audio::make_alsa_stream();
     if (!stream) { std::printf("make_alsa_stream returned null\n"); return 1; }
     if (!stream->open(0, false, "Cordial (alsa probe)", nullptr, fill, nullptr)) {
         std::printf("open failed\n");

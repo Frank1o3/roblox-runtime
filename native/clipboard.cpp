@@ -78,7 +78,7 @@
 
 #include "permissions_transport.h"
 
-namespace cordial {
+namespace roblox_runtime {
 
 using jnivm::Class;
 using jnivm::ENV;
@@ -410,14 +410,14 @@ void register_clipboard_classes(jnivm::ENV* env) {
     MessageBusRequestHandlerAsyncRaw::Register(env);
 }
 
-} // namespace cordial
+} // namespace roblox_runtime
 
 extern "C" {
 
 /// `MessageBus.doSubscribeRaw(String messageId, RawCallback cb, boolean) -> Connection`
 ///
 /// One callback object and one `Connection` are created and kept alive per
-/// `message_id`, looked up through `cordial::subscription_for`, rather than in
+/// `message_id`, looked up through `roblox_runtime::subscription_for`, rather than in
 /// the single set of globals this file used to hold. `sink` may be null: that
 /// is the control case a run with `RBX_RUNTIME_SKIP_CLIPBOARD=1` still exercises —
 /// registration and the subscribe call both still happen, and only whether
@@ -439,30 +439,30 @@ extern "C" {
 int roblox_messagebus_subscribe(void* fn, const char* message_id, void (*sink)(const char*),
                                  char* err, size_t err_len) {
     using Call = jobject (*)(JNIEnv*, jobject, jstring, jobject, jboolean);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env || !message_id) {
         snprintf(err, err_len, "no JavaVM, or doSubscribeRaw is not exported");
         return -1;
     }
     const std::string id(message_id);
-    auto& sub = cordial::subscription_for(id);
+    auto& sub = roblox_runtime::subscription_for(id);
     try {
         auto cls = env->GetClass("com/roblox/universalapp/messagebus/MessageBus");
-        auto cb = std::make_shared<cordial::MessageBusRawCallback>();
+        auto cb = std::make_shared<roblox_runtime::MessageBusRawCallback>();
         cb->sink = sink;
         cb->message_id = id;
-        auto jid = std::make_shared<cordial::String>(id);
+        auto jid = std::make_shared<roblox_runtime::String>(id);
         // Parked before the call, not after: the bus may deliver a message
         // synchronously from inside this very call, and a callback owned only
         // by a local would already be a candidate for collection.
         sub.callback = cb;
         jobject r = reinterpret_cast<Call>(fn)(env->GetJNIEnv(),
-                                               (jobject)cordial::to_jni(env, cls),
-                                               (jstring)cordial::to_jni(env, jid),
-                                               (jobject)cordial::to_jni(env, cb),
+                                               (jobject)roblox_runtime::to_jni(env, cls),
+                                               (jstring)roblox_runtime::to_jni(env, jid),
+                                               (jobject)roblox_runtime::to_jni(env, cb),
                                                (jboolean) false);
-        auto* conn = dynamic_cast<cordial::MessageBusConnection*>(
-            reinterpret_cast<cordial::Object*>(r));
+        auto* conn = dynamic_cast<roblox_runtime::MessageBusConnection*>(
+            reinterpret_cast<roblox_runtime::Object*>(r));
         if (conn) {
             sub.connection_ptr.store(static_cast<long long>(conn->ptr),
                                      std::memory_order_release);
@@ -504,26 +504,26 @@ extern "C" int roblox_messagebus_set_request_handler(
     void* fn, const char* protocol, const char* method,
     int (*sink)(const char*, char*, size_t), char* err, size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jstring, jstring, jobject);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env || !protocol || !method) {
         snprintf(err, err_len, "no JavaVM, or setRequestHandlerRaw is not exported");
         return -1;
     }
     try {
         auto cls = env->GetClass("com/roblox/universalapp/messagebus/MessageBus");
-        auto handler = std::make_shared<cordial::MessageBusRequestHandlerRaw>();
+        auto handler = std::make_shared<roblox_runtime::MessageBusRequestHandlerRaw>();
         handler->sink = sink;
         handler->method_id = std::string(protocol) + "." + method;
-        auto jproto = std::make_shared<cordial::String>(std::string(protocol));
-        auto jmethod = std::make_shared<cordial::String>(std::string(method));
+        auto jproto = std::make_shared<roblox_runtime::String>(std::string(protocol));
+        auto jmethod = std::make_shared<roblox_runtime::String>(std::string(method));
         // Held before the call: the bus may deliver a request synchronously
         // from inside it, exactly as the subscribe path may deliver a message.
-        cordial::request_handlers().push_back(handler);
+        roblox_runtime::request_handlers().push_back(handler);
         reinterpret_cast<Call>(fn)(env->GetJNIEnv(),
-                                   (jobject)cordial::to_jni(env, cls),
-                                   (jstring)cordial::to_jni(env, jproto),
-                                   (jstring)cordial::to_jni(env, jmethod),
-                                   (jobject)cordial::to_jni(env, handler));
+                                   (jobject)roblox_runtime::to_jni(env, cls),
+                                   (jstring)roblox_runtime::to_jni(env, jproto),
+                                   (jstring)roblox_runtime::to_jni(env, jmethod),
+                                   (jobject)roblox_runtime::to_jni(env, handler));
         return 0;
     } catch (const std::exception& e) {
         snprintf(err, err_len, "%s", e.what());
@@ -549,34 +549,34 @@ extern "C" int roblox_messagebus_set_request_handler_async(
     const char* protocol, const char* method,
     int (*sink)(const char*, char*, size_t), char* err, size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jstring, jstring, jobject);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!set_fn || !respond_fn || !env || !protocol || !method) {
         snprintf(err, err_len, "no JavaVM, or setRequestHandlerAsyncRaw/callResponseHandlerRaw is not exported");
         return -1;
     }
-    if (cordial::permissions::uses_dual_response(dual_response != 0, protocol) && !publish_fn) {
+    if (roblox_runtime::permissions::uses_dual_response(dual_response != 0, protocol) && !publish_fn) {
         snprintf(err, err_len, "publishProtocolMethodResponseRaw is not exported");
         return -1;
     }
     try {
         auto cls = env->GetClass("com/roblox/universalapp/messagebus/MessageBus");
-        auto handler = std::make_shared<cordial::MessageBusRequestHandlerAsyncRaw>();
+        auto handler = std::make_shared<roblox_runtime::MessageBusRequestHandlerAsyncRaw>();
         handler->sink = sink;
-        handler->publish = reinterpret_cast<cordial::permissions::PublishProtocolMethodResponseRaw>(
+        handler->publish = reinterpret_cast<roblox_runtime::permissions::PublishProtocolMethodResponseRaw>(
             publish_fn);
         handler->respond =
-            reinterpret_cast<cordial::permissions::CallResponseHandlerRaw>(respond_fn);
+            reinterpret_cast<roblox_runtime::permissions::CallResponseHandlerRaw>(respond_fn);
         handler->dual_response = dual_response != 0;
         handler->protocol = protocol;
         handler->method = method;
-        auto jproto = std::make_shared<cordial::String>(std::string(protocol));
-        auto jmethod = std::make_shared<cordial::String>(std::string(method));
-        cordial::async_request_handlers().push_back(handler);
+        auto jproto = std::make_shared<roblox_runtime::String>(std::string(protocol));
+        auto jmethod = std::make_shared<roblox_runtime::String>(std::string(method));
+        roblox_runtime::async_request_handlers().push_back(handler);
         reinterpret_cast<Call>(set_fn)(env->GetJNIEnv(),
-                                       (jobject)cordial::to_jni(env, cls),
-                                       (jstring)cordial::to_jni(env, jproto),
-                                       (jstring)cordial::to_jni(env, jmethod),
-                                       (jobject)cordial::to_jni(env, handler));
+                                       (jobject)roblox_runtime::to_jni(env, cls),
+                                       (jstring)roblox_runtime::to_jni(env, jproto),
+                                       (jstring)roblox_runtime::to_jni(env, jmethod),
+                                       (jobject)roblox_runtime::to_jni(env, handler));
         return 0;
     } catch (const std::exception& e) {
         snprintf(err, err_len, "%s", e.what());
@@ -596,9 +596,9 @@ long long roblox_messagebus_connection_ptr(const char* message_id) {
     if (!message_id) {
         return 0;
     }
-    std::lock_guard<std::mutex> lock(cordial::g_subscriptions_mutex);
-    auto it = cordial::g_subscriptions.find(message_id);
-    if (it == cordial::g_subscriptions.end() || !it->second) {
+    std::lock_guard<std::mutex> lock(roblox_runtime::g_subscriptions_mutex);
+    auto it = roblox_runtime::g_subscriptions.find(message_id);
+    if (it == roblox_runtime::g_subscriptions.end() || !it->second) {
         return 0;
     }
     return it->second->connection_ptr.load(std::memory_order_acquire);
@@ -611,7 +611,7 @@ long long roblox_messagebus_connection_ptr(const char* message_id) {
 int roblox_messagebus_is_connected(void* fn, long long ptr, int* out_connected, char* err,
                                     size_t err_len) {
     using Call = jboolean (*)(JNIEnv*, jobject, jlong);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env) {
         snprintf(err, err_len, "no JavaVM, or isConnected is not exported");
         return -1;
@@ -623,7 +623,7 @@ int roblox_messagebus_is_connected(void* fn, long long ptr, int* out_connected, 
     try {
         auto cls = env->GetClass("com/roblox/universalapp/messagebus/Connection");
         jboolean r = reinterpret_cast<Call>(fn)(env->GetJNIEnv(),
-                                                (jobject)cordial::to_jni(env, cls),
+                                                (jobject)roblox_runtime::to_jni(env, cls),
                                                 static_cast<jlong>(ptr));
         if (out_connected) {
             *out_connected = r ? 1 : 0;

@@ -48,7 +48,7 @@ T pointer(std::uintptr_t value) {
     return reinterpret_cast<T>(value);
 }
 
-cordial::permissions::ResponseDelivery delivery(const char* protocol_name, bool dual) {
+roblox_runtime::permissions::ResponseDelivery delivery(const char* protocol_name, bool dual) {
     return {
         pointer<JNIEnv*>(0x100),
         pointer<jobject>(0x200),
@@ -70,7 +70,7 @@ void permissions_dual_response_publishes_before_resolving_the_same_body() {
     const auto input = delivery("PermissionsProtocol", true);
 
     // When the transport delivers the generated response.
-    cordial::permissions::deliver_response(input);
+    roblox_runtime::permissions::deliver_response(input);
 
     // Then protocol/method publication precedes correlation resolution and shares the body.
     require(events.size() == 2);
@@ -96,7 +96,7 @@ void disabled_dual_response_only_resolves_the_original_id() {
     input.publish = nullptr;
 
     // When the transport delivers the response.
-    cordial::permissions::deliver_response(input);
+    roblox_runtime::permissions::deliver_response(input);
 
     // Then legacy publication remains absent and the original async route is unchanged.
     require(events.size() == 1);
@@ -112,7 +112,7 @@ void other_protocols_ignore_the_permission_delivery_mode() {
     const auto input = delivery("Linking", true);
 
     // When the transport delivers its response.
-    cordial::permissions::deliver_response(input);
+    roblox_runtime::permissions::deliver_response(input);
 
     // Then it uses only its correlation ID and never publishes a permission response.
     require(events.size() == 1);
@@ -131,7 +131,7 @@ void requested_permission_dual_response_rejects_a_missing_publish_native() {
     // When delivery is attempted.
     bool rejected = false;
     try {
-        cordial::permissions::deliver_response(input);
+        roblox_runtime::permissions::deliver_response(input);
     } catch (const std::invalid_argument&) {
         rejected = true;
     }

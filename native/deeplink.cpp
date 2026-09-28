@@ -52,7 +52,7 @@
 #include <memory>
 #include <string>
 
-namespace cordial {
+namespace roblox_runtime {
 
 using jnivm::Class;
 using jnivm::ENV;
@@ -66,7 +66,7 @@ static auto to_jni(jnivm::ENV* env, const std::shared_ptr<T>& p) {
     return jnivm::JNITypes<std::shared_ptr<T>>::ToJNIType(env, p);
 }
 
-} // namespace cordial
+} // namespace roblox_runtime
 
 extern "C" {
 
@@ -80,7 +80,7 @@ extern "C" {
 int roblox_deeplink_protocol_string(void* fn, const char* class_name, char* out, size_t out_len,
                                      char* err, size_t err_len) {
     using Call = jstring (*)(JNIEnv*, jobject);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env || !class_name) {
         snprintf(err, err_len, "no JavaVM, or the native is not exported");
         return -1;
@@ -88,8 +88,8 @@ int roblox_deeplink_protocol_string(void* fn, const char* class_name, char* out,
     try {
         auto cls = env->GetClass(class_name);
         jstring r = reinterpret_cast<Call>(fn)(env->GetJNIEnv(),
-                                               (jobject)cordial::to_jni(env, cls));
-        const auto* s = reinterpret_cast<cordial::String*>(r);
+                                               (jobject)roblox_runtime::to_jni(env, cls));
+        const auto* s = reinterpret_cast<roblox_runtime::String*>(r);
         const std::string value = s ? static_cast<const std::string&>(*s) : std::string();
         if (value.size() >= out_len) {
             snprintf(err, err_len, "the answer is %zu bytes and the buffer is %zu", value.size(),
@@ -119,17 +119,17 @@ int roblox_deeplink_protocol_string(void* fn, const char* class_name, char* out,
 int roblox_deeplink_cold_start(void* fn, const char* class_name, const char* url, int* out_handled,
                                 char* err, size_t err_len) {
     using Call = jboolean (*)(JNIEnv*, jobject, jstring);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env || !class_name) {
         snprintf(err, err_len, "no JavaVM, or the native is not exported");
         return -1;
     }
     try {
         auto cls = env->GetClass(class_name);
-        auto arg = std::make_shared<cordial::String>(std::string(url ? url : ""));
+        auto arg = std::make_shared<roblox_runtime::String>(std::string(url ? url : ""));
         jboolean r = reinterpret_cast<Call>(fn)(env->GetJNIEnv(),
-                                               (jobject)cordial::to_jni(env, cls),
-                                               (jstring)cordial::to_jni(env, arg));
+                                               (jobject)roblox_runtime::to_jni(env, cls),
+                                               (jstring)roblox_runtime::to_jni(env, arg));
         if (out_handled) {
             *out_handled = r ? 1 : 0;
         }
@@ -154,7 +154,7 @@ int roblox_deeplink_cold_start(void* fn, const char* class_name, const char* url
 /// so by name — which is the point of driving this rather than skipping it.
 int roblox_deeplink_protocol_init(void* fn, const char* class_name, char* err, size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jobject);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env || !class_name) {
         snprintf(err, err_len, "no JavaVM, or the native is not exported");
         return -1;
@@ -163,8 +163,8 @@ int roblox_deeplink_protocol_init(void* fn, const char* class_name, char* err, s
         auto cls = env->GetClass(class_name);
         auto context = std::make_shared<jnivm::Object>();
         reinterpret_cast<Call>(fn)(env->GetJNIEnv(),
-                                   (jobject)cordial::to_jni(env, cls),
-                                   (jobject)cordial::to_jni(env, context));
+                                   (jobject)roblox_runtime::to_jni(env, cls),
+                                   (jobject)roblox_runtime::to_jni(env, context));
         return 0;
     } catch (const std::exception& e) {
         snprintf(err, err_len, "%s", e.what());
@@ -201,20 +201,20 @@ int roblox_deeplink_two_strings_ret_string(void* fn, const char* class_name, con
                                             const char* arg_b, char* out, size_t out_len,
                                             char* err, size_t err_len) {
     using Call = jstring (*)(JNIEnv*, jobject, jstring, jstring);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env || !class_name) {
         snprintf(err, err_len, "no JavaVM, or the native is not exported");
         return -1;
     }
     try {
         auto cls = env->GetClass(class_name);
-        auto a = std::make_shared<cordial::String>(std::string(arg_a ? arg_a : ""));
-        auto b = std::make_shared<cordial::String>(std::string(arg_b ? arg_b : ""));
+        auto a = std::make_shared<roblox_runtime::String>(std::string(arg_a ? arg_a : ""));
+        auto b = std::make_shared<roblox_runtime::String>(std::string(arg_b ? arg_b : ""));
         jstring r = reinterpret_cast<Call>(fn)(env->GetJNIEnv(),
-                                               (jobject)cordial::to_jni(env, cls),
-                                               (jstring)cordial::to_jni(env, a),
-                                               (jstring)cordial::to_jni(env, b));
-        const auto* s = reinterpret_cast<cordial::String*>(r);
+                                               (jobject)roblox_runtime::to_jni(env, cls),
+                                               (jstring)roblox_runtime::to_jni(env, a),
+                                               (jstring)roblox_runtime::to_jni(env, b));
+        const auto* s = reinterpret_cast<roblox_runtime::String*>(r);
         const std::string value = s ? static_cast<const std::string&>(*s) : std::string();
         if (value.size() >= out_len) {
             snprintf(err, err_len, "the answer is %zu bytes and the buffer is %zu", value.size(),
@@ -236,18 +236,18 @@ int roblox_deeplink_two_strings_ret_string(void* fn, const char* class_name, con
 int roblox_deeplink_string_ret_string(void* fn, const char* class_name, const char* arg, char* out,
                                        size_t out_len, char* err, size_t err_len) {
     using Call = jstring (*)(JNIEnv*, jobject, jstring);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env || !class_name) {
         snprintf(err, err_len, "no JavaVM, or the native is not exported");
         return -1;
     }
     try {
         auto cls = env->GetClass(class_name);
-        auto a = std::make_shared<cordial::String>(std::string(arg ? arg : ""));
+        auto a = std::make_shared<roblox_runtime::String>(std::string(arg ? arg : ""));
         jstring r = reinterpret_cast<Call>(fn)(env->GetJNIEnv(),
-                                               (jobject)cordial::to_jni(env, cls),
-                                               (jstring)cordial::to_jni(env, a));
-        const auto* s = reinterpret_cast<cordial::String*>(r);
+                                               (jobject)roblox_runtime::to_jni(env, cls),
+                                               (jstring)roblox_runtime::to_jni(env, a));
+        const auto* s = reinterpret_cast<roblox_runtime::String*>(r);
         const std::string value = s ? static_cast<const std::string&>(*s) : std::string();
         if (value.size() >= out_len) {
             snprintf(err, err_len, "the answer is %zu bytes and the buffer is %zu", value.size(),

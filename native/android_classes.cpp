@@ -231,7 +231,7 @@ std::atomic<unsigned> g_textbox_property_generation{0};
 /// booleans were being argued about from a log that only ever showed two.
 void trace_textbox_info(const char* source, const RobloxRuntimeTextBoxInfo& i) {
     fprintf(stderr,
-            "[cordial] textbox spec from %s x=%g y=%g w=%g h=%g fontSize=%g "
+            "[runtime] textbox spec from %s x=%g y=%g w=%g h=%g fontSize=%g "
             "multiline=%d xAlign=%d yAlign=%d textColor=%#x font=%d "
             "textInputType=%d returnKeyType=%d manualFocusRelease=%d "
             "textWrapped=%d z14=%d\n",
@@ -255,7 +255,7 @@ extern "C" void roblox_textbox_focused(long long handle, const char* text,
                                         const RobloxRuntimeTextBoxInfo* info) {
     const bool trace = getenv("RBX_RUNTIME_TRACE_TEXT") != nullptr;
     if (trace) {
-        fprintf(stderr, "[cordial] textbox focused handle=%lld current=%zu bytes\n",
+        fprintf(stderr, "[runtime] textbox focused handle=%lld current=%zu bytes\n",
                 handle, text ? strlen(text) : 0);
     }
     {
@@ -282,7 +282,7 @@ extern "C" void roblox_textbox_focused(long long handle, const char* text,
             if (source) {
                 trace_textbox_info(source, g_textbox_info);
             } else {
-                fprintf(stderr, "[cordial] textbox spec unavailable\n");
+                fprintf(stderr, "[runtime] textbox spec unavailable\n");
             }
         }
     }
@@ -292,7 +292,7 @@ extern "C" void roblox_textbox_focused(long long handle, const char* text,
 
 extern "C" void roblox_textbox_blurred() {
     if (getenv("RBX_RUNTIME_TRACE_TEXT")) {
-        fprintf(stderr, "[cordial] textbox blurred\n");
+        fprintf(stderr, "[runtime] textbox blurred\n");
     }
     {
         // The spec goes with the focus. A caller that kept drawing an editor
@@ -325,7 +325,7 @@ extern "C" unsigned roblox_textbox_property_generation() {
 /// happens on Cordial's own pump, the next time it looks.
 extern "C" void roblox_textbox_property_changed() {
     if (getenv("RBX_RUNTIME_TRACE_TEXT")) {
-        fprintf(stderr, "[cordial] textbox property changed, generation now %u\n",
+        fprintf(stderr, "[runtime] textbox property changed, generation now %u\n",
                 g_textbox_property_generation.load(std::memory_order_relaxed) + 1);
     }
     g_textbox_property_generation.fetch_add(1, std::memory_order_acq_rel);
@@ -411,7 +411,7 @@ extern "C" int roblox_textbox_text(char* buf, int n) {
     return len;
 }
 
-namespace cordial {
+namespace roblox_runtime {
 
 using jnivm::Class;
 using jnivm::ENV;
@@ -506,8 +506,8 @@ public:
         p->osVersion       = str("33");
         p->deviceName      = str("Roblox Runtime");
         p->manufacturer    = str("Roblox Runtime");
-        p->deviceSku       = str("cordial");
-        p->socModel        = str("cordial");
+        p->deviceSku       = str("linux-x86_64");
+        p->socModel        = str("unknown");
         p->appBuildVariant = str("release");
         // Left as the client's own version until Cordial reads it from the APK
         // manifest; a wrong value here shows up in telemetry and support threads.
@@ -709,7 +709,7 @@ bool identity_known() {
 void trace_identity(const char* field) {
     static const bool on = getenv("RBX_RUNTIME_TRACE_IDENTITY") != nullptr;
     if (!on) return;
-    fprintf(stderr, "[cordial] identity asked: %s (%s)\n", field,
+    fprintf(stderr, "[runtime] identity asked: %s (%s)\n", field,
             identity_known() ? "signed in" : "nobody");
 }
 
@@ -839,7 +839,7 @@ public:
         // whose spec is unknown means our `<init>` hook never matched and the
         // fourteen values went past us.
         if (getenv("RBX_RUNTIME_TRACE_TEXT") != nullptr) {
-            fprintf(stderr, "[cordial] showKeyboard: info=%s spec_known=%s\n",
+            fprintf(stderr, "[runtime] showKeyboard: info=%s spec_known=%s\n",
                     info ? "object" : "NULL",
                     info ? (info->spec_known ? "true" : "false") : "n/a");
         }
@@ -1385,14 +1385,14 @@ public:
 
 jint BuildVersion::SDK_INT = 33;
 
-} // namespace cordial
+} // namespace roblox_runtime
 
 // Defined in accessibility.cpp — kept in its own file rather than added to
 // this one because it answers a platform surface (`android.view.accessibility.*`)
 // nothing else here touches, and because its own header comment is long
 // enough (the push-vs-pull accessibility-tree question) that folding it into
 // this file's already-long one would bury it.
-namespace cordial {
+namespace roblox_runtime {
 void register_accessibility_classes(jnivm::ENV* env);
 }
 
@@ -1400,7 +1400,7 @@ void register_accessibility_classes(jnivm::ENV* env);
 // one surface (`com.roblox.universalapp.cookie.*`) whose header comment has to
 // carry the measurement that a session is not persisted anywhere on disk by
 // the engine itself, which is long and does not belong in this file's preamble.
-namespace cordial {
+namespace roblox_runtime {
 void register_cookie_classes(jnivm::ENV* env);
 }
 
@@ -1409,7 +1409,7 @@ void register_cookie_classes(jnivm::ENV* env);
 // exist while Roblox is not recording, and that rule has to be the first thing
 // anyone editing the microphone path reads rather than a paragraph buried in
 // this file's preamble.
-namespace cordial {
+namespace roblox_runtime {
 void register_audio_classes(jnivm::ENV* env);
 }
 
@@ -1419,7 +1419,7 @@ void register_audio_classes(jnivm::ENV* env);
 // Java uses it — and that copying out of an experience arrives as a message-bus
 // publish instead. That is the first thing anyone who goes looking for a
 // clipboard class needs to read, and it would be buried here.
-namespace cordial {
+namespace roblox_runtime {
 void register_clipboard_classes(jnivm::ENV* env);
 }
 
@@ -1429,7 +1429,7 @@ void register_clipboard_classes(jnivm::ENV* env);
 // `ILocalStorageHandlerCore`/`IPlatformLocalStorageHandler` (this), which
 // `docs/analysis/flag-init.md` §12 spent a session establishing and which
 // belongs next to the code it explains rather than buried here.
-namespace cordial {
+namespace roblox_runtime {
 void register_local_storage_classes(jnivm::ENV* env);
 }
 
@@ -1439,7 +1439,7 @@ void register_local_storage_classes(jnivm::ENV* env);
 // than through the app's Java bootstrap Cordial never runs — and the account
 // of which of the fork's requested classes were checked against the dex and
 // found absent, neither of which belongs buried in this file's preamble.
-namespace cordial {
+namespace roblox_runtime {
 void register_platform_classes(jnivm::ENV* env);
 }
 
@@ -1448,7 +1448,7 @@ void register_platform_classes(jnivm::ENV* env);
 // declaration-only reader this task added alongside `dex_method.py`) and what
 // is and is not confirmed about them without a live run to watch, neither of
 // which belongs buried in this file's preamble.
-namespace cordial {
+namespace roblox_runtime {
 void register_battery_classes(jnivm::ENV* env);
 }
 
@@ -1468,14 +1468,14 @@ void register_battery_classes(jnivm::ENV* env);
 extern "C" void roblox_identity_publish(long long user_id, const char* username,
                                          const char* display_name, long long membership_type,
                                          int is_under13, int has_subscription) {
-    std::lock_guard<std::mutex> lock(cordial::g_identity_mutex);
-    cordial::g_identity_user_id = static_cast<jlong>(user_id);
-    cordial::g_identity_username = username ? username : "";
-    cordial::g_identity_display_name = display_name ? display_name : "";
-    cordial::g_identity_membership = static_cast<jint>(membership_type);
-    cordial::g_identity_under13 = is_under13 != 0;
-    cordial::g_identity_subscription = has_subscription != 0;
-    cordial::g_identity_known = true;
+    std::lock_guard<std::mutex> lock(roblox_runtime::g_identity_mutex);
+    roblox_runtime::g_identity_user_id = static_cast<jlong>(user_id);
+    roblox_runtime::g_identity_username = username ? username : "";
+    roblox_runtime::g_identity_display_name = display_name ? display_name : "";
+    roblox_runtime::g_identity_membership = static_cast<jint>(membership_type);
+    roblox_runtime::g_identity_under13 = is_under13 != 0;
+    roblox_runtime::g_identity_subscription = has_subscription != 0;
+    roblox_runtime::g_identity_known = true;
 }
 
 /// Put the mirrors back to reporting nobody.
@@ -1484,14 +1484,14 @@ extern "C" void roblox_identity_publish(long long user_id, const char* username,
 /// is a self-contradicting client, and the engine reads the two through
 /// different calls at different times, so it would see exactly that.
 extern "C" void roblox_identity_clear() {
-    std::lock_guard<std::mutex> lock(cordial::g_identity_mutex);
-    cordial::g_identity_user_id = 0;
-    cordial::g_identity_username.clear();
-    cordial::g_identity_display_name.clear();
-    cordial::g_identity_membership = 0;
-    cordial::g_identity_under13 = false;
-    cordial::g_identity_subscription = false;
-    cordial::g_identity_known = false;
+    std::lock_guard<std::mutex> lock(roblox_runtime::g_identity_mutex);
+    roblox_runtime::g_identity_user_id = 0;
+    roblox_runtime::g_identity_username.clear();
+    roblox_runtime::g_identity_display_name.clear();
+    roblox_runtime::g_identity_membership = 0;
+    roblox_runtime::g_identity_under13 = false;
+    roblox_runtime::g_identity_subscription = false;
+    roblox_runtime::g_identity_known = false;
 }
 
 /// Install the sinks `onDataModelNotificationCallback` reports through, or
@@ -1505,8 +1505,8 @@ extern "C" void roblox_identity_clear() {
 /// registration failure.
 extern "C" void roblox_identity_set_sinks(void (*on_login)(const char*),
                                            void (*on_logout)()) {
-    cordial::g_identity_login_sink.store(on_login, std::memory_order_release);
-    cordial::g_identity_logout_sink.store(on_logout, std::memory_order_release);
+    roblox_runtime::g_identity_login_sink.store(on_login, std::memory_order_release);
+    roblox_runtime::g_identity_logout_sink.store(on_logout, std::memory_order_release);
 }
 
 /// Where `APP_READY` is reported, or null to stop reporting it.
@@ -1515,10 +1515,10 @@ extern "C" void roblox_identity_set_sinks(void (*on_login)(const char*),
 /// what decides whether anything listens, so "nobody was listening" can never
 /// be mistaken for "the engine never called".
 extern "C" void roblox_app_ready_set_sink(void (*on_ready)(const char*)) {
-    cordial::g_app_ready_sink.store(on_ready, std::memory_order_release);
+    roblox_runtime::g_app_ready_sink.store(on_ready, std::memory_order_release);
 }
 
-namespace cordial {
+namespace roblox_runtime {
 
 /// `android.content.SharedPreferences` and its `Editor`.
 ///
@@ -1928,33 +1928,33 @@ void register_permission_checks(ENV* env) {
     env->GetClass<Object>("java/lang/Object");
 }
 
-} // namespace cordial
+} // namespace roblox_runtime
 
 extern "C" void roblox_register_android_classes(void* env_ptr) {
     auto* env = static_cast<jnivm::ENV*>(env_ptr);
     if (!env) {
         return;
     }
-    cordial::StringBridge::Register(env);
-    cordial::DeviceStaticParams::Register(env);
-    cordial::NativeTextBoxInfo::Register(env);
-    cordial::NativeGLJavaInterface::Register(env);
-    cordial::NativeLocaleJavaInterface::Register(env);
-    cordial::NativeUserJavaInterface::Register(env);
-    cordial::LoggingProtocol::Register(env);
-    cordial::SessionReporterJavaInterface::Register(env);
-    cordial::VideoCodecCapability::Register(env);
-    cordial::MediaCodecInfoUtils::Register(env);
-    cordial::BuildVersion::Register(env);
-    cordial::register_accessibility_classes(env);
-    cordial::register_cookie_classes(env);
-    cordial::register_audio_classes(env);
-    cordial::register_clipboard_classes(env);
-    cordial::register_shared_preferences(env);
-    cordial::register_permission_checks(env);
-    cordial::register_local_storage_classes(env);
-    cordial::register_platform_classes(env);
-    cordial::register_battery_classes(env);
+    roblox_runtime::StringBridge::Register(env);
+    roblox_runtime::DeviceStaticParams::Register(env);
+    roblox_runtime::NativeTextBoxInfo::Register(env);
+    roblox_runtime::NativeGLJavaInterface::Register(env);
+    roblox_runtime::NativeLocaleJavaInterface::Register(env);
+    roblox_runtime::NativeUserJavaInterface::Register(env);
+    roblox_runtime::LoggingProtocol::Register(env);
+    roblox_runtime::SessionReporterJavaInterface::Register(env);
+    roblox_runtime::VideoCodecCapability::Register(env);
+    roblox_runtime::MediaCodecInfoUtils::Register(env);
+    roblox_runtime::BuildVersion::Register(env);
+    roblox_runtime::register_accessibility_classes(env);
+    roblox_runtime::register_cookie_classes(env);
+    roblox_runtime::register_audio_classes(env);
+    roblox_runtime::register_clipboard_classes(env);
+    roblox_runtime::register_shared_preferences(env);
+    roblox_runtime::register_permission_checks(env);
+    roblox_runtime::register_local_storage_classes(env);
+    roblox_runtime::register_platform_classes(env);
+    roblox_runtime::register_battery_classes(env);
     if (getenv("RBX_RUNTIME_JNI_TRACE")) {
         fprintf(stderr, "[classes] Cordial's Java side registered\n");
     }
@@ -1963,14 +1963,14 @@ extern "C" void roblox_register_android_classes(void* env_ptr) {
 // ------------------------------------------------- asking the engine directly
 //
 // Down here rather than beside `roblox_textbox_info` because it needs
-// `cordial::NativeTextBoxInfo`, which is defined above and cannot be
+// `roblox_runtime::NativeTextBoxInfo`, which is defined above and cannot be
 // forward-declared usefully.
 
-namespace cordial {
+namespace roblox_runtime {
 /// Defined in `game_activity.cpp`; declared rather than duplicated for the
 /// same reason `make_display_metrics` is declared there.
 jnivm::ENV* process_env();
-} // namespace cordial
+} // namespace roblox_runtime
 
 /// `NativeGLInterface.nativeGetTextBoxInfo()` — the engine's own answer to
 /// "where is the focused box", as opposed to the one it volunteered at
@@ -1996,7 +1996,7 @@ jnivm::ENV* process_env();
 extern "C" int roblox_textbox_info_now(void* fn, RobloxRuntimeTextBoxInfo* out,
                                         char* err, size_t err_len) {
     using Call = jobject (*)(JNIEnv*, jobject);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env) {
         snprintf(err, err_len, "no JavaVM, or nativeGetTextBoxInfo is not exported");
         return -1;
@@ -2026,7 +2026,7 @@ extern "C" int roblox_textbox_info_now(void* fn, RobloxRuntimeTextBoxInfo* out,
         int rc = 0;
         if (r) {
             auto obj =
-                jnivm::JNITypes<std::shared_ptr<cordial::NativeTextBoxInfo>>::JNICast(env, r);
+                jnivm::JNITypes<std::shared_ptr<roblox_runtime::NativeTextBoxInfo>>::JNICast(env, r);
             // `spec_known` is false for an object that never went through the
             // `<init>` hook. Reporting that as success would hand the caller a
             // default-constructed struct dressed up as geometry.

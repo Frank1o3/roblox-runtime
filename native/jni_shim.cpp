@@ -5,7 +5,7 @@
 #include <jnivm.h>
 
 extern "C" void roblox_register_android_classes(void* env);
-namespace cordial {
+namespace roblox_runtime {
 void register_game_activity_classes(jnivm::ENV* env);
 void register_init_params_classes(jnivm::ENV* env);
 }
@@ -15,7 +15,7 @@ void register_init_params_classes(jnivm::ENV* env);
 /// type it cannot name — passing a JNIEnv* and casting it to jnivm::ENV* is a
 /// silent type confusion that surfaces as a null function pointer several calls
 /// later.
-namespace cordial { jnivm::ENV* process_env(); }
+namespace roblox_runtime { jnivm::ENV* process_env(); }
 
 #include <cstddef>
 #include <cstdio>
@@ -131,8 +131,8 @@ void* roblox_jni_create_vm() {
     g_vm = std::make_unique<jnivm::VM>();
     // Cordial's Java side, before Roblox can ask for any of it.
     roblox_register_android_classes(g_vm->GetEnv().get());
-    cordial::register_game_activity_classes(g_vm->GetEnv().get());
-    cordial::register_init_params_classes(g_vm->GetEnv().get());
+    roblox_runtime::register_game_activity_classes(g_vm->GetEnv().get());
+    roblox_runtime::register_init_params_classes(g_vm->GetEnv().get());
     g_real_vm = g_vm->GetJavaVM();
     g_real_iface = g_real_vm->functions;
 
@@ -203,7 +203,7 @@ int roblox_jni_call_onload(void* fn, char* err, size_t err_len) {
 
 } // extern "C"
 
-namespace cordial {
+namespace roblox_runtime {
 jnivm::ENV* process_env() {
     if (!g_vm || !g_real_vm) {
         return nullptr;
@@ -225,4 +225,4 @@ jnivm::ENV* process_env() {
     }
     return jnivm::ENV::FromJNIEnv(env);
 }
-} // namespace cordial
+} // namespace roblox_runtime

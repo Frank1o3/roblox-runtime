@@ -60,6 +60,9 @@ dependencies = [
 [[package]]
 name = "roblox-abi"
 version = "0.1.0"
+dependencies = [
+ "roblox-linker",
+]
 
 [[package]]
 name = "roblox-jni"

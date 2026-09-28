@@ -128,3 +128,28 @@ never linked that archive.
   the same-connection subsurface relationship.
 * Existing source runtime defects are inherited. Migration changes will be
   limited to API adaptation and regressions introduced by extraction.
+
+## Destination status after the first extraction stage
+
+The destination workspace now contains `roblox-linker`, `roblox-jni`, and
+`roblox-abi`. JNI, GameActivity, accessibility, and the large GameActivity
+surface are split into focused Rust source files. The linker and JNI C ABI
+symbols and private Rust/C++ struct names have been renamed together to remove
+the old project prefix; the Android system properties identify the emulated
+host as Linux/Roblox Runtime. The native linker implementation remains the
+same local implementation and both native dependencies are represented by
+their source-pinned submodules.
+
+The root API currently defines caller-supplied APK, native-library, data,
+cache, Fast Flag, and settings inputs and validates empty paths. It does not yet
+launch Roblox. Android, graphics, Wayland, input, platform, and runtime
+orchestration have not yet been extracted, and the native Android compatibility
+shims still share the linker crate's CMake build. Therefore this is an audited
+workspace foundation, not runtime parity; no client launch claim is made.
+
+At this stage `cargo fmt --all -- --check`, `cargo check --workspace`, and
+`cargo test --workspace` pass. Strict Clippy was run and remains failing in
+`roblox-abi` on inherited undocumented unsafe blocks and existing style lints
+in the copied bionic/stub code; the linker and JNI crate warnings introduced
+by extraction were corrected. These lint findings are not evidence of runtime
+parity.

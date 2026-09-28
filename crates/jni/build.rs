@@ -6,12 +6,7 @@ fn main() {
             .expect("roblox-linker must expose its native build directory"),
     );
     println!("cargo:rustc-link-search=native={}/lib", root.display());
-    for library in [
-        "roblox_jni_shim",
-        "roblox_liblog",
-        "jnivm",
-        "logger",
-    ] {
+    for library in ["roblox_jni_shim", "roblox_liblog", "jnivm", "logger"] {
         println!("cargo:rustc-link-lib=static={library}");
     }
     for library in ["stdc++", "z", "dl", "pthread"] {

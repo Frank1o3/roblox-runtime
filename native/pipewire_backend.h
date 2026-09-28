@@ -15,7 +15,7 @@
 #include <string>
 #include <vector>
 
-namespace cordial::audio {
+namespace roblox_runtime::audio {
 
 /// True once a PipeWire session has been confirmed reachable: the library
 /// loaded, `pw_init` ran, and a core connection completed a round trip. The
@@ -523,7 +523,7 @@ uint32_t fill_pcm(std::deque<PendingBuffer>& pending, uint8_t* dst, uint32_t wan
 
 } // namespace testing
 
-} // namespace cordial::audio
+} // namespace roblox_runtime::audio
 
 // ------------------------------------------------------- the picker's window
 //

@@ -70,6 +70,8 @@ pub struct Library(*mut c_void);
 
 // The linker keeps its own global state under its own lock; a handle is just an
 // index into it. Sending one between threads is no less safe than using it.
+// SAFETY: the linker owns global state under its lock; the handle is a stable
+// index into that state and carries no thread-affine Rust allocation.
 unsafe impl Send for Library {}
 
 impl Library {
@@ -79,18 +81,24 @@ impl Library {
 
     /// Base address the object was mapped at.
     pub fn base(self) -> usize {
+        // SAFETY: only the linker creates `Library` handles, and it retains
+        // them for the lifetime of the process.
         unsafe { ffi::roblox_linker_get_library_base(self.0) }
     }
 
     /// Address and length of the executable segment.
     pub fn code_region(self) -> (usize, usize) {
         let (mut base, mut size) = (0usize, 0usize);
+        // SAFETY: `self` is a live linker handle and both output pointers refer
+        // to writable locals for the duration of the call.
         unsafe { ffi::roblox_linker_get_library_code_region(self.0, &mut base, &mut size) };
         (base, size)
     }
 
     pub fn symbol(self, name: &str) -> Option<*mut c_void> {
         let c = CString::new(name).ok()?;
+        // SAFETY: `self` is a live linker handle and `c` is NUL-terminated for
+        // the duration of symbol lookup.
         let p = unsafe { ffi::roblox_linker_dlsym(self.0, c.as_ptr()) };
         (!p.is_null()).then_some(p)
     }
@@ -100,6 +108,8 @@ impl Library {
 ///
 /// Must be called once, before anything else in this module.
 pub fn init() {
+    // SAFETY: this is the linker's process-global initializer; callers invoke
+    // it before registration or loading, as required by the native shim.
     unsafe { ffi::roblox_linker_init() }
 }
 
@@ -125,6 +135,9 @@ pub fn register(name: &str, symbols: &[(String, *mut c_void)]) -> Result<Library
     let name_ptrs: Vec<*const c_char> = cnames.iter().map(|c| c.as_ptr()).collect();
     let addrs: Vec<*mut c_void> = symbols.iter().map(|(_, a)| *a).collect();
 
+    // SAFETY: every pointer references a live CString or vector allocation
+    // retained through the call; the linker copies symbol addresses and keeps
+    // the leaked soname CString alive for its own stored pointer.
     let handle = unsafe {
         ffi::roblox_linker_load_library(
             cname.as_ptr(),
@@ -143,6 +156,7 @@ pub fn register(name: &str, symbols: &[(String, *mut c_void)]) -> Result<Library
 /// Directory the linker searches for real objects.
 pub fn set_library_path(path: &str) -> Result<(), Error> {
     let c = CString::new(path)?;
+    // SAFETY: `c` is NUL-terminated and alive for this synchronous update.
     unsafe { ffi::roblox_linker_update_ld_library_path(c.as_ptr()) };
     Ok(())
 }
@@ -151,6 +165,8 @@ pub fn set_library_path(path: &str) -> Result<(), Error> {
 /// libraries.
 pub fn dlopen(soname: &str, flags: c_int) -> Result<Library, Error> {
     let c = CString::new(soname)?;
+    // SAFETY: `c` is a live NUL-terminated soname and flags are passed through
+    // to the native linker's documented dlopen interface.
     let handle = unsafe { ffi::roblox_linker_dlopen(c.as_ptr(), flags) };
     if handle.is_null() {
         Err(Error::Linker(last_error()))
@@ -170,6 +186,7 @@ pub fn dlopen(soname: &str, flags: c_int) -> Result<Library, Error> {
 /// after `dlopen` returns. It is not wired into the default load path in
 /// `cordial-run`; nothing calls this outside an explicit experiment.
 pub fn defer_next_ctors(defer: bool) {
+    // SAFETY: the native shim accepts a scalar process-global setting.
     unsafe { ffi::roblox_linker_defer_next_ctors(defer as c_int) }
 }
 
@@ -178,6 +195,8 @@ pub fn defer_next_ctors(defer: bool) {
 /// `soinfo::call_constructors()` is itself guarded, so calling this on a
 /// library that was never deferred (or already constructed) is harmless.
 pub fn run_deferred_ctors(lib: Library) {
+    // SAFETY: `lib` can only be created by this wrapper and remains loaded for
+    // the process lifetime.
     unsafe { ffi::roblox_linker_run_deferred_ctors(lib.0) }
 }
 
@@ -199,10 +218,13 @@ pub fn set_realpath(lib: Library, path: &str) {
 }
 
 fn last_error() -> String {
+    // SAFETY: the linker returns its own NUL-terminated error string, valid
+    // until the next linker call on this thread; it is copied immediately.
     let p = unsafe { ffi::roblox_linker_dlerror() };
     if p.is_null() {
         "unknown linker error".into()
     } else {
+        // SAFETY: non-null linker errors are NUL-terminated by the native API.
         unsafe { CStr::from_ptr(p) }.to_string_lossy().into_owned()
     }
 }

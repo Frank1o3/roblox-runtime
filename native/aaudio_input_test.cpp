@@ -18,7 +18,7 @@
 struct AAudioStreamBuilder;
 struct AAudioStream;
 
-namespace cordial::audio {
+namespace roblox_runtime::audio {
 namespace {
 
 std::atomic<uint32_t> g_capture_count{0};
@@ -89,7 +89,7 @@ const char* host_backend_name() { return "fake"; }
 const char* effective_backend_name() { return "fake"; }
 std::unique_ptr<OutputStream> make_output_stream() { return std::make_unique<FakeOutputStream>(); }
 
-} // namespace cordial::audio
+} // namespace roblox_runtime::audio
 
 extern "C" {
 
@@ -250,7 +250,7 @@ AAudioStream* open_input(Api& api, CallbackState* callback) {
     assert(api.channels(stream) == 1);
     assert(api.format(stream) == 1);
     assert(api.state(stream) == 2);
-    assert(cordial::audio::active_capture_streams() == 0);
+    assert(roblox_runtime::audio::active_capture_streams() == 0);
     return stream;
 }
 
@@ -262,14 +262,14 @@ void callback_input_delivers_s16_frames_and_callback_stop_releases_capture() {
     assert(wait_for_calls(callback, 1));
 
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
-    while (cordial::audio::active_capture_streams() != 0 &&
+    while (roblox_runtime::audio::active_capture_streams() != 0 &&
            std::chrono::steady_clock::now() < deadline) {
     }
     assert(callback.calls == 1);
     assert(callback.frames == 480);
     assert(callback.bytes_match);
     assert(api.state(stream) == 10);
-    assert(cordial::audio::active_capture_streams() == 0);
+    assert(roblox_runtime::audio::active_capture_streams() == 0);
     assert(api.close(stream) == 0);
     std::printf("ok: callback_input_delivers_s16_frames_and_callback_stop_releases_capture\n");
 }
@@ -284,13 +284,13 @@ void stop_from_inside_callback_does_not_self_join_or_leak_capture() {
     assert(wait_for_calls(callback, 1));
 
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
-    while (cordial::audio::active_capture_streams() != 0 &&
+    while (roblox_runtime::audio::active_capture_streams() != 0 &&
            std::chrono::steady_clock::now() < deadline) {
     }
     assert(callback.request_result == 0);
     assert(callback.calls == 1);
     assert(api.state(stream) == 10);
-    assert(cordial::audio::active_capture_streams() == 0);
+    assert(roblox_runtime::audio::active_capture_streams() == 0);
     assert(api.close(stream) == 0);
     std::printf("ok: stop_from_inside_callback_does_not_self_join_or_leak_capture\n");
 }
@@ -307,7 +307,7 @@ void callback_stop_closes_capture_before_a_blocked_callback_returns() {
 
     assert(callback.request_result == 0);
     assert(api.state(stream) == 10);
-    assert(cordial::audio::active_capture_streams() == 0 &&
+    assert(roblox_runtime::audio::active_capture_streams() == 0 &&
            "callback-thread requestStop returned while the microphone remained open");
     release_callback(callback);
     assert(api.close(stream) == 0);
@@ -326,7 +326,7 @@ void callback_pause_closes_capture_before_a_blocked_callback_returns() {
 
     assert(callback.request_result == 0);
     assert(api.state(stream) == 6);
-    assert(cordial::audio::active_capture_streams() == 0 &&
+    assert(roblox_runtime::audio::active_capture_streams() == 0 &&
            "callback-thread requestPause returned while the microphone remained open");
     release_callback(callback);
     assert(api.close(stream) == 0);
@@ -342,14 +342,14 @@ void callback_continue_delivers_multiple_bursts_before_stop() {
     assert(wait_for_calls(callback, 4));
 
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
-    while (cordial::audio::active_capture_streams() != 0 &&
+    while (roblox_runtime::audio::active_capture_streams() != 0 &&
            std::chrono::steady_clock::now() < deadline) {
     }
     assert(callback.calls == 4);
     assert(callback.frames == 480);
     assert(callback.bytes_match);
     assert(api.state(stream) == 10);
-    assert(cordial::audio::active_capture_streams() == 0);
+    assert(roblox_runtime::audio::active_capture_streams() == 0);
     assert(api.close(stream) == 0);
     std::printf("ok: callback_continue_delivers_multiple_bursts_before_stop\n");
 }
@@ -362,15 +362,15 @@ void external_close_waits_for_active_callback_then_releases_capture() {
     AAudioStream* stream = open_input(api, &callback);
     assert(api.start(stream) == 0);
     assert(wait_for_calls(callback, 1));
-    assert(cordial::audio::active_capture_streams() == 1);
+    assert(roblox_runtime::audio::active_capture_streams() == 1);
 
     std::atomic<int32_t> close_result{INT32_MIN};
     std::thread closer([&] { close_result.store(api.close(stream)); });
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
-    while (cordial::audio::active_capture_streams() != 0 &&
+    while (roblox_runtime::audio::active_capture_streams() != 0 &&
            std::chrono::steady_clock::now() < deadline) {
     }
-    assert(cordial::audio::active_capture_streams() == 0 &&
+    assert(roblox_runtime::audio::active_capture_streams() == 0 &&
            "external close left the microphone open while waiting for the callback");
     assert(close_result.load() == INT32_MIN &&
            "external close deleted a stream while its callback was still active");
@@ -379,7 +379,7 @@ void external_close_waits_for_active_callback_then_releases_capture() {
 
     assert(close_result.load() == 0);
     assert(callback.calls == 1);
-    assert(cordial::audio::active_capture_streams() == 0);
+    assert(roblox_runtime::audio::active_capture_streams() == 0);
     std::printf("ok: external_close_waits_for_active_callback_then_releases_capture\n");
 }
 
@@ -411,10 +411,10 @@ void concurrent_callback_stop_and_restart_cannot_close_the_new_capture() {
     restarter.join();
     assert(restart_result.load() == 0);
     assert(api.state(stream) == 4);
-    assert(cordial::audio::active_capture_streams() == 1 &&
+    assert(roblox_runtime::audio::active_capture_streams() == 1 &&
            "the old callback exit closed the newly restarted capture");
     assert(api.stop(stream) == 0);
-    assert(cordial::audio::active_capture_streams() == 0);
+    assert(roblox_runtime::audio::active_capture_streams() == 0);
     assert(api.close(stream) == 0);
     std::printf("ok: concurrent_callback_stop_and_restart_cannot_close_the_new_capture\n");
 }
@@ -427,15 +427,15 @@ void capture_failure_stops_callback_and_reports_disconnected() {
     assert(api.start(stream) == 0);
     assert(wait_for_calls(callback, 1));
 
-    cordial::audio::g_stall_capture.store(true);
-    cordial::audio::g_capture_failed.store(true);
+    roblox_runtime::audio::g_stall_capture.store(true);
+    roblox_runtime::audio::g_capture_failed.store(true);
     assert(wait_for_errors(callback, 1) &&
            "PipeWire capture failure never reached the AAudio error callback");
-    cordial::audio::g_stall_capture.store(false);
+    roblox_runtime::audio::g_stall_capture.store(false);
 
     assert(callback.last_error == -899);
     assert(api.state(stream) == 13);
-    assert(cordial::audio::active_capture_streams() == 0);
+    assert(roblox_runtime::audio::active_capture_streams() == 0);
     assert(api.close(stream) == 0);
     std::printf("ok: capture_failure_stops_callback_and_reports_disconnected\n");
 }
@@ -449,13 +449,13 @@ void close_from_inside_callback_is_refused_without_deleting_the_live_stream() {
     assert(wait_for_calls(callback, 1));
 
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
-    while (cordial::audio::active_capture_streams() != 0 &&
+    while (roblox_runtime::audio::active_capture_streams() != 0 &&
            std::chrono::steady_clock::now() < deadline) {
     }
     assert(callback.request_result == -895);
     assert(callback.calls == 1);
     assert(api.state(stream) == 10);
-    assert(cordial::audio::active_capture_streams() == 0);
+    assert(roblox_runtime::audio::active_capture_streams() == 0);
     assert(api.close(stream) == 0);
     std::printf("ok: close_from_inside_callback_is_refused_without_deleting_the_live_stream\n");
 }
@@ -469,14 +469,14 @@ void pause_cancels_capture_and_start_reopens_it() {
     assert(wait_for_calls(callback, 1));
     assert(api.pause(stream) == 0);
     assert(api.state(stream) == 6);
-    assert(cordial::audio::active_capture_streams() == 0);
+    assert(roblox_runtime::audio::active_capture_streams() == 0);
 
     const uint32_t first_calls = callback.calls;
     assert(api.start(stream) == 0);
     assert(wait_for_calls(callback, first_calls + 1));
     assert(api.stop(stream) == 0);
     assert(api.state(stream) == 10);
-    assert(cordial::audio::active_capture_streams() == 0);
+    assert(roblox_runtime::audio::active_capture_streams() == 0);
     assert(api.close(stream) == 0);
     std::printf("ok: pause_cancels_capture_and_start_reopens_it\n");
 }
@@ -485,20 +485,20 @@ void stop_cancels_an_idle_callback_and_releases_capture_promptly() {
     Api api;
     CallbackState callback;
     callback.result = 0;
-    cordial::audio::g_stall_capture.store(true);
+    roblox_runtime::audio::g_stall_capture.store(true);
     AAudioStream* stream = open_input(api, &callback);
     assert(api.start(stream) == 0);
-    assert(cordial::audio::active_capture_streams() == 1);
+    assert(roblox_runtime::audio::active_capture_streams() == 1);
 
     const auto before = std::chrono::steady_clock::now();
     assert(api.stop(stream) == 0);
     const auto elapsed = std::chrono::steady_clock::now() - before;
-    cordial::audio::g_stall_capture.store(false);
+    roblox_runtime::audio::g_stall_capture.store(false);
 
     assert(elapsed < std::chrono::milliseconds(250));
     assert(callback.calls == 0);
     assert(api.state(stream) == 10);
-    assert(cordial::audio::active_capture_streams() == 0);
+    assert(roblox_runtime::audio::active_capture_streams() == 0);
     assert(api.close(stream) == 0);
     std::printf("ok: stop_cancels_an_idle_callback_and_releases_capture_promptly\n");
 }
@@ -511,7 +511,7 @@ void blocking_reads_remain_supported() {
     assert(api.read(stream, bytes, 32, 0) == 32);
     for (size_t i = 0; i < sizeof(bytes); ++i) assert(bytes[i] == static_cast<uint8_t>(i));
     assert(api.stop(stream) == 0);
-    assert(cordial::audio::active_capture_streams() == 0);
+    assert(roblox_runtime::audio::active_capture_streams() == 0);
     assert(api.close(stream) == 0);
     std::printf("ok: blocking_reads_remain_supported\n");
 }

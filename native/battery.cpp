@@ -58,7 +58,7 @@
 #include <memory>
 #include <string>
 
-namespace cordial {
+namespace roblox_runtime {
 
 using jnivm::Class;
 using jnivm::ENV;
@@ -227,7 +227,7 @@ void register_battery_classes(jnivm::ENV* env) {
     BatteryStatus::Register(env);
 }
 
-} // namespace cordial
+} // namespace roblox_runtime
 
 // --------------------------------------------------------------- extern "C"
 //
@@ -247,14 +247,14 @@ extern "C" {
 int roblox_report_battery_state_changed(void* fn, int status, int plugged, char* err,
                                           size_t err_len) {
     using Call = void (*)(JNIEnv*, jclass, jint, jint);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env) {
         snprintf(err, err_len, "no JavaVM, or reportBatteryStateChanged is not exported");
         return -1;
     }
     try {
         auto cls = env->GetClass("com/roblox/engine/jni/NativeGLInterface");
-        reinterpret_cast<Call>(fn)(env->GetJNIEnv(), (jclass)cordial::to_jni(env, cls),
+        reinterpret_cast<Call>(fn)(env->GetJNIEnv(), (jclass)roblox_runtime::to_jni(env, cls),
                                    static_cast<jint>(status), static_cast<jint>(plugged));
         return 0;
     } catch (const std::exception& e) {
@@ -309,33 +309,33 @@ struct RobloxRuntimeBatteryStatus {
 int roblox_report_battery_status(void* fn, const RobloxRuntimeBatteryStatus* in, char* err,
                                    size_t err_len) {
     using Call = void (*)(JNIEnv*, jclass, jobject);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env || !in) {
         snprintf(err, err_len, "no JavaVM, no reading, or reportBatteryStatus is not exported");
         return -1;
     }
     try {
-        auto status = std::make_shared<cordial::BatteryStatus>();
-        if (in->has_present) status->present = cordial::box_bool(in->present != 0);
-        if (in->has_percentage) status->batteryPercentage = cordial::box_int(in->percentage);
-        if (in->has_status) status->status = cordial::box_int(in->status);
-        if (in->has_health) status->health = cordial::box_int(in->health);
-        if (in->has_voltage_mv) status->voltage = cordial::box_int(in->voltage_mv);
-        if (in->has_current_now_ua) status->currentNow = cordial::box_int(in->current_now_ua);
-        if (in->has_current_avg_ua) status->currentAverage = cordial::box_int(in->current_avg_ua);
+        auto status = std::make_shared<roblox_runtime::BatteryStatus>();
+        if (in->has_present) status->present = roblox_runtime::box_bool(in->present != 0);
+        if (in->has_percentage) status->batteryPercentage = roblox_runtime::box_int(in->percentage);
+        if (in->has_status) status->status = roblox_runtime::box_int(in->status);
+        if (in->has_health) status->health = roblox_runtime::box_int(in->health);
+        if (in->has_voltage_mv) status->voltage = roblox_runtime::box_int(in->voltage_mv);
+        if (in->has_current_now_ua) status->currentNow = roblox_runtime::box_int(in->current_now_ua);
+        if (in->has_current_avg_ua) status->currentAverage = roblox_runtime::box_int(in->current_avg_ua);
         if (in->has_charge_counter_uah)
-            status->chargeCounter = cordial::box_int(in->charge_counter_uah);
-        if (in->has_power_now_uw) status->power = cordial::box_int(in->power_now_uw);
+            status->chargeCounter = roblox_runtime::box_int(in->charge_counter_uah);
+        if (in->has_power_now_uw) status->power = roblox_runtime::box_int(in->power_now_uw);
         if (in->has_technology && in->technology)
-            status->technology = std::make_shared<cordial::String>(std::string(in->technology));
-        if (in->has_temperature_c) status->temperature = cordial::box_float(in->temperature_c);
-        if (in->has_plugged) status->plugged = cordial::box_int(in->plugged);
+            status->technology = std::make_shared<roblox_runtime::String>(std::string(in->technology));
+        if (in->has_temperature_c) status->temperature = roblox_runtime::box_float(in->temperature_c);
+        if (in->has_plugged) status->plugged = roblox_runtime::box_int(in->plugged);
         // batteryLow, batterySaverMode, energyCounter: never set. See the
         // class's own doc comment for why.
 
         auto cls = env->GetClass("com/roblox/engine/jni/NativeGLInterface");
-        reinterpret_cast<Call>(fn)(env->GetJNIEnv(), (jclass)cordial::to_jni(env, cls),
-                                   (jobject)cordial::to_jni(env, status));
+        reinterpret_cast<Call>(fn)(env->GetJNIEnv(), (jclass)roblox_runtime::to_jni(env, cls),
+                                   (jobject)roblox_runtime::to_jni(env, status));
         return 0;
     } catch (const std::exception& e) {
         snprintf(err, err_len, "%s", e.what());

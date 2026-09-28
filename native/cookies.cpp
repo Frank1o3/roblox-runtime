@@ -59,7 +59,7 @@
 #include <memory>
 #include <string>
 
-namespace cordial {
+namespace roblox_runtime {
 
 using jnivm::Class;
 using jnivm::ENV;
@@ -179,7 +179,7 @@ void register_cookie_classes(jnivm::ENV* env) {
     OnSetCookieHandler::Register(env);
 }
 
-} // namespace cordial
+} // namespace roblox_runtime
 
 extern "C" {
 
@@ -191,7 +191,7 @@ extern "C" {
 /// behaviour cannot be confused with the engine failing to resolve the
 /// callback.
 void roblox_cookies_set_host_sink(void (*sink)(const char*)) {
-    cordial::g_host_sink = sink;
+    roblox_runtime::g_host_sink = sink;
 }
 
 /// `JNICookieProtocol.updateOnSetCookieHandler(OnSetCookieHandler)`.
@@ -202,28 +202,28 @@ void roblox_cookies_set_host_sink(void (*sink)(const char*)) {
 /// does, which is what makes this testable without an account.
 int roblox_cookies_register_handler(void* fn, char* err, size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jobject);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env) {
         snprintf(err, err_len, "no JavaVM, or updateOnSetCookieHandler is not exported");
         return -1;
     }
     try {
         auto cls = env->GetClass("com/roblox/universalapp/cookie/JNICookieProtocol");
-        auto handler = std::make_shared<cordial::OnSetCookieHandler>();
+        auto handler = std::make_shared<roblox_runtime::OnSetCookieHandler>();
         // Park it before the call, not after: the engine may call back
         // synchronously from inside this very call, and a handler owned only
         // by a local would already be a candidate for collection.
-        cordial::g_handler = handler;
+        roblox_runtime::g_handler = handler;
         reinterpret_cast<Call>(fn)(env->GetJNIEnv(),
-                                   (jobject)cordial::to_jni(env, cls),
-                                   (jobject)cordial::to_jni(env, handler));
+                                   (jobject)roblox_runtime::to_jni(env, cls),
+                                   (jobject)roblox_runtime::to_jni(env, handler));
         return 0;
     } catch (const std::exception& e) {
-        cordial::g_handler.reset();
+        roblox_runtime::g_handler.reset();
         snprintf(err, err_len, "%s", e.what());
         return -1;
     } catch (...) {
-        cordial::g_handler.reset();
+        roblox_runtime::g_handler.reset();
         snprintf(err, err_len, "non-standard C++ exception");
         return -1;
     }
@@ -242,18 +242,18 @@ int roblox_cookies_get_for_domain(void* fn, const char* class_name, const char* 
                                    char* out, size_t out_len, size_t* needed,
                                    char* err, size_t err_len) {
     using Call = jstring (*)(JNIEnv*, jobject, jstring);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env || !class_name) {
         snprintf(err, err_len, "no JavaVM, or the cookie native is not exported");
         return -1;
     }
     try {
         auto cls = env->GetClass(class_name);
-        auto arg = std::make_shared<cordial::String>(std::string(domain ? domain : ""));
+        auto arg = std::make_shared<roblox_runtime::String>(std::string(domain ? domain : ""));
         jstring r = reinterpret_cast<Call>(fn)(env->GetJNIEnv(),
-                                               (jobject)cordial::to_jni(env, cls),
-                                               (jstring)cordial::to_jni(env, arg));
-        const auto* s = reinterpret_cast<cordial::String*>(r);
+                                               (jobject)roblox_runtime::to_jni(env, cls),
+                                               (jstring)roblox_runtime::to_jni(env, arg));
+        const auto* s = reinterpret_cast<roblox_runtime::String*>(r);
         const std::string value = s ? static_cast<const std::string&>(*s) : std::string();
         if (needed) {
             *needed = value.size();

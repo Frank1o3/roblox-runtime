@@ -21,9 +21,9 @@
 #include <cstdio>
 #include <cstring>
 
-using cordial::audio::testing::choose_output_target;
-using cordial::audio::testing::fill_pcm;
-using cordial::audio::testing::PendingBuffer;
+using roblox_runtime::audio::testing::choose_output_target;
+using roblox_runtime::audio::testing::fill_pcm;
+using roblox_runtime::audio::testing::PendingBuffer;
 
 namespace {
 
@@ -131,11 +131,11 @@ void multiple_buffers_are_drained_in_order_within_one_fill() {
 // the invariant that the live case rests on, and it will fail loudly if
 // someone later moves the `open()` call into the constructor.
 void a_capture_stream_holds_nothing_until_it_is_opened() {
-    assert(cordial::audio::active_capture_streams() == 0);
+    assert(roblox_runtime::audio::active_capture_streams() == 0);
     {
-        cordial::audio::CaptureStream capture;
+        roblox_runtime::audio::CaptureStream capture;
         assert(!capture.is_open());
-        assert(cordial::audio::active_capture_streams() == 0);
+        assert(roblox_runtime::audio::active_capture_streams() == 0);
 
         // A read from a stream that was never opened returns no samples
         // rather than blocking for some that will never arrive, and must not
@@ -143,9 +143,9 @@ void a_capture_stream_holds_nothing_until_it_is_opened() {
         uint8_t buf[64];
         std::memset(buf, 0xAA, sizeof(buf));
         assert(capture.read(buf, sizeof(buf)) == 0);
-        assert(cordial::audio::active_capture_streams() == 0);
+        assert(roblox_runtime::audio::active_capture_streams() == 0);
     }
-    assert(cordial::audio::active_capture_streams() == 0);
+    assert(roblox_runtime::audio::active_capture_streams() == 0);
     std::printf("ok: a_capture_stream_holds_nothing_until_it_is_opened\n");
 }
 
@@ -250,7 +250,7 @@ void a_null_fell_back_pointer_is_allowed() {
 void the_shells_device_list_survives_being_asked_for_nothing() {
     assert(roblox_audio_sinks(nullptr) == 0);
     roblox_audio_sinks_free(nullptr, 0);
-    assert(cordial::audio::active_capture_streams() == 0);
+    assert(roblox_runtime::audio::active_capture_streams() == 0);
     std::printf("ok: the_shells_device_list_survives_being_asked_for_nothing\n");
 }
 
@@ -262,7 +262,7 @@ void the_shells_device_list_survives_being_asked_for_nothing() {
 /// failure it forecloses is a null dereference on a machine with no PipeWire,
 /// which is the machine least likely to be the one running this test.
 void the_factory_always_returns_a_stream() {
-    auto stream = cordial::audio::make_output_stream();
+    auto stream = roblox_runtime::audio::make_output_stream();
     assert(stream != nullptr);
     assert(!stream->is_open());
     assert(!stream->is_running());
@@ -281,10 +281,10 @@ void an_unknown_host_backend_falls_back_to_pipewire() {
     // Whatever the environment says, the only backend this build has is
     // PipeWire, so every answer is the same one. ADR-023 schedules PulseAudio
     // and ALSA behind this name.
-    const char* first = cordial::audio::host_backend_name();
+    const char* first = roblox_runtime::audio::host_backend_name();
     assert(std::strcmp(first, "pipewire") == 0);
     ::setenv("RBX_RUNTIME_AUDIO_HOST", "something-that-does-not-exist", 1);
-    assert(std::strcmp(cordial::audio::host_backend_name(), first) == 0);
+    assert(std::strcmp(roblox_runtime::audio::host_backend_name(), first) == 0);
     ::unsetenv("RBX_RUNTIME_AUDIO_HOST");
     std::printf("ok: an_unknown_host_backend_falls_back_to_pipewire\n");
 }

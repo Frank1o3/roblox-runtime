@@ -33,7 +33,7 @@
 /// `roblox_linker_sys::game_activity::TouchContact`. The two definitions are
 /// the same three words in the same order and have to stay that way.
 ///
-/// At file scope rather than inside `namespace cordial` because it appears in
+/// At file scope rather than inside `namespace roblox_runtime` because it appears in
 /// the signature of an `extern "C"` entry point at the bottom of this file, and
 /// an elaborated `struct RobloxRuntimeTouchContact` written there would silently
 /// declare a *second*, unrelated type rather than referring to this one.
@@ -42,7 +42,7 @@ struct RobloxRuntimeTouchContact {
     float x, y;
 };
 
-namespace cordial {
+namespace roblox_runtime {
 std::shared_ptr<jnivm::Object> make_display_metrics(jnivm::ENV* env);
 /// Defined beside `Insets` in init_params.cpp. Declared rather than
 /// duplicated for the same reason make_display_metrics is: one class, one
@@ -64,7 +64,7 @@ BootstrapFn bootstrap_callback() { return g_bootstrap; }
 
 /// Convert a C++ object into a `jobject` the way libjnivm expects.
 ///
-/// A raw `cordial::to_jni(env, p)` looks right — libjnivm does
+/// A raw `roblox_runtime::to_jni(env, p)` looks right — libjnivm does
 /// represent a `jobject` as its own `Object*` — but it skips the two things
 /// `ToJNIType` does on the way:
 ///
@@ -228,7 +228,7 @@ public:
     /// installed it says so rather than returning quietly — an unanswered
     /// bootstrap that looks answered is how this cost two days.
     void bootstrapTheApp(ENV*) {
-        auto fn = cordial::bootstrap_callback();
+        auto fn = roblox_runtime::bootstrap_callback();
         if (!fn) {
             fprintf(stderr,
                     "[roblox] bootstrapTheApp: no bootstrap installed; the engine "
@@ -579,7 +579,7 @@ extern "C" void roblox_ime_set_state(const char* text, int sel_start, int sel_en
                                       int comp_start, int comp_end) {
     if (getenv("RBX_RUNTIME_TRACE_TEXT")) {
         fprintf(stderr,
-                "[cordial] InputConnection.setState text=%zu bytes sel=[%d,%d) composing=[%d,%d)\n",
+                "[runtime] InputConnection.setState text=%zu bytes sel=[%d,%d) composing=[%d,%d)\n",
                 text ? strlen(text) : 0, sel_start, sel_end, comp_start, comp_end);
     }
     {
@@ -595,14 +595,14 @@ extern "C" void roblox_ime_set_state(const char* text, int sel_start, int sel_en
 
 extern "C" void roblox_ime_set_soft_keyboard_active(int active, int flags) {
     if (getenv("RBX_RUNTIME_TRACE_TEXT")) {
-        fprintf(stderr, "[cordial] InputConnection.setSoftKeyboardActive(%d, flags=%d)\n", active, flags);
+        fprintf(stderr, "[runtime] InputConnection.setSoftKeyboardActive(%d, flags=%d)\n", active, flags);
     }
     g_ime_soft_keyboard_active.store(active, std::memory_order_release);
 }
 
 extern "C" void roblox_ime_restart_input() {
     if (getenv("RBX_RUNTIME_TRACE_TEXT")) {
-        fprintf(stderr, "[cordial] InputConnection.restartInput\n");
+        fprintf(stderr, "[runtime] InputConnection.restartInput\n");
     }
     // `restartInput` means "forget whatever editing session was in progress",
     // which is exactly what bumping the generation without changing the
@@ -803,7 +803,7 @@ void register_game_activity_classes(ENV* env) {
 /// the ordinary race against `initializeNativeCode` during startup.
 template <typename Build>
 int deliver_motion(long handle, Build&& build, int* consumed, char* err, size_t err_len) {
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!env || handle == 0) {
         snprintf(err, err_len, "no JavaVM, or no native handle");
         return -1;
@@ -827,16 +827,16 @@ int deliver_motion(long handle, Build&& build, int* consumed, char* err, size_t 
 
         // Wrapped in `PushLocalFrame`/`PopLocalFrame`: unlike the
         // once-per-launch calls elsewhere in this file, this runs once per
-        // input event, and `cordial::to_jni` parks every object it touches in
+        // input event, and `roblox_runtime::to_jni` parks every object it touches in
         // the current local frame — without popping, a long session would grow
         // that frame without bound. The contacts are plain C++ in the event
         // object rather than a Java array, so the frame holds two references
         // however many fingers are down.
         jni->PushLocalFrame(8);
 
-        auto jactivity = cordial::to_jni(env, cordial::shared_activity(env));
+        auto jactivity = roblox_runtime::to_jni(env, roblox_runtime::shared_activity(env));
         auto event = build(env);
-        auto jevent = cordial::to_jni(env, event);
+        auto jevent = roblox_runtime::to_jni(env, event);
 
         using TouchFn = jboolean (*)(JNIEnv*, jobject, jlong, jobject, jint, jint, jint, jint,
                                      jint, jlong, jlong, jint, jint, jint, jint, jint, jint,
@@ -865,7 +865,7 @@ int deliver_motion(long handle, Build&& build, int* consumed, char* err, size_t 
     }
 }
 
-} // namespace cordial
+} // namespace roblox_runtime
 
 extern "C" {
 
@@ -875,7 +875,7 @@ extern "C" {
 /// `bootstrapTheApp` from inside `initializeNativeCode` and reads the flags
 /// verdict on the very next line, so anything installed afterwards is too late
 /// by construction — which is exactly the bug this exists to fix.
-void roblox_set_bootstrap(void (*fn)()) { cordial::g_bootstrap = fn; }
+void roblox_set_bootstrap(void (*fn)()) { roblox_runtime::g_bootstrap = fn; }
 
 /// Call `initializeNativeCode` and return its handle, or 0.
 ///
@@ -890,33 +890,33 @@ long roblox_game_activity_init(void* fn, const char* internal_path, const char* 
     // `jnivm::ENV*` are unrelated types that both arrive as `void*`, and
     // confusing them does not fail at the boundary — it fails much later, as a
     // call through a null slot in what was assumed to be the function table.
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env) {
         snprintf(err, err_len, "no JavaVM or no initializeNativeCode");
         return 0;
     }
 
     try {
-        auto activity = std::make_shared<cordial::GameActivity>();
-        auto assets = std::make_shared<cordial::AssetManager>();
-        auto config = std::make_shared<cordial::Configuration>();
+        auto activity = std::make_shared<roblox_runtime::GameActivity>();
+        auto assets = std::make_shared<roblox_runtime::AssetManager>();
+        auto config = std::make_shared<roblox_runtime::Configuration>();
 
-        auto internal = cordial::jstr(internal_path);
-        auto obb = cordial::jstr(obb_path);
-        auto external = cordial::jstr(external_path);
+        auto internal = roblox_runtime::jstr(internal_path);
+        auto obb = roblox_runtime::jstr(obb_path);
+        auto external = roblox_runtime::jstr(external_path);
 
         // libjnivm represents a `jobject` as its own `Object*`, so the shared_ptrs
         // above convert by taking their raw pointer. They stay in scope for the
         // duration of the call, which is what keeps the objects alive — the
         // engine must not retain them past this without its own reference.
-        auto j = [env](const auto& p) { return cordial::to_jni(env, p); };
+        auto j = [env](const auto& p) { return roblox_runtime::to_jni(env, p); };
 
         return reinterpret_cast<Init>(fn)(
             env->GetJNIEnv(),
             j(activity),
-            cordial::to_jni(env, internal),
-            cordial::to_jni(env, obb),
-            cordial::to_jni(env, external),
+            roblox_runtime::to_jni(env, internal),
+            roblox_runtime::to_jni(env, obb),
+            roblox_runtime::to_jni(env, external),
             j(assets),
             // savedState is null on a cold start, which this always is.
             nullptr,
@@ -1045,7 +1045,7 @@ static bool skip_agdk_focus()
 /// Every call carries the handle `initializeNativeCode` returned.
 int roblox_game_activity_start(long handle, int width, int height, int format,
                                 char* err, size_t err_len) {
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!env || handle == 0) {
         snprintf(err, err_len, "no JavaVM, or initializeNativeCode gave no handle");
         return -1;
@@ -1076,8 +1076,8 @@ int roblox_game_activity_start(long handle, int width, int height, int format,
 
         // The shared thiz and the surface starting a new lifetime — see
         // `shared_activity`/`shared_surface`'s own doc comments.
-        auto jactivity = cordial::to_jni(env, cordial::shared_activity(env));
-        auto jsurface = cordial::to_jni(env, cordial::shared_surface(env, /*make_new=*/true));
+        auto jactivity = roblox_runtime::to_jni(env, roblox_runtime::shared_activity(env));
+        auto jsurface = roblox_runtime::to_jni(env, roblox_runtime::shared_surface(env, /*make_new=*/true));
 
         using HandleOnly = void (*)(JNIEnv*, jobject, jlong);
         using SurfaceFn = void (*)(JNIEnv*, jobject, jlong, jobject);
@@ -1174,7 +1174,7 @@ extern "C" {
 /// `native_name` was never registered.
 int roblox_game_activity_lifecycle(long handle, const char* native_name, char* err,
                                     size_t err_len) {
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!env || handle == 0) {
         snprintf(err, err_len, "no JavaVM, or no native handle");
         return -1;
@@ -1196,7 +1196,7 @@ int roblox_game_activity_lifecycle(long handle, const char* native_name, char* e
             return -2;
         }
         using HandleOnly = void (*)(JNIEnv*, jobject, jlong);
-        auto jactivity = cordial::to_jni(env, cordial::shared_activity(env));
+        auto jactivity = roblox_runtime::to_jni(env, roblox_runtime::shared_activity(env));
         reinterpret_cast<HandleOnly>(fn)(jni, jactivity, (jlong)handle);
         return 0;
     } catch (const std::exception& e) {
@@ -1214,7 +1214,7 @@ int roblox_game_activity_lifecycle(long handle, const char* native_name, char* e
 /// `onPauseNative` when a run ends, the same way it sends the `true` case
 /// immediately after `onResumeNative` when one starts.
 int roblox_game_activity_window_focus(long handle, int focused, char* err, size_t err_len) {
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!env || handle == 0) {
         snprintf(err, err_len, "no JavaVM, or no native handle");
         return -1;
@@ -1236,7 +1236,7 @@ int roblox_game_activity_window_focus(long handle, int focused, char* err, size_
             return -2;
         }
         using FocusFn = void (*)(JNIEnv*, jobject, jlong, jboolean);
-        auto jactivity = cordial::to_jni(env, cordial::shared_activity(env));
+        auto jactivity = roblox_runtime::to_jni(env, roblox_runtime::shared_activity(env));
         reinterpret_cast<FocusFn>(fn)(jni, jactivity, (jlong)handle,
                                       (jboolean)(focused ? JNI_TRUE : JNI_FALSE));
         return 0;
@@ -1260,7 +1260,7 @@ int roblox_game_activity_window_focus(long handle, int focused, char* err, size_
 /// surface lifetime, it re-announces the current one, exactly as Android does
 /// when asking an already-created surface to be redrawn.
 int roblox_game_activity_surface_redraw_needed(long handle, char* err, size_t err_len) {
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!env || handle == 0) {
         snprintf(err, err_len, "no JavaVM, or no native handle");
         return -1;
@@ -1282,8 +1282,8 @@ int roblox_game_activity_surface_redraw_needed(long handle, char* err, size_t er
             return -2;
         }
         using SurfaceFn = void (*)(JNIEnv*, jobject, jlong, jobject);
-        auto jactivity = cordial::to_jni(env, cordial::shared_activity(env));
-        auto jsurface = cordial::to_jni(env, cordial::shared_surface(env, /*make_new=*/false));
+        auto jactivity = roblox_runtime::to_jni(env, roblox_runtime::shared_activity(env));
+        auto jsurface = roblox_runtime::to_jni(env, roblox_runtime::shared_surface(env, /*make_new=*/false));
         reinterpret_cast<SurfaceFn>(fn)(jni, jactivity, (jlong)handle, jsurface);
         return 0;
     } catch (const std::exception& e) {
@@ -1313,7 +1313,7 @@ extern "C" {
 ///
 /// Wrapped in `PushLocalFrame`/`PopLocalFrame`: unlike the once-per-launch
 /// calls elsewhere in this file, this runs once per input event, and
-/// `cordial::to_jni` parks every object it touches in the current local frame
+/// `roblox_runtime::to_jni` parks every object it touches in the current local frame
 /// (see its own doc comment) — without popping, a long session would grow that
 /// frame without bound.
 /// `NativeInputInterface.nativePassMouseMove(F,F,F,F)` and
@@ -1334,7 +1334,7 @@ extern "C" {
 /// Android implementation does when an IME edits the text.
 int roblox_game_activity_text_input(long handle, const char* text, int sel_start, int sel_end,
                                      char* err, size_t err_len) {
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!env || handle == 0) {
         snprintf(err, err_len, "no JavaVM, or no native handle");
         return -1;
@@ -1351,14 +1351,14 @@ int roblox_game_activity_text_input(long handle, const char* text, int sel_start
             snprintf(err, err_len, "onTextInputEventNative was never registered");
             return -1;
         }
-        auto state = std::make_shared<cordial::TextInputState>();
-        state->text = std::make_shared<cordial::String>(std::string(text ? text : ""));
+        auto state = std::make_shared<roblox_runtime::TextInputState>();
+        state->text = std::make_shared<roblox_runtime::String>(std::string(text ? text : ""));
         state->selectionStart = sel_start;
         state->selectionEnd = sel_end;
 
         using Call = void (*)(JNIEnv*, jobject, jlong, jobject);
-        reinterpret_cast<Call>(it->second)(jni, (jobject)cordial::to_jni(env, cordial::shared_activity(env)), (jlong)handle,
-                                           (jobject)cordial::to_jni(env, state));
+        reinterpret_cast<Call>(it->second)(jni, (jobject)roblox_runtime::to_jni(env, roblox_runtime::shared_activity(env)), (jlong)handle,
+                                           (jobject)roblox_runtime::to_jni(env, state));
         return 0;
     } catch (const std::exception& e) {
         snprintf(err, err_len, "%s", e.what());
@@ -1375,7 +1375,7 @@ int roblox_game_activity_text_input(long handle, const char* text, int sel_start
 /// with the `InputConnection` it just built — to hand native code a reference it
 /// then calls back through for the rest of the session. Cordial has no view
 /// system to trigger that callback, so this drives it directly: construct one
-/// `InputConnection` (see `cordial::shared_input_connection`'s doc for why it is
+/// `InputConnection` (see `roblox_runtime::shared_input_connection`'s doc for why it is
 /// one, kept alive for the process) and call the native the same way Java would
 /// have. Meant to run once, early — see the call site in `load.rs` — not per
 /// frame.
@@ -1384,7 +1384,7 @@ int roblox_game_activity_text_input(long handle, const char* text, int sel_start
 /// `setInputConnectionNative` has not been registered yet, the same
 /// not-yet-vs-failed distinction `touch`/`key` make.
 int roblox_game_activity_set_input_connection(long handle, char* err, size_t err_len) {
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!env || handle == 0) {
         snprintf(err, err_len, "no JavaVM, or no native handle");
         return -1;
@@ -1401,12 +1401,12 @@ int roblox_game_activity_set_input_connection(long handle, char* err, size_t err
             snprintf(err, err_len, "setInputConnectionNative was never registered");
             return -2;
         }
-        auto ic = cordial::shared_input_connection(env);
+        auto ic = roblox_runtime::shared_input_connection(env);
 
         using Call = void (*)(JNIEnv*, jobject, jlong, jobject);
         reinterpret_cast<Call>(it->second)(
-            jni, (jobject)cordial::to_jni(env, cordial::shared_activity(env)), (jlong)handle,
-            (jobject)cordial::to_jni(env, ic));
+            jni, (jobject)roblox_runtime::to_jni(env, roblox_runtime::shared_activity(env)), (jlong)handle,
+            (jobject)roblox_runtime::to_jni(env, ic));
         return 0;
     } catch (const std::exception& e) {
         snprintf(err, err_len, "%s", e.what());
@@ -1425,14 +1425,14 @@ int roblox_game_activity_set_input_connection(long handle, char* err, size_t err
 int roblox_input_key_event(void* fn, int down, int key_code, int modifiers, int is_repeat,
                             char* err, size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jboolean, jint, jint, jboolean);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env) {
         snprintf(err, err_len, "no JavaVM, or nativePassKeyEvent is not exported");
         return -1;
     }
     try {
         auto cls = env->GetClass("com/roblox/engine/jni/NativeGLInterface");
-        reinterpret_cast<Call>(fn)(env->GetJNIEnv(), (jobject)cordial::to_jni(env, cls),
+        reinterpret_cast<Call>(fn)(env->GetJNIEnv(), (jobject)roblox_runtime::to_jni(env, cls),
                                    down ? JNI_TRUE : JNI_FALSE, key_code, modifiers,
                                    is_repeat ? JNI_TRUE : JNI_FALSE);
         return 0;
@@ -1450,16 +1450,16 @@ int roblox_input_key_event(void* fn, int down, int key_code, int modifiers, int 
 int roblox_input_pass_text(void* fn, long long which, const char* text, int flag, int cursor,
                             char* err, size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jlong, jstring, jboolean, jint);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env) {
         snprintf(err, err_len, "no JavaVM, or nativePassText is not exported");
         return -1;
     }
     try {
         auto cls = env->GetClass("com/roblox/engine/jni/NativeGLInterface");
-        auto str = std::make_shared<cordial::String>(std::string(text ? text : ""));
-        reinterpret_cast<Call>(fn)(env->GetJNIEnv(), (jobject)cordial::to_jni(env, cls),
-                                   (jlong)which, (jstring)cordial::to_jni(env, str),
+        auto str = std::make_shared<roblox_runtime::String>(std::string(text ? text : ""));
+        reinterpret_cast<Call>(fn)(env->GetJNIEnv(), (jobject)roblox_runtime::to_jni(env, cls),
+                                   (jlong)which, (jstring)roblox_runtime::to_jni(env, str),
                                    flag ? JNI_TRUE : JNI_FALSE, cursor);
         return 0;
     } catch (const std::exception& e) {
@@ -1484,7 +1484,7 @@ int roblox_input_pass_text(void* fn, long long which, const char* text, int flag
 /// to the engine as a surface it has never seen.
 int roblox_game_activity_surface_resized(long long handle, int format, int width, int height,
                                           char* err, size_t err_len) {
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!env) {
         snprintf(err, err_len, "no JavaVM");
         return -1;
@@ -1497,8 +1497,8 @@ int roblox_game_activity_surface_resized(long long handle, int format, int width
             auto it = cls->natives.find(name);
             return it == cls->natives.end() ? nullptr : it->second;
         };
-        auto jactivity = cordial::to_jni(env, cordial::shared_activity(env));
-        auto jsurface = cordial::to_jni(env, cordial::shared_surface(env, /*make_new=*/false));
+        auto jactivity = roblox_runtime::to_jni(env, roblox_runtime::shared_activity(env));
+        auto jsurface = roblox_runtime::to_jni(env, roblox_runtime::shared_surface(env, /*make_new=*/false));
 
         using SurfaceChangedFn = void (*)(JNIEnv*, jobject, jlong, jobject, jint, jint, jint);
         using RectFn = void (*)(JNIEnv*, jobject, jlong, jint, jint, jint, jint);
@@ -1539,14 +1539,14 @@ int roblox_game_activity_surface_resized(long long handle, int format, int width
 int roblox_input_update_keyboard_size(void* fn, int visible, int x, int y, int w, int h,
                                        char* err, size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jboolean, jint, jint, jint, jint);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env) {
         snprintf(err, err_len, "no JavaVM, or updateKeyboardSize is not exported");
         return -1;
     }
     try {
         auto cls = env->GetClass("com/roblox/engine/jni/NativeGLInterface");
-        reinterpret_cast<Call>(fn)(env->GetJNIEnv(), (jobject)cordial::to_jni(env, cls),
+        reinterpret_cast<Call>(fn)(env->GetJNIEnv(), (jobject)roblox_runtime::to_jni(env, cls),
                                    visible ? JNI_TRUE : JNI_FALSE, x, y, w, h);
         return 0;
     } catch (const std::exception& e) {
@@ -1571,16 +1571,16 @@ int roblox_input_update_keyboard_size(void* fn, int visible, int x, int y, int w
 int roblox_input_sync_textbox(void* fn, const char* text, int cursor, char* err,
                                size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jstring, jint);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env) {
         snprintf(err, err_len, "no JavaVM, or syncTextboxTextAndCursorPosition2 is not exported");
         return -1;
     }
     try {
         auto cls = env->GetClass("com/roblox/engine/jni/NativeGLInterface");
-        auto str = std::make_shared<cordial::String>(std::string(text ? text : ""));
-        reinterpret_cast<Call>(fn)(env->GetJNIEnv(), (jobject)cordial::to_jni(env, cls),
-                                   (jstring)cordial::to_jni(env, str), cursor);
+        auto str = std::make_shared<roblox_runtime::String>(std::string(text ? text : ""));
+        reinterpret_cast<Call>(fn)(env->GetJNIEnv(), (jobject)roblox_runtime::to_jni(env, cls),
+                                   (jstring)roblox_runtime::to_jni(env, str), cursor);
         return 0;
     } catch (const std::exception& e) {
         snprintf(err, err_len, "%s", e.what());
@@ -1594,14 +1594,14 @@ int roblox_input_sync_textbox(void* fn, const char* text, int cursor, char* err,
 int roblox_input_mouse_move(void* fn, float x, float y, float dx, float dy, char* err,
                              size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jfloat, jfloat, jfloat, jfloat);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env) {
         snprintf(err, err_len, "no JavaVM, or nativePassMouseMove is not exported");
         return -1;
     }
     try {
         auto cls = env->GetClass("com/roblox/engine/jni/NativeInputInterface");
-        reinterpret_cast<Call>(fn)(env->GetJNIEnv(), (jobject)cordial::to_jni(env, cls), x, y, dx,
+        reinterpret_cast<Call>(fn)(env->GetJNIEnv(), (jobject)roblox_runtime::to_jni(env, cls), x, y, dx,
                                    dy);
         return 0;
     } catch (const std::exception& e) {
@@ -1616,14 +1616,14 @@ int roblox_input_mouse_move(void* fn, float x, float y, float dx, float dy, char
 int roblox_input_mouse_button(void* fn, float x, float y, int down, int button, char* err,
                                size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jfloat, jfloat, jboolean, jint);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env) {
         snprintf(err, err_len, "no JavaVM, or nativePassMouseButton is not exported");
         return -1;
     }
     try {
         auto cls = env->GetClass("com/roblox/engine/jni/NativeInputInterface");
-        reinterpret_cast<Call>(fn)(env->GetJNIEnv(), (jobject)cordial::to_jni(env, cls), x, y,
+        reinterpret_cast<Call>(fn)(env->GetJNIEnv(), (jobject)roblox_runtime::to_jni(env, cls), x, y,
                                    down ? JNI_TRUE : JNI_FALSE, button);
         return 0;
     } catch (const std::exception& e) {
@@ -1650,14 +1650,14 @@ int roblox_input_mouse_button(void* fn, float x, float y, int down, int button, 
 /// the knob that flips it without a rebuild.
 int roblox_input_mouse_wheel(void* fn, float x, float y, float delta, char* err, size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jfloat, jfloat, jfloat);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env) {
         snprintf(err, err_len, "no JavaVM, or nativePassMouseWheel is not exported");
         return -1;
     }
     try {
         auto cls = env->GetClass("com/roblox/engine/jni/NativeInputInterface");
-        reinterpret_cast<Call>(fn)(env->GetJNIEnv(), (jobject)cordial::to_jni(env, cls), x, y,
+        reinterpret_cast<Call>(fn)(env->GetJNIEnv(), (jobject)roblox_runtime::to_jni(env, cls), x, y,
                                    delta);
         return 0;
     } catch (const std::exception& e) {
@@ -1693,14 +1693,14 @@ int roblox_input_mouse_wheel(void* fn, float x, float y, float delta, char* err,
 int roblox_input_pass_input(void* fn, int pointer_id, float x, float y, int action, int width,
                              int height, char* err, size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jint, jfloat, jfloat, jint, jint, jint);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env) {
         snprintf(err, err_len, "no JavaVM, or nativePassInput is not exported");
         return -1;
     }
     try {
         auto cls = env->GetClass("com/roblox/engine/jni/NativeInputInterface");
-        reinterpret_cast<Call>(fn)(env->GetJNIEnv(), (jobject)cordial::to_jni(env, cls), pointer_id,
+        reinterpret_cast<Call>(fn)(env->GetJNIEnv(), (jobject)roblox_runtime::to_jni(env, cls), pointer_id,
                                    x, y, action, width, height);
         return 0;
     } catch (const std::exception& e) {
@@ -1752,7 +1752,7 @@ int roblox_input_pass_input(void* fn, int pointer_id, float x, float y, int acti
 /// is still not an observation.
 int roblox_input_gamepad_connect(void* fn, int id, int gamepad_type, char* err, size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jint, jint);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env) {
         snprintf(err, err_len,
                  "no JavaVM, or nativeGamepadConnectEventWithGamepadType is not exported");
@@ -1760,7 +1760,7 @@ int roblox_input_gamepad_connect(void* fn, int id, int gamepad_type, char* err, 
     }
     try {
         auto cls = env->GetClass("com/roblox/engine/jni/NativeInputInterface");
-        reinterpret_cast<Call>(fn)(env->GetJNIEnv(), (jobject)cordial::to_jni(env, cls), id,
+        reinterpret_cast<Call>(fn)(env->GetJNIEnv(), (jobject)roblox_runtime::to_jni(env, cls), id,
                                    gamepad_type);
         return 0;
     } catch (const std::exception& e) {
@@ -1778,14 +1778,14 @@ int roblox_input_gamepad_connect(void* fn, int id, int gamepad_type, char* err, 
 /// that the engine keeps the type it was handed at connect.
 int roblox_input_gamepad_disconnect(void* fn, int id, char* err, size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jint);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env) {
         snprintf(err, err_len, "no JavaVM, or nativeGamepadDisconnectEvent is not exported");
         return -1;
     }
     try {
         auto cls = env->GetClass("com/roblox/engine/jni/NativeInputInterface");
-        reinterpret_cast<Call>(fn)(env->GetJNIEnv(), (jobject)cordial::to_jni(env, cls), id);
+        reinterpret_cast<Call>(fn)(env->GetJNIEnv(), (jobject)roblox_runtime::to_jni(env, cls), id);
         return 0;
     } catch (const std::exception& e) {
         snprintf(err, err_len, "%s", e.what());
@@ -1808,14 +1808,14 @@ int roblox_input_gamepad_disconnect(void* fn, int id, char* err, size_t err_len)
 int roblox_input_gamepad_button(void* fn, int id, int key_code, int action, char* err,
                                  size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jint, jint, jint);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env) {
         snprintf(err, err_len, "no JavaVM, or nativeGamepadButtonEvent is not exported");
         return -1;
     }
     try {
         auto cls = env->GetClass("com/roblox/engine/jni/NativeInputInterface");
-        reinterpret_cast<Call>(fn)(env->GetJNIEnv(), (jobject)cordial::to_jni(env, cls), id,
+        reinterpret_cast<Call>(fn)(env->GetJNIEnv(), (jobject)roblox_runtime::to_jni(env, cls), id,
                                    key_code, action);
         return 0;
     } catch (const std::exception& e) {
@@ -1840,14 +1840,14 @@ int roblox_input_gamepad_button(void* fn, int id, int key_code, int action, char
 int roblox_input_gamepad_axis(void* fn, int id, int axis, float x, float y, float z, char* err,
                                size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jint, jint, jfloat, jfloat, jfloat);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env) {
         snprintf(err, err_len, "no JavaVM, or nativeGamepadAxisEvent is not exported");
         return -1;
     }
     try {
         auto cls = env->GetClass("com/roblox/engine/jni/NativeInputInterface");
-        reinterpret_cast<Call>(fn)(env->GetJNIEnv(), (jobject)cordial::to_jni(env, cls), id, axis,
+        reinterpret_cast<Call>(fn)(env->GetJNIEnv(), (jobject)roblox_runtime::to_jni(env, cls), id, axis,
                                    x, y, z);
         return 0;
     } catch (const std::exception& e) {
@@ -1872,7 +1872,7 @@ int roblox_input_gamepad_axis(void* fn, int id, int axis, float x, float y, floa
 int roblox_input_gamepad_supported_key(void* fn, int id, int key_code, int supported,
                                         int gamepad_type, char* err, size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jint, jint, jboolean, jint);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env) {
         snprintf(err, err_len,
                  "no JavaVM, or nativeSetGamepadSupportedKeyWithGamepadType is not exported");
@@ -1880,7 +1880,7 @@ int roblox_input_gamepad_supported_key(void* fn, int id, int key_code, int suppo
     }
     try {
         auto cls = env->GetClass("com/roblox/engine/jni/NativeInputInterface");
-        reinterpret_cast<Call>(fn)(env->GetJNIEnv(), (jobject)cordial::to_jni(env, cls), id,
+        reinterpret_cast<Call>(fn)(env->GetJNIEnv(), (jobject)roblox_runtime::to_jni(env, cls), id,
                                    key_code, supported ? JNI_TRUE : JNI_FALSE, gamepad_type);
         return 0;
     } catch (const std::exception& e) {
@@ -1905,7 +1905,7 @@ int roblox_input_gamepad_supported_key(void* fn, int id, int key_code, int suppo
 int roblox_input_gamepad_supported_motion(void* fn, int id, int axis, int source, int supported,
                                            int gamepad_type, char* err, size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jint, jint, jint, jboolean, jint);
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!fn || !env) {
         snprintf(err, err_len,
                  "no JavaVM, or nativeSetGamepadSupportedMotionWithGamepadType is not exported");
@@ -1913,7 +1913,7 @@ int roblox_input_gamepad_supported_motion(void* fn, int id, int axis, int source
     }
     try {
         auto cls = env->GetClass("com/roblox/engine/jni/NativeInputInterface");
-        reinterpret_cast<Call>(fn)(env->GetJNIEnv(), (jobject)cordial::to_jni(env, cls), id, axis,
+        reinterpret_cast<Call>(fn)(env->GetJNIEnv(), (jobject)roblox_runtime::to_jni(env, cls), id, axis,
                                    source, supported ? JNI_TRUE : JNI_FALSE, gamepad_type);
         return 0;
     } catch (const std::exception& e) {
@@ -1937,10 +1937,10 @@ int roblox_input_gamepad_supported_motion(void* fn, int id, int axis, int source
 int roblox_game_activity_scroll(long handle, float x, float y, float hscroll, float vscroll,
                                  long long event_time_ms, int* consumed, char* err,
                                  size_t err_len) {
-    return cordial::deliver_motion(
+    return roblox_runtime::deliver_motion(
         handle,
-        [&](cordial::ENV* env) {
-            return cordial::MotionEvent::CreateScroll(env, x, y, hscroll, vscroll,
+        [&](roblox_runtime::ENV* env) {
+            return roblox_runtime::MotionEvent::CreateScroll(env, x, y, hscroll, vscroll,
                                                       (jlong)event_time_ms);
         },
         consumed, err, err_len);
@@ -1950,10 +1950,10 @@ int roblox_game_activity_touch(long handle, int action, float x, float y, int bu
                                 int action_button, long long event_time_ms,
                                 long long down_time_ms, int* consumed, char* err,
                                 size_t err_len) {
-    return cordial::deliver_motion(
+    return roblox_runtime::deliver_motion(
         handle,
-        [&](cordial::ENV* env) {
-            return cordial::MotionEvent::Create(env, x, y, action, button_state, action_button,
+        [&](roblox_runtime::ENV* env) {
+            return roblox_runtime::MotionEvent::Create(env, x, y, action, button_state, action_button,
                                                 (jlong)event_time_ms, (jlong)down_time_ms);
         },
         consumed, err, err_len);
@@ -1984,10 +1984,10 @@ int roblox_game_activity_touch_multi(long handle, int action,
         snprintf(err, err_len, "a touch event with no contacts");
         return -1;
     }
-    return cordial::deliver_motion(
+    return roblox_runtime::deliver_motion(
         handle,
-        [&](cordial::ENV* env) {
-            return cordial::MotionEvent::CreateTouch(env, contacts, count, action,
+        [&](roblox_runtime::ENV* env) {
+            return roblox_runtime::MotionEvent::CreateTouch(env, contacts, count, action,
                                                      (jlong)event_time_ms, (jlong)down_time_ms);
         },
         consumed, err, err_len);
@@ -2001,7 +2001,7 @@ int roblox_game_activity_touch_multi(long handle, int action,
 int roblox_game_activity_key(long handle, int down, int key_code, int scan_code, int meta_state,
                               int repeat_count, int unicode_char, long long event_time_ms,
                               long long down_time_ms, int* consumed, char* err, size_t err_len) {
-    auto* env = cordial::process_env();
+    auto* env = roblox_runtime::process_env();
     if (!env || handle == 0) {
         snprintf(err, err_len, "no JavaVM, or no native handle");
         return -1;
@@ -2026,12 +2026,12 @@ int roblox_game_activity_key(long handle, int down, int key_code, int scan_code,
 
         jni->PushLocalFrame(8);
 
-        auto jactivity = cordial::to_jni(env, cordial::shared_activity(env));
-        auto event = cordial::KeyEvent::Create(env, down ? JNI_TRUE : JNI_FALSE, (jint)key_code,
+        auto jactivity = roblox_runtime::to_jni(env, roblox_runtime::shared_activity(env));
+        auto event = roblox_runtime::KeyEvent::Create(env, down ? JNI_TRUE : JNI_FALSE, (jint)key_code,
                                                (jint)scan_code, (jint)meta_state,
                                                (jint)repeat_count, (jint)unicode_char,
                                                (jlong)event_time_ms, (jlong)down_time_ms);
-        auto jevent = cordial::to_jni(env, event);
+        auto jevent = roblox_runtime::to_jni(env, event);
 
         using KeyFn = jboolean (*)(JNIEnv*, jobject, jlong, jobject);
         jboolean r = reinterpret_cast<KeyFn>(fn)(jni, jactivity, (jlong)handle, jevent);
@@ -2073,7 +2073,7 @@ int roblox_game_activity_key(long handle, int down, int key_code, int scan_code,
 extern "C" int roblox_registered_natives(const char* class_name, char* out, size_t out_len) {
     if (!class_name || !out || out_len == 0) return -1;
     out[0] = '\0';
-    jnivm::ENV* env = cordial::process_env();
+    jnivm::ENV* env = roblox_runtime::process_env();
     if (!env) {
         snprintf(out, out_len, "no JNI environment yet");
         return -1;

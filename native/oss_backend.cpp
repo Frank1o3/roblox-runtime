@@ -57,7 +57,7 @@
 #include <sys/soundcard.h>
 #include <unistd.h>
 
-namespace cordial::audio {
+namespace roblox_runtime::audio {
 namespace {
 
 /// What the engine is given, and what Cordial converts from.
@@ -150,7 +150,7 @@ void OssStream::writer() {
                 // retrying into it would spin. Reported once, then the stream
                 // stops -- a gap that says so beats one that busy-loops.
                 std::fprintf(stderr,
-                    "E/Cordial-OSS             write to %s failed: %s; the stream is stopping.\n",
+                    "E/RobloxRuntime-OSS             write to %s failed: %s; the stream is stopping.\n",
                     device_path(), std::strerror(errno));
                 return;
             }
@@ -164,7 +164,7 @@ bool OssStream::open(uint32_t, bool, const char*, const char*, FillCallback cb, 
     const char* path = device_path();
     fd_ = ::open(path, O_WRONLY | O_CLOEXEC);
     if (fd_ < 0) {
-        std::fprintf(stderr, "W/Cordial-OSS             cannot open %s: %s\n", path,
+        std::fprintf(stderr, "W/RobloxRuntime-OSS             cannot open %s: %s\n", path,
                      std::strerror(errno));
         return false;
     }
@@ -176,20 +176,20 @@ bool OssStream::open(uint32_t, bool, const char*, const char*, FillCallback cb, 
     int fmt = AFMT_S16_NE;
     if (::ioctl(fd_, SNDCTL_DSP_SETFMT, &fmt) < 0 || fmt != AFMT_S16_NE) {
         std::fprintf(stderr,
-            "W/Cordial-OSS             %s will not take 16-bit native-endian PCM.\n", path);
+            "W/RobloxRuntime-OSS             %s will not take 16-bit native-endian PCM.\n", path);
         close();
         return false;
     }
     int ch = static_cast<int>(kChannels);
     if (::ioctl(fd_, SNDCTL_DSP_CHANNELS, &ch) < 0) {
-        std::fprintf(stderr, "W/Cordial-OSS             %s refused %u channels.\n", path,
+        std::fprintf(stderr, "W/RobloxRuntime-OSS             %s refused %u channels.\n", path,
                      kChannels);
         close();
         return false;
     }
     int rate = static_cast<int>(kRate);
     if (::ioctl(fd_, SNDCTL_DSP_SPEED, &rate) < 0) {
-        std::fprintf(stderr, "W/Cordial-OSS             %s refused %u Hz.\n", path, kRate);
+        std::fprintf(stderr, "W/RobloxRuntime-OSS             %s refused %u Hz.\n", path, kRate);
         close();
         return false;
     }
@@ -208,7 +208,7 @@ bool OssStream::open(uint32_t, bool, const char*, const char*, FillCallback cb, 
     user_ = user;
     quit_.store(false, std::memory_order_relaxed);
 
-    std::fprintf(stderr, "I/Cordial-OSS             %s at %u Hz, %u channels, %u-frame periods\n",
+    std::fprintf(stderr, "I/RobloxRuntime-OSS             %s at %u Hz, %u channels, %u-frame periods\n",
                  path, rate_, channels_, period_);
     thread_ = std::thread([this] { writer(); });
     return true;
@@ -252,11 +252,11 @@ bool oss_available() {
 
 std::unique_ptr<OutputStream> make_oss_stream() { return std::make_unique<OssStream>(); }
 
-} // namespace cordial::audio
+} // namespace roblox_runtime::audio
 
 #else // !RBX_RUNTIME_HAVE_OSS
 
-namespace cordial::audio {
+namespace roblox_runtime::audio {
 
 // Built without <sys/soundcard.h>. Honest rather than absent, so the selector
 // can tell a run that asked for OSS that it did not get it.
@@ -264,6 +264,6 @@ bool oss_available() { return false; }
 
 std::unique_ptr<OutputStream> make_oss_stream() { return nullptr; }
 
-} // namespace cordial::audio
+} // namespace roblox_runtime::audio
 
 #endif

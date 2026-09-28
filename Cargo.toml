@@ -1,32 +1,32 @@
 [workspace]
-    default-members=["."]
-    members=[".", "crates/jni", "crates/linker", "crates/abi"]
-    resolver="3"
+resolver = "3"
+members = [".", "crates/jni", "crates/linker", "crates/abi"]
+default-members = ["."]
 
-    [workspace.package]
-        edition="2024"
-        license="GPL-3.0-or-later"
-        version="0.1.0"
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
 
 [package]
-    description="Embeddable Roblox Android runtime for Linux"
-    edition.workspace=true
-    license.workspace=true
-    name="roblox-runtime"
-    version.workspace=true
+name = "roblox-runtime"
+description = "Embeddable Roblox Android runtime for Linux"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
 
 [dependencies]
-    roblox-jni={path="crates/jni"}
-    roblox-linker={path="crates/linker"}
-    roblox-abi={path="crates/abi"}
-    serde_json="1"
+roblox-jni = { path = "crates/jni" }
+roblox-linker = { path = "crates/linker" }
+roblox-abi = { path = "crates/abi" }
+serde_json = "1"
 
 [lints.rust]
-    unsafe_code="deny"
-    unsafe_op_in_unsafe_fn="deny"
+unsafe_code = "deny"
+unsafe_op_in_unsafe_fn = "deny"
 
 [lints.clippy]
-    undocumented_unsafe_blocks="warn"
+undocumented_unsafe_blocks = "warn"
 
 [profile.release]
-    debug=true
+debug = true

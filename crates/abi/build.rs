@@ -72,4 +72,14 @@ fn main() {
     std::fs::write(&dest, out).unwrap();
 
     println!("cargo:warning=generated {} stubs", symbols.len());
+
+    let native = PathBuf::from(
+        std::env::var_os("DEP_ROBLOX_LINKER_SHIM_ROOT")
+            .expect("roblox-linker must expose its native build directory"),
+    );
+    println!("cargo:rustc-link-search=native={}/lib", native.display());
+    println!("cargo:rustc-link-lib=static=roblox_liblog");
+    for library in ["stdc++", "z", "dl", "pthread"] {
+        println!("cargo:rustc-link-lib=dylib={library}");
+    }
 }

@@ -425,7 +425,7 @@ const PROPERTIES: &[(&str, &str)] = &[
     ("ro.product.brand", "roblox-runtime"),
     ("ro.product.device", "linux"),
     ("ro.product.name", "roblox-runtime"),
-    ("ro.hardware", "cordial"),
+    ("ro.hardware", "linux"),
     // **`ro.soc.manufacturer` is deliberately not here, and this comment is the
     // answer to issue #12 rather than a note that nobody got round to it.**
     //
@@ -447,7 +447,7 @@ const PROPERTIES: &[(&str, &str)] = &[
     // fails honestly, so `""` stays. If something is ever traced to it, this is
     // the comment to come back to and the trace is the thing that would settle
     // it -- not a guess at a vendor name.
-    ("ro.board.platform", "cordial"),
+    ("ro.board.platform", "linux"),
     ("ro.debuggable", "0"),
     ("ro.secure", "1"),
 ];

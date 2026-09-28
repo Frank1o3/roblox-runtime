@@ -8,7 +8,7 @@
 #include <cstdint>
 #include <memory>
 
-namespace cordial::audio {
+namespace roblox_runtime::audio {
 
 class InputCallbackDriver {
 public:
@@ -43,4 +43,4 @@ private:
     std::unique_ptr<Impl> impl_;
 };
 
-} // namespace cordial::audio
+} // namespace roblox_runtime::audio

@@ -71,7 +71,7 @@
 #include <dlfcn.h>
 #include <pulse/pulseaudio.h>
 
-namespace cordial::audio {
+namespace roblox_runtime::audio {
 namespace {
 
 /// Everything this file calls in `libpulse`, resolved once.
@@ -117,7 +117,7 @@ const Pulse* pulse() {
         void* lib = ::dlopen("libpulse.so.0", RTLD_LAZY | RTLD_LOCAL);
         if (!lib) {
             std::fprintf(stderr,
-                "I/Cordial-Pulse           libpulse.so.0 is not on this machine; the PulseAudio "
+                "I/RobloxRuntime-Pulse           libpulse.so.0 is not on this machine; the PulseAudio "
                 "backend is unavailable.\n");
             return nullptr;
         }
@@ -127,7 +127,7 @@ const Pulse* pulse() {
             void* sym = ::dlsym(lib, name);
             if (!sym) {
                 std::fprintf(stderr,
-                    "E/Cordial-Pulse           libpulse.so.0 has no %s; refusing to use a "
+                    "E/RobloxRuntime-Pulse           libpulse.so.0 has no %s; refusing to use a "
                     "half-resolved backend.\n", name);
                 ok = false;
                 return;
@@ -325,7 +325,7 @@ bool PulseStream::open(uint32_t, bool, const char* node_description,
         if (st == PA_CONTEXT_FAILED || st == PA_CONTEXT_TERMINATED) {
             pa->mainloop_unlock(loop_);
             std::fprintf(stderr,
-                "I/Cordial-Pulse           no PulseAudio server answered; this backend is "
+                "I/RobloxRuntime-Pulse           no PulseAudio server answered; this backend is "
                 "unavailable for this run.\n");
             close();
             return false;
@@ -372,7 +372,7 @@ bool PulseStream::open(uint32_t, bool, const char* node_description,
     pa->mainloop_unlock(loop_);
 
     std::fprintf(stderr,
-        "I/Cordial-Pulse           opened %u Hz, %u channel(s), PCM_FLOAT, %u frames per burst, "
+        "I/RobloxRuntime-Pulse           opened %u Hz, %u channel(s), PCM_FLOAT, %u frames per burst, "
         "on %s.\n", rate_, channels_, burst_.load(std::memory_order_relaxed),
         sink ? sink : "the server's default sink");
     return true;
@@ -445,11 +445,11 @@ bool pulse_available() {
 
 std::unique_ptr<OutputStream> make_pulse_stream() { return std::make_unique<PulseStream>(); }
 
-} // namespace cordial::audio
+} // namespace roblox_runtime::audio
 
 #else // !RBX_RUNTIME_HAVE_PULSE
 
-namespace cordial::audio {
+namespace roblox_runtime::audio {
 
 // Built without pulseaudio-libs-devel. Honest rather than absent: the selector
 // asks `pulse_available()` and gets a truthful no, so a run that asked for this
@@ -457,6 +457,6 @@ namespace cordial::audio {
 bool pulse_available() { return false; }
 std::unique_ptr<OutputStream> make_pulse_stream() { return nullptr; }
 
-} // namespace cordial::audio
+} // namespace roblox_runtime::audio
 
 #endif // RBX_RUNTIME_HAVE_PULSE

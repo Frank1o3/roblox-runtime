@@ -573,7 +573,7 @@ struct AudioPlayerObject {
     std::atomic<SLuint32> state{SL_OBJECT_STATE_UNREALIZED};
     std::atomic<SLuint32> playState{SL_PLAYSTATE_STOPPED};
 
-    cordial::audio::PlaybackStream stream;
+    roblox_runtime::audio::PlaybackStream stream;
 
     // Format, captured at CreateAudioPlayer time from the caller's
     // SLDataFormat_PCM and used to open `stream` at Realize.
@@ -627,7 +627,7 @@ SLresult player_Realize(SLObjectItf self, SLboolean) {
     // choice that only applied to two of the three would be a setting that
     // works or does not depending on a decision the user never sees.
     if (!p->stream.open(p->rateHz, p->channels, p->bitsPerSample, p->containerBits, p->bigEndian,
-                         p->numBuffers, cordial::audio::configured_output_device())) {
+                         p->numBuffers, roblox_runtime::audio::configured_output_device())) {
         // pipewire_backend.cpp already printed the specific reason (unsupported
         // layout, or the stream failed to connect).
         return SL_RESULT_CONTENT_UNSUPPORTED;
@@ -885,7 +885,7 @@ SLresult androidconfig_SetConfiguration(SLAndroidConfigurationItf, const SLchar*
                 std::memcpy(&value, pConfigValue, sizeof(SLuint32));
             }
             std::fprintf(stderr,
-                "I/Cordial-OpenSLES         SLAndroidConfigurationItf::SetConfiguration('%s', "
+                "I/RobloxRuntime-OpenSLES         SLAndroidConfigurationItf::SetConfiguration('%s', "
                 "%u, %u bytes) — accepted and discarded; there is no Android audio path to "
                 "select on this host.\n", key.c_str(), value, valueSize);
         }
@@ -956,7 +956,7 @@ struct AudioRecorderObject {
     std::atomic<SLuint32> state{SL_OBJECT_STATE_UNREALIZED};
     std::atomic<SLuint32> recordState{SL_RECORDSTATE_STOPPED};
 
-    cordial::audio::CaptureStream capture;
+    roblox_runtime::audio::CaptureStream capture;
 
     uint32_t rateHz = 0;
     uint32_t channels = 0;
@@ -1143,7 +1143,7 @@ SLresult record_SetRecordState(SLRecordItf self, SLuint32 state) {
                 // paying for: the engine would sit on a buffer queue that never
                 // drains, with nothing to say why.
                 std::fprintf(stderr,
-                    "E/Cordial-OpenSLES         SetRecordState(RECORDING) could not open a "
+                    "E/RobloxRuntime-OpenSLES         SetRecordState(RECORDING) could not open a "
                     "capture stream; staying STOPPED rather than reporting a recording that "
                     "is not happening.\n");
                 r->recordState.store(SL_RECORDSTATE_STOPPED);
@@ -1447,7 +1447,7 @@ SLresult engine_CreateAudioRecorder(SLEngineItf, SLObjectItf* pRecorder, SLDataS
     if (srcLocator->deviceType != SL_IODEVICE_AUDIOINPUT) return SL_RESULT_CONTENT_UNSUPPORTED;
     if (srcLocator->deviceID != SL_DEFAULTDEVICEID_AUDIOINPUT) {
         std::fprintf(stderr,
-            "E/Cordial-OpenSLES         CreateAudioRecorder asked for input device id 0x%08X; "
+            "E/RobloxRuntime-OpenSLES         CreateAudioRecorder asked for input device id 0x%08X; "
             "only SL_DEFAULTDEVICEID_AUDIOINPUT is implemented, and serving a different "
             "microphone than the one asked for would be worse than refusing.\n",
             srcLocator->deviceID);
@@ -1471,7 +1471,7 @@ SLresult engine_CreateAudioRecorder(SLEngineItf, SLObjectItf* pRecorder, SLDataS
     if (fmt->bitsPerSample != 16 || fmt->containerSize != 16 ||
         fmt->endianness == SL_BYTEORDER_BIGENDIAN) {
         std::fprintf(stderr,
-            "E/Cordial-OpenSLES         CreateAudioRecorder asked for %u-bit samples in a "
+            "E/RobloxRuntime-OpenSLES         CreateAudioRecorder asked for %u-bit samples in a "
             "%u-bit container; this backend records signed 16-bit native-endian PCM only.\n",
             fmt->bitsPerSample, fmt->containerSize);
         return SL_RESULT_CONTENT_UNSUPPORTED;
@@ -1500,7 +1500,7 @@ SLresult engine_CreateAudioRecorder(SLEngineItf, SLObjectItf* pRecorder, SLDataS
     // records through OpenSL ES becomes distinguishable from one that does not,
     // and nobody has yet observed it happen. No microphone is opened here.
     std::fprintf(stderr,
-        "I/Cordial-OpenSLES         CreateAudioRecorder(%u Hz, %u channel(s), %u buffers) — "
+        "I/RobloxRuntime-OpenSLES         CreateAudioRecorder(%u Hz, %u channel(s), %u buffers) — "
         "recorder created; no capture stream exists until SetRecordState(RECORDING).\n",
         recorder->rateHz, recorder->channels, recorder->numBuffers);
 
@@ -1606,7 +1606,7 @@ uint32_t slCreateEngine(void** engine, uint32_t numOptions, const void* pEngineO
     // it is also printed by device enumeration and by `supportsAAudio()` --
     // which is why that line no longer claims anything about OpenSL ES.
     std::fprintf(stderr,
-        "I/Cordial-OpenSLES         slCreateEngine called by the engine (%u option(s), %u "
+        "I/RobloxRuntime-OpenSLES         slCreateEngine called by the engine (%u option(s), %u "
         "interface(s) requested).\n", numOptions, numInterfaces);
 
     if (engine) *engine = nullptr;
@@ -1619,7 +1619,7 @@ uint32_t slCreateEngine(void** engine, uint32_t numOptions, const void* pEngineO
         if (required && id != SL_IID_ENGINE) return SL_RESULT_FEATURE_UNSUPPORTED;
     }
 
-    if (!cordial::audio::pipewire_available()) {
+    if (!roblox_runtime::audio::pipewire_available()) {
         return SL_RESULT_FEATURE_UNSUPPORTED;
     }
     if (!engine) return SL_RESULT_PARAMETER_INVALID;
