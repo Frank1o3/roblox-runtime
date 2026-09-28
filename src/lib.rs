@@ -320,6 +320,29 @@ impl LoadedEngine {
         .map_err(JniError::GameActivity)
     }
 
+    /// Deliver the initial client surface through GameActivity's native
+    /// lifecycle callbacks after `initialize_game_activity` has succeeded.
+    pub fn start_game_activity(
+        &self,
+        handle: i64,
+        width: u32,
+        height: u32,
+        format: i32,
+    ) -> Result<(), JniError> {
+        if self.constructors_pending {
+            return Err(JniError::ConstructorsDeferred);
+        }
+        if !self.jni_initialized || roblox_jni::jni::env().is_none() {
+            return Err(JniError::JniNotInitialized);
+        }
+        let width = i32::try_from(width)
+            .map_err(|_| JniError::GameActivity("surface width exceeds Android limits".into()))?;
+        let height = i32::try_from(height)
+            .map_err(|_| JniError::GameActivity("surface height exceeds Android limits".into()))?;
+        roblox_jni::game_activity::start(handle, width, height, format)
+            .map_err(JniError::GameActivity)
+    }
+
     /// Deliver a host-window resize to Roblox's app bridge and GameActivity.
     ///
     /// `assets` is the extracted Android asset directory. Resize the host
