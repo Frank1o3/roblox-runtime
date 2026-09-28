@@ -1,9 +1,9 @@
 # roblox-runtime
 
 Standalone runtime for executing the Roblox Android client on Linux. This
-repository owns Android compatibility and native loading; a separate client
-supplies the APK, extracted libraries, data/cache directories, settings and
-Fast Flags.
+repository owns Android compatibility and native loading; the `rusty-blox`
+client supplies the base/split APKs, extracted libraries, data/cache
+directories, settings, Fast Flags and host rendering surface.
 
 The workspace is being extracted from the local `rbx-native-runtime` reference
 implementation. See [the runtime audit](docs/runtime-audit.md) for source

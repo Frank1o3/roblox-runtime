@@ -145,7 +145,7 @@ host as Linux/Roblox Runtime. The native linker implementation remains the
 same local implementation and both native dependencies are represented by
 their source-pinned submodules.
 
-The root API currently defines caller-supplied APK, native-library, data,
+The root API currently defines caller-supplied base/split APK, native-library, data,
 cache, Fast Flag, and settings inputs and validates empty paths. It prepares the
 initial Android configuration, files directory, and `/system` font tree from
 those supplied paths; it does not yet launch Roblox. The remaining Android
@@ -164,7 +164,8 @@ parity.
 ## Client and renderer contract
 
 `RuntimeConfig::apk_paths` carries the base APK and any split APKs as paths
-selected/imported by the client. `RuntimeOptions::graphics_backend` records an explicit runtime preference:
+selected/imported by the client. `RuntimeOptions::graphics_backend` records an
+explicit runtime preference:
 automatic chooses Vulkan when available for the supplied surface and otherwise
 OpenGL ES; a forced Vulkan request reports unavailable support instead of
 silently changing the user's choice. This is preference resolution only: the
@@ -177,5 +178,8 @@ surface contract must support both the current Wayland same-connection
 requirement and X11 without making the runtime create a toplevel. Host events
 enter through a runtime input API, where Android `MotionEvent` and `KeyEvent`
 delivery remains implemented; no host event loop belongs in the runtime core.
-`rusty-blox` is currently a placeholder and has not yet implemented APK import,
-surface creation or event forwarding.
+`rusty-blox` now discovers Sober's base and x86-64 split APK, imports both into
+its managed data root and extracts native libraries from the split. The client
+builds a `RuntimeConfig` and prepares Android filesystem paths, but window
+creation, game startup, surface handoff and event forwarding are pending; the
+runtime has no game-start method yet.
