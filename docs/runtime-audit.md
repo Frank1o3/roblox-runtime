@@ -1,6 +1,6 @@
 # Runtime extraction audit
 
-This audit is based on the local `rbx-native-runtime` tree at the time of
+This audit is based on the local `Cordial` tree at the time of
 extraction. It is the source of truth; no upstream Cordial copy was consulted.
 The source tree was clean at audit time. This file precedes the code migration
 so that launcher boundaries are reviewable before any source is omitted.
