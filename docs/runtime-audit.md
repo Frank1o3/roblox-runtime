@@ -163,7 +163,8 @@ parity.
 
 ## Client and renderer contract
 
-`RuntimeOptions::graphics_backend` records an explicit runtime preference:
+`RuntimeConfig::apk_paths` carries the base APK and any split APKs as paths
+selected/imported by the client. `RuntimeOptions::graphics_backend` records an explicit runtime preference:
 automatic chooses Vulkan when available for the supplied surface and otherwise
 OpenGL ES; a forced Vulkan request reports unavailable support instead of
 silently changing the user's choice. This is preference resolution only: the

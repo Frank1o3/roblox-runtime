@@ -11,8 +11,8 @@ pub mod graphics;
 /// Paths and options supplied by the embedding client.
 #[derive(Clone, Debug)]
 pub struct RuntimeConfig {
-    /// APK or application bundle supplied by the caller.
-    pub apk: PathBuf,
+    /// Base APK and split APKs supplied by the caller.
+    pub apk_paths: Vec<PathBuf>,
     /// Directory containing extracted Android native libraries.
     pub native_lib_dir: PathBuf,
     /// Android-visible writable data directory.
@@ -38,8 +38,15 @@ pub struct RuntimeOptions {
 impl RuntimeConfig {
     /// Reject missing paths before starting native compatibility code.
     pub fn validate_paths(&self) -> Result<(), ConfigError> {
+        if self.apk_paths.is_empty() {
+            return Err(ConfigError::NoApks);
+        }
+        for path in &self.apk_paths {
+            if path.as_os_str().is_empty() {
+                return Err(ConfigError::EmptyPath("APK"));
+            }
+        }
         for (name, path) in [
-            ("APK", self.apk.as_path()),
             ("native library directory", self.native_lib_dir.as_path()),
             ("data directory", self.data_dir.as_path()),
             ("cache directory", self.cache_dir.as_path()),
@@ -64,12 +71,14 @@ impl RuntimeConfig {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ConfigError {
     EmptyPath(&'static str),
+    NoApks,
 }
 
 impl std::fmt::Display for ConfigError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::EmptyPath(name) => write!(f, "{name} path is empty"),
+            Self::NoApks => f.write_str("at least one APK path is required"),
         }
     }
 }
