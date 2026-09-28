@@ -20,7 +20,7 @@ roblox-jni = { path = "crates/jni" }
 roblox-linker = { path = "crates/linker" }
 roblox-abi = { path = "crates/abi" }
 roblox-android = { path = "crates/android" }
-serde_json = "1"
+serde_json = "1.0.151"
 
 [lints.rust]
 unsafe_code = "deny"
