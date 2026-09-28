@@ -319,6 +319,58 @@ impl LoadedEngine {
         }
         .map_err(JniError::GameActivity)
     }
+
+    /// Deliver a host-window resize to Roblox's app bridge and GameActivity.
+    ///
+    /// `assets` is the extracted Android asset directory. Resize the host
+    /// window (including its `wl_egl_window`) before calling this method.
+    #[allow(unsafe_code)]
+    pub fn resize_surface(
+        &self,
+        game_activity: i64,
+        assets: &str,
+        format: i32,
+        width: u32,
+        height: u32,
+    ) -> Result<(), JniError> {
+        if self.constructors_pending {
+            return Err(JniError::ConstructorsDeferred);
+        }
+        if !self.jni_initialized || roblox_jni::jni::env().is_none() {
+            return Err(JniError::JniNotInitialized);
+        }
+        let width_i32 = i32::try_from(width)
+            .map_err(|_| JniError::SurfaceUpdate("width exceeds Android's integer range".into()))?;
+        let height_i32 = i32::try_from(height).map_err(|_| {
+            JniError::SurfaceUpdate("height exceeds Android's integer range".into())
+        })?;
+        let app = self
+            .symbol("Java_com_roblox_engine_jni_NativeGLInterface_nativeAppBridgeV2UpdateSurfaceAppWithPlatformParams")
+            .ok_or(JniError::MissingSurfaceUpdateNative("app"))?;
+        let game = self
+            .symbol("Java_com_roblox_engine_jni_NativeGLInterface_nativeAppBridgeV2UpdateSurfaceGameWithPlatformParams")
+            .ok_or(JniError::MissingSurfaceUpdateNative("game"))?;
+
+        graphics::resize_surface(width, height)
+            .map_err(|error| JniError::SurfaceUpdate(error.to_string()))?;
+        // SAFETY: both addresses are exports from this mapped library and the
+        // live JavaVM was checked above. `assets` remains valid for each call.
+        unsafe {
+            roblox_jni::game_activity::appbridge_update_surface(
+                app, assets, width_i32, height_i32, false,
+            )
+        }
+        .map_err(JniError::SurfaceUpdate)?;
+        // SAFETY: same conditions as the app surface update above.
+        unsafe {
+            roblox_jni::game_activity::appbridge_update_surface(
+                game, assets, width_i32, height_i32, true,
+            )
+        }
+        .map_err(JniError::SurfaceUpdate)?;
+        roblox_jni::game_activity::surface_resized(game_activity, format, width_i32, height_i32)
+            .map_err(JniError::SurfaceUpdate)
+    }
 }
 
 /// Failure during JavaVM or AGDK GameActivity initialisation.
@@ -332,8 +384,10 @@ pub enum JniError {
     MissingOnLoad,
     MissingGameActivityInit,
     MissingPreConstructorNative(&'static str),
+    MissingSurfaceUpdateNative(&'static str),
     DirectorySetup(String),
     PreConstructorNative(String),
+    SurfaceUpdate(String),
     OnLoad(String),
     GameActivity(String),
 }
@@ -359,12 +413,19 @@ impl std::fmt::Display for JniError {
             Self::MissingPreConstructorNative(name) => {
                 write!(f, "required pre-constructor native is not exported: {name}")
             }
+            Self::MissingSurfaceUpdateNative(which) => {
+                write!(
+                    f,
+                    "app bridge does not export the {which} surface update native"
+                )
+            }
             Self::DirectorySetup(message) => {
                 write!(f, "cannot prepare engine directories: {message}")
             }
             Self::PreConstructorNative(message) => {
                 write!(f, "pre-constructor directory setter failed: {message}")
             }
+            Self::SurfaceUpdate(message) => write!(f, "surface resize failed: {message}"),
             Self::OnLoad(message) => write!(f, "JNI_OnLoad failed: {message}"),
             Self::GameActivity(message) => {
                 write!(f, "GameActivity initialization failed: {message}")

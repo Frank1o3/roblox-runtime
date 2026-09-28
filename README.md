@@ -24,6 +24,9 @@ yet create the client window or renderer context. GLES3 is the only supported
 backend; Vulkan requests fail explicitly until its Android loader and surface
 adapter are ported. The runtime checks the installed surface and host EGL/GLES
 libraries before engine constructors run.
+After startup, `LoadedEngine::resize_surface` updates the Android window
+dimensions and delivers both app-bridge surface updates plus GameActivity's
+surface-changed callback.
 
 Build with a recent stable Rust toolchain, Clang/Clang++, CMake, GNU `patch`,
 and initialized Git submodules:

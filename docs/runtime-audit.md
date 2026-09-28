@@ -190,6 +190,11 @@ and an explicit Vulkan request reports unavailable support. The runtime does
 not yet create a host window, EGL context, Vulkan surface, or perform a rendered
 game launch; no client launch claim is made.
 
+`LoadedEngine::resize_surface` now updates the installed dimensions and sends
+both app-bridge surface updates followed by GameActivity's surface-changed
+callback. This path compiles but has not yet been observed against a running
+client.
+
 At this stage `cargo fmt --all -- --check`, `cargo check --workspace`, and
 `cargo test --workspace` pass, including ELF parser and resolver tests. Strict workspace Clippy remains failing in
 `roblox-abi` on inherited undocumented unsafe blocks and existing style lints

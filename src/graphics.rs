@@ -54,6 +54,13 @@ pub fn clear_surface() {
     roblox_android::native_window::clear();
 }
 
+/// Update the installed client surface after its host window is resized.
+pub fn resize_surface(width: u32, height: u32) -> Result<(), SurfaceError> {
+    roblox_android::native_window::resize(width, height)?;
+    roblox_jni::game_activity::set_display_size(width as i32, height as i32);
+    Ok(())
+}
+
 /// Whether the client has installed a renderable surface.
 pub fn has_surface() -> bool {
     roblox_android::native_window::is_installed()

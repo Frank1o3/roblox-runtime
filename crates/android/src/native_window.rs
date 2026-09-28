@@ -42,7 +42,7 @@ impl HostSurface {
         if display.is_null() || window == 0 {
             return Err(SurfaceError::InvalidHandle);
         }
-        if width == 0 || height == 0 {
+        if width == 0 || height == 0 || width > i32::MAX as u32 || height > i32::MAX as u32 {
             return Err(SurfaceError::InvalidDimensions);
         }
         Ok(Self::Xlib {
@@ -70,7 +70,7 @@ impl HostSurface {
         if display.is_null() || surface.is_null() || egl_window.is_null() {
             return Err(SurfaceError::InvalidHandle);
         }
-        if width == 0 || height == 0 {
+        if width == 0 || height == 0 || width > i32::MAX as u32 || height > i32::MAX as u32 {
             return Err(SurfaceError::InvalidDimensions);
         }
         Ok(Self::Wayland {
@@ -133,6 +133,37 @@ pub fn install(surface: HostSurface) {
     WIDTH.store(width as i32, Ordering::Release);
     HEIGHT.store(height as i32, Ordering::Release);
     FORMAT.store(1, Ordering::Release);
+}
+
+/// Update the host-owned window dimensions after a resize event.
+pub fn resize(width: u32, height: u32) -> Result<(), SurfaceError> {
+    if width == 0 || height == 0 || width > i32::MAX as u32 || height > i32::MAX as u32 {
+        return Err(SurfaceError::InvalidDimensions);
+    }
+    let mut current = current_lock()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let Some(surface) = current.as_mut() else {
+        return Err(SurfaceError::InvalidHandle);
+    };
+    match surface {
+        HostSurface::Xlib {
+            width: current_width,
+            height: current_height,
+            ..
+        }
+        | HostSurface::Wayland {
+            width: current_width,
+            height: current_height,
+            ..
+        } => {
+            *current_width = width;
+            *current_height = height;
+        }
+    }
+    WIDTH.store(width as i32, Ordering::Release);
+    HEIGHT.store(height as i32, Ordering::Release);
+    Ok(())
 }
 
 pub fn clear() {
