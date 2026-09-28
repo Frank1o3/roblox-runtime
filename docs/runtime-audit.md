@@ -138,7 +138,9 @@ never linked that archive.
 
 The destination workspace now contains `roblox-linker`, `roblox-jni`, and
 `roblox-abi`. JNI, GameActivity, accessibility, and the large GameActivity
-surface are split into focused Rust source files. The linker and JNI C ABI
+surface are split into focused Rust source files. `LoadedEngine` now wires
+JavaVM creation, `JNI_OnLoad`, and the exported `GameActivity.initializeNativeCode`
+wrapper behind the constructor/VM ordering checks. The linker and JNI C ABI
 symbols and private Rust/C++ struct names have been renamed together to remove
 the old project prefix; the Android system properties identify the emulated
 host as Linux/Roblox Runtime. The native linker implementation remains the
@@ -198,5 +200,6 @@ delivery remains implemented; no host event loop belongs in the runtime core.
 `rusty-blox` now discovers Sober's base and x86-64 split APK, imports both into
 its managed data root and extracts native libraries from the split. The client
 builds a `RuntimeConfig` and prepares Android filesystem paths, but window
-creation, game startup, surface handoff and event forwarding are pending; the
-runtime has no game-start method yet.
+creation, invoking the JNI/GameActivity startup methods, surface handoff and
+event forwarding are pending; the runtime has no graphics-backed game-start
+method yet.

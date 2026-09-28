@@ -5,7 +5,9 @@
 
 use std::path::{Path, PathBuf};
 
+pub use roblox_abi as abi;
 pub use roblox_android as android;
+pub use roblox_jni as jni;
 pub use roblox_linker::elf::{Binding as ImportBinding, Imports as EngineImports};
 pub mod graphics;
 mod symbols;
@@ -126,6 +128,7 @@ impl RuntimeConfig {
         Ok(LoadedEngine {
             library,
             constructors_pending: true,
+            jni_initialized: false,
         })
     }
 }
@@ -135,6 +138,7 @@ impl RuntimeConfig {
 pub struct LoadedEngine {
     library: roblox_linker::Library,
     constructors_pending: bool,
+    jni_initialized: bool,
 }
 
 impl LoadedEngine {
@@ -162,7 +166,84 @@ impl LoadedEngine {
             self.constructors_pending = false;
         }
     }
+
+    /// Create libjnivm's JavaVM and call Roblox's `JNI_OnLoad` export.
+    /// Constructors must have run first.
+    #[allow(unsafe_code)]
+    pub fn initialize_jni(&mut self) -> Result<i32, JniError> {
+        if self.constructors_pending {
+            return Err(JniError::ConstructorsDeferred);
+        }
+        let on_load = self.symbol("JNI_OnLoad").ok_or(JniError::MissingOnLoad)?;
+        roblox_jni::jni::create_vm().ok_or(JniError::VmAlreadyExists)?;
+        // SAFETY: the function pointer is this live library's JNI_OnLoad;
+        // the native shim contains exceptions at the FFI boundary.
+        let version = unsafe { roblox_jni::jni::call_on_load(on_load) }
+            .map_err(JniError::OnLoad)?;
+        self.jni_initialized = true;
+        Ok(version)
+    }
+
+    /// Call AGDK's `initializeNativeCode` through the ported JNI layer.
+    /// A JavaVM must exist, and constructors must have run first.
+    #[allow(unsafe_code)]
+    pub fn initialize_game_activity(
+        &self,
+        internal_path: &str,
+        obb_path: &str,
+        external_path: &str,
+    ) -> Result<i64, JniError> {
+        if self.constructors_pending {
+            return Err(JniError::ConstructorsDeferred);
+        }
+        if !self.jni_initialized || roblox_jni::jni::env().is_none() {
+            return Err(JniError::JniNotInitialized);
+        }
+        let native = self
+            .symbol("Java_com_google_androidgamesdk_GameActivity_initializeNativeCode")
+            .ok_or(JniError::MissingGameActivityInit)?;
+        // SAFETY: the symbol belongs to this mapped engine and the process VM
+        // was checked above.
+        unsafe {
+            roblox_jni::game_activity::initialize(native, internal_path, obb_path, external_path)
+        }
+        .map_err(JniError::GameActivity)
+    }
 }
+
+/// Failure during JavaVM or AGDK GameActivity initialisation.
+#[derive(Debug)]
+pub enum JniError {
+    ConstructorsDeferred,
+    VmAlreadyExists,
+    JniNotInitialized,
+    MissingOnLoad,
+    MissingGameActivityInit,
+    OnLoad(String),
+    GameActivity(String),
+}
+
+impl std::fmt::Display for JniError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::ConstructorsDeferred => f.write_str("engine constructors have not run"),
+            Self::VmAlreadyExists => f.write_str("a JavaVM already exists in this process"),
+            Self::JniNotInitialized => {
+                f.write_str("complete JNI_OnLoad before GameActivity initialization")
+            }
+            Self::MissingOnLoad => f.write_str("libroblox.so does not export JNI_OnLoad"),
+            Self::MissingGameActivityInit => {
+                f.write_str("GameActivity.initializeNativeCode is not exported")
+            }
+            Self::OnLoad(message) => write!(f, "JNI_OnLoad failed: {message}"),
+            Self::GameActivity(message) => {
+                write!(f, "GameActivity initialization failed: {message}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for JniError {}
 
 /// Failure while resolving or loading the engine.
 #[derive(Debug)]

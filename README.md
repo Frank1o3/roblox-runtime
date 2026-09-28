@@ -12,7 +12,9 @@ boundaries and current migration status.
 The runtime resolves engine imports against implemented ABI symbols, selected
 host libraries and generated fallback stubs, then maps `libroblox.so` with its
 constructors deferred. It does not yet run those constructors or call Roblox's
-GameActivity bootstrap. Game startup, the host surface adapter and most Android
+GameActivity bootstrap automatically. `LoadedEngine` exposes the ordered JNI
+steps (`JNI_OnLoad`, then `initializeNativeCode`) once constructors have run.
+The host surface adapter, constructor-time compatibility gaps and most Android
 APIs are still pending.
 
 Build with a recent stable Rust toolchain, Clang/Clang++, CMake, GNU `patch`,
