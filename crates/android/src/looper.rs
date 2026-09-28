@@ -132,6 +132,23 @@ pub fn prepare_for_current_thread() -> bool {
     !prepare(0).is_null()
 }
 
+/// Poll the Android looper associated with the calling thread once.
+///
+/// Desktop hosts must keep pumping this after GameActivity registers its
+/// command and input descriptors. Returning the Android poll result lets the
+/// embedding event loop decide whether to schedule another immediate pass.
+pub fn poll_for_current_thread(timeout_ms: c_int) -> Option<c_int> {
+    if for_thread().is_none() {
+        return None;
+    }
+    Some(poll_once(
+        timeout_ms,
+        std::ptr::null_mut(),
+        std::ptr::null_mut(),
+        std::ptr::null_mut(),
+    ))
+}
+
 extern "C" fn for_thread_c() -> *mut c_void {
     for_thread().map_or(std::ptr::null_mut(), |looper| {
         (looper as *const Looper).cast_mut().cast()
