@@ -6,6 +6,7 @@
 use std::path::{Path, PathBuf};
 
 pub use roblox_android as android;
+pub mod graphics;
 
 /// Paths and options supplied by the embedding client.
 #[derive(Clone, Debug)]
@@ -29,6 +30,9 @@ pub struct RuntimeConfig {
 pub struct RuntimeOptions {
     /// Optional client settings document supplied by the caller.
     pub client_settings: Option<PathBuf>,
+    /// Renderer preference. The runtime resolves `Automatic` after inspecting
+    /// the supplied host surface and available graphics loaders.
+    pub graphics_backend: graphics::BackendPreference,
 }
 
 impl RuntimeConfig {

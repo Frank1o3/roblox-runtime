@@ -114,15 +114,19 @@ never linked that archive.
 
 ## Boundary decisions
 
-* The runtime receives APK/native-library, data and cache paths from its
-  caller. It will contain no Sober path lookup, APK download/update client,
-  Cordial installation policy, or `rusty-blox` dependency.
+* `rusty-blox` owns APK discovery/import (including Sober path lookup), the
+  managed APK/native-library space, data roots and host-window creation. The
+  runtime receives those paths, configuration and a host rendering surface; it
+  contains no APK download/update client or `rusty-blox` dependency.
 * Fast Flags are values/configuration supplied by the caller. The plugin host,
   plugin registry, plugin broker and plugin process lifecycle are not carried
   into the runtime.
-* Linker, JNI, ABI, Android, graphics GL, graphics Vulkan, Wayland, input and
-  platform responsibilities are independent crate boundaries. Root `src/`
-  owns a small runtime configuration and orchestration API only.
+* Renderer selection and Android input translation belong to the runtime.
+  `rusty-blox` collects host input events and forwards them; the runtime maps
+  them to Android input semantics. Linker, JNI, ABI, Android, graphics GL,
+  graphics Vulkan, Wayland, input and platform responsibilities are independent
+  crate boundaries. Root `src/` owns a small runtime configuration and
+  orchestration API only.
 * Existing GTK host-window use is a real dependency of the current Wayland
   implementation. It will be carried as a platform backend first, then hidden
   behind a stable API; removing GTK before replacing the toplevel would break
@@ -156,3 +160,21 @@ At this stage `cargo fmt --all -- --check`, `cargo check --workspace`, and
 in the copied bionic/stub code; the linker and JNI crate warnings introduced
 by extraction were corrected. These lint findings are not evidence of runtime
 parity.
+
+## Client and renderer contract
+
+`RuntimeOptions::graphics_backend` records an explicit runtime preference:
+automatic chooses Vulkan when available for the supplied surface and otherwise
+OpenGL ES; a forced Vulkan request reports unavailable support instead of
+silently changing the user's choice. This is preference resolution only: the
+workspace does not yet create either renderer or consume a host surface.
+
+The host-window API is still pending extraction. The client owns creation,
+visibility and destruction of the host window, then provides the runtime a
+surface handle with a lifetime covering the runtime session. The eventual
+surface contract must support both the current Wayland same-connection
+requirement and X11 without making the runtime create a toplevel. Host events
+enter through a runtime input API, where Android `MotionEvent` and `KeyEvent`
+delivery remains implemented; no host event loop belongs in the runtime core.
+`rusty-blox` is currently a placeholder and has not yet implemented APK import,
+surface creation or event forwarding.
