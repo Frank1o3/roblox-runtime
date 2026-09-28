@@ -199,9 +199,9 @@ impl LoadedEngine {
         Ok(())
     }
 
-    /// Create the JavaVM and prepare storage directories before running the
-    /// engine's ELF constructors. NativeSettingsInterface is delivered after
-    /// JNI_OnLoad, when the engine has initialised its JNI-side state.
+    /// Create the JavaVM and prepare storage directories before JNI_OnLoad and
+    /// the engine's ELF constructors. JNI_OnLoad must precede the directory
+    /// natives, while those natives must precede constructors that read them.
     #[allow(unsafe_code)]
     pub fn prepare_before_constructors(&mut self) -> Result<(), JniError> {
         if !self.constructors_pending {
@@ -230,7 +230,6 @@ impl LoadedEngine {
             self.vm_initialized = true;
         }
 
-        self.constructors_ready = true;
         Ok(())
     }
 
@@ -241,13 +240,10 @@ impl LoadedEngine {
             .to_path_buf()
     }
 
-    /// Create libjnivm's JavaVM and call Roblox's `JNI_OnLoad` export.
-    /// Constructors must have run first.
+    /// Create libjnivm's JavaVM and call Roblox's `JNI_OnLoad` export. The
+    /// directory natives are delivered next, before the deferred constructors.
     #[allow(unsafe_code)]
     pub fn initialize_jni(&mut self) -> Result<i32, JniError> {
-        if self.constructors_pending {
-            return Err(JniError::ConstructorsDeferred);
-        }
         let on_load = self.symbol("JNI_OnLoad").ok_or(JniError::MissingOnLoad)?;
         if !self.vm_initialized {
             roblox_jni::jni::create_vm().ok_or(JniError::VmAlreadyExists)?;
@@ -259,6 +255,7 @@ impl LoadedEngine {
             unsafe { roblox_jni::jni::call_on_load(on_load) }.map_err(JniError::OnLoad)?;
         self.jni_initialized = true;
         self.initialize_storage_directories()?;
+        self.constructors_ready = true;
         Ok(version)
     }
 
