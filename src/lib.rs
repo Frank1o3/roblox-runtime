@@ -67,13 +67,13 @@ extern "C" fn run_startup_bootstrap() {
             }
         }
         if plan.flags_native != 0 {
-            // An empty name list registers the engine's default flag provider;
-            // callers supply actual value overrides through RuntimeConfig.
+            // Match the name cache registered by Roblox's Android client;
+            // values still come from the client settings and overrides above.
             // SAFETY: same mapped-library and live-JNI guarantees as above.
             match unsafe {
                 roblox_jni::game_activity::init_flags(
                     plan.flags_native as *mut std::ffi::c_void,
-                    "",
+                    roblox_jni::game_activity::NATIVE_FLAG_NAMES,
                 )
             } {
                 Ok(()) => eprintln!("[runtime] nativeInitializeNativeFlags completed"),
