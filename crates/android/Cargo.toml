@@ -8,6 +8,7 @@ build = "build.rs"
 
 [dependencies]
 roblox-linker = { path = "../linker" }
+zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [lints.rust]
 unsafe_code = "allow"

@@ -147,12 +147,16 @@ their source-pinned submodules.
 
 The root API currently defines caller-supplied base/split APK, native-library, data,
 cache, Fast Flag, and settings inputs and validates empty paths. It prepares the
-initial Android configuration, files directory, and `/system` font tree from
-those supplied paths; it does not yet launch Roblox. The remaining Android
-surface, graphics, Wayland, input, platform, and runtime orchestration have not
-yet been extracted, and native Android compatibility shims still share the
-linker crate's CMake build. Therefore this is an audited workspace foundation,
-not runtime parity; no client launch claim is made.
+initial Android configuration, files directory, `/system` font tree, and
+caller-supplied APK asset manager from those paths. `roblox-android` now
+provides the `AAssetManager` buffer, length, close, and file-descriptor calls
+across base and split APKs, with a single symbol override registry for its
+current Android surface. It does not yet launch
+Roblox. The remaining Android surface, graphics, Wayland, input, platform, and
+runtime orchestration have not yet been extracted, and native Android
+compatibility shims still share the linker crate's CMake build. Therefore this
+is an audited workspace foundation, not runtime parity; no client launch claim
+is made.
 
 At this stage `cargo fmt --all -- --check`, `cargo check --workspace`, and
 `cargo test --workspace` pass. Strict Clippy was run and remains failing in

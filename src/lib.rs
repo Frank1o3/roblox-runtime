@@ -62,6 +62,7 @@ impl RuntimeConfig {
     /// embedding client. Returns the host-backed `/system` tree.
     pub fn prepare_android_environment(&self) -> Result<PathBuf, ConfigError> {
         self.validate_paths()?;
+        android::asset::set_apks(&self.apk_paths).map_err(ConfigError::AssetSetup)?;
         android::system::set_files_dir(&self.data_dir);
         Ok(android::system::install(&self.cache_dir))
     }
@@ -72,6 +73,7 @@ impl RuntimeConfig {
 pub enum ConfigError {
     EmptyPath(&'static str),
     NoApks,
+    AssetSetup(String),
 }
 
 impl std::fmt::Display for ConfigError {
@@ -79,6 +81,7 @@ impl std::fmt::Display for ConfigError {
         match self {
             Self::EmptyPath(name) => write!(f, "{name} path is empty"),
             Self::NoApks => f.write_str("at least one APK path is required"),
+            Self::AssetSetup(message) => write!(f, "could not configure APK assets: {message}"),
         }
     }
 }

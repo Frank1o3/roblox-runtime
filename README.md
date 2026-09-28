@@ -9,6 +9,10 @@ The workspace is being extracted from the local `rbx-native-runtime` reference
 implementation. See [the runtime audit](docs/runtime-audit.md) for source
 boundaries and current migration status.
 
+The Android compatibility crate currently serves assets from client-provided
+base/split APKs and provides the first combined native-symbol override table.
+Game startup, the host surface adapter and most Android APIs are still pending.
+
 Build with a recent stable Rust toolchain, Clang/Clang++, CMake, and initialized
 Git submodules:
 
