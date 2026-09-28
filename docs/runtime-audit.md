@@ -175,11 +175,20 @@ initially also exposed unresolved references to four `roblox_local_storage_*`
 callbacks; these are now implemented by a private per-user JSON store. The
 probe then followed the source-observed order: create the JavaVM, call the four
 native directory setters, and run deferred constructors. In the explicit,
-ABI-unsafe `host_libc` diagnostic mode, the observed output ended with
-`constructor probe: deferred ELF constructors returned` (with a `time` stub
-still reported). This does not establish that normal ABI mode succeeds or that
-Roblox launches; the mode can pass incompatible glibc structures and remains
-diagnostic only.
+ABI-unsafe `host_libc` diagnostic mode, a client run passed constructors,
+`JNI_OnLoad`, GameActivity initialisation and flag setup, then segfaulted on an
+engine thread after app-bridge startup. The run reported `[stub] time`; that
+call now has a runtime-owned implementation in `roblox-abi`. A repeat with
+`RBX_RUNTIME_STUB_ABORT=1` reached the same later crash without hitting another
+generated stub first. In normal ABI mode, a repeat segfaulted after JavaVM
+creation and before the linker reported constructor execution. Temporary
+call-boundary logging isolated the fault to the first setter,
+`NativeSettingsInterface.nativeSetFilesDirectory`; that logging was removed
+after the run. The cause inside the JNI/native call remains **INFERRED**, not
+isolated. Both runs used an isolated `XDG_DATA_HOME` and the local Sober APK.
+Because each process died by SIGSEGV, the shutdown unimplemented report was not
+written. These observations do not establish that Roblox launches;
+`host_libc` remains ABI-unsafe and diagnostic only.
 
 The Android native-window shim now exposes a client-supplied surface token,
 dimensions and EGL adaptations for host Xlib/Wayland windows. Installing a

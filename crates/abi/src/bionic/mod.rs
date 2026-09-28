@@ -53,6 +53,10 @@ pub fn function_overrides() -> Vec<(&'static str, *mut c_void)> {
         // Stubbed until now, and a stub here answers 0 — which reads as an
         // impossibly old Android rather than an unknown one.
         f!("android_get_device_api_level", android_get_device_api_level),
+        // The backtrace helper calls `time` during constructor startup. A zero
+        // from its generated stub is a valid timestamp only at the Unix epoch,
+        // so provide the ordinary realtime contract here.
+        f!("time", bionic_time),
         // Selector numbering differs wholesale between the two libcs.
         f!("sysconf", bionic_sysconf),
         // The legacy `__sF` streams. Zeroed storage below stops the load-time
@@ -113,6 +117,22 @@ pub fn function_overrides() -> Vec<(&'static str, *mut c_void)> {
         v.extend(trace::verbose());
     }
     v
+}
+
+/// Return realtime seconds since the Unix epoch and optionally store them.
+/// `time_t` is a signed 64-bit value on the supported Linux x86-64 and
+/// aarch64 targets, matching both bionic and glibc.
+extern "C" fn bionic_time(timer: *mut i64) -> i64 {
+    let seconds = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+    if !timer.is_null() {
+        // SAFETY: the C caller supplies either a null pointer or writable
+        // storage for one `time_t`, as required by the `time` contract.
+        unsafe { timer.write(seconds) };
+    }
+    seconds
 }
 
 /// Data symbols. The *address* is what matters, not a call.

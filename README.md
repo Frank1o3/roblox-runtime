@@ -17,10 +17,12 @@ steps (`JNI_OnLoad`, then `initializeNativeCode`) once constructors have run.
 The resolver uses host glibc for observed constructor-time libc calls whose
 ABI matches bionic and keeps structure-sensitive APIs on runtime-owned
 wrappers. With the explicitly ABI-unsafe diagnostic `host_libc` option, the
-local APK probe returned from deferred constructors after pre-constructor JNI
-setup; normal ABI mode still has an unresolved constructor failure. The runtime
-has EGL support for client-owned X11/Wayland surfaces and a Vulkan interposer
-in `roblox-graphics-vulkan`. The Vulkan crate uses Ash to load the host
+local APK run passed constructors, `JNI_OnLoad`, GameActivity initialisation
+and flag setup, then segfaulted on an engine thread. Normal ABI mode segfaults
+during `NativeSettingsInterface.nativeSetFilesDirectory`, the first
+pre-constructor setter. Neither run establishes a playable client. The runtime
+has EGL support for client-owned X11/Wayland surfaces and a Vulkan interposer in
+`roblox-graphics-vulkan`. The Vulkan crate uses Ash to load the host
 `libvulkan`, reports the host WSI extension to Roblox as Android surface
 support, and translates Android surface creation to the supplied Xlib or
 Wayland surface. Roblox's own renderer then submits to the host Vulkan driver
