@@ -45,18 +45,46 @@ impl BackendPreference {
 /// must stay alive until [`clear_surface`] is called after engine shutdown.
 pub fn install_surface(surface: HostSurface) {
     let (width, height) = surface.dimensions();
+    let vulkan_surface = match surface {
+        HostSurface::Xlib {
+            display,
+            window,
+            width,
+            height,
+        } => roblox_graphics_vulkan::Surface::Xlib {
+            display,
+            window,
+            width,
+            height,
+        },
+        HostSurface::Wayland {
+            display,
+            surface,
+            width,
+            height,
+            ..
+        } => roblox_graphics_vulkan::Surface::Wayland {
+            display,
+            surface,
+            width,
+            height,
+        },
+    };
+    roblox_graphics_vulkan::set_surface(Some(vulkan_surface));
     roblox_android::native_window::install(surface);
     roblox_jni::game_activity::set_display_size(width as i32, height as i32);
 }
 
 /// Release the process-wide host-surface descriptor after the engine stops.
 pub fn clear_surface() {
+    roblox_graphics_vulkan::set_surface(None);
     roblox_android::native_window::clear();
 }
 
 /// Update the installed client surface after its host window is resized.
 pub fn resize_surface(width: u32, height: u32) -> Result<(), SurfaceError> {
     roblox_android::native_window::resize(width, height)?;
+    roblox_graphics_vulkan::resize_surface(width, height);
     roblox_jni::game_activity::set_display_size(width as i32, height as i32);
     Ok(())
 }
@@ -74,19 +102,23 @@ pub fn host_egl_available() -> bool {
         && roblox_linker::host_symbol("libGLESv2.so.2", "glGetString").is_some()
 }
 
-/// Check the host surface and renderer support before running engine constructors.
-///
-/// Vulkan is not implemented by this runtime yet. The engine's missing Vulkan
-/// loader path selects its GLES3 fallback, so Automatic is usable when EGL is
-/// present while an explicit Vulkan request fails with a useful error.
+/// Check the installed host surface and renderer support before constructors.
+/// Vulkan is offered only when Ash can load the host loader and the matching
+/// Xlib or Wayland WSI extension is available. Roblox then renders through the
+/// host Vulkan implementation; this crate translates Android WSI requests.
 pub fn prepare(preference: BackendPreference) -> Result<Backend, BackendUnavailable> {
     if !has_surface() {
         return Err(BackendUnavailable::NoSurface);
     }
-    if !host_egl_available() {
+    let vulkan_available = roblox_graphics_vulkan::available_for_surface();
+    let selected = preference.select(vulkan_available)?;
+    roblox_graphics_vulkan::set_enabled(selected == Backend::Vulkan);
+    let mode = std::env::var("RBX_RUNTIME_PRESENT_MODE").ok();
+    roblox_graphics_vulkan::set_present_mode(mode.as_deref());
+    if selected == Backend::OpenGlEs && !host_egl_available() {
         return Err(BackendUnavailable::OpenGlEs);
     }
-    preference.select(false)
+    Ok(selected)
 }
 
 /// Present the supplied Android surface through the host EGL window type.
@@ -169,7 +201,9 @@ impl std::fmt::Display for BackendUnavailable {
         match self {
             Self::NoSurface => f.write_str("a host renderable surface has not been installed"),
             Self::OpenGlEs => f.write_str("the host EGL/GLES libraries are unavailable"),
-            Self::Vulkan => f.write_str("Vulkan is not implemented by this runtime"),
+            Self::Vulkan => {
+                f.write_str("the host Vulkan loader or matching WSI extension is unavailable")
+            }
         }
     }
 }

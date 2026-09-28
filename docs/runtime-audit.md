@@ -183,34 +183,42 @@ diagnostic only.
 
 The Android native-window shim now exposes a client-supplied surface token,
 dimensions and EGL adaptations for host Xlib/Wayland windows. Installing a
-surface also supplies its dimensions to the JNI display shim. The graphics
-readiness check confirms the surface and EGL/GLES loader exports before
-constructors run. Vulkan is not ported, so Automatic currently selects GLES3
-and an explicit Vulkan request reports unavailable support. The runtime does
-not yet create a host window, EGL context, Vulkan surface, or perform a rendered
-game launch; no client launch claim is made.
+surface also supplies its dimensions to the JNI display shim. Graphics
+preparation selects Vulkan when Ash loads the host Vulkan library and the
+matching Xlib/Wayland WSI extension is available; otherwise Automatic selects
+GLES3. `roblox-graphics-vulkan` loads the host loader through Ash, exposes its
+`vkGetInstanceProcAddr` through virtual Android Vulkan sonames, maps
+`VK_KHR_android_surface` to the active host WSI, and forwards the engine's
+remaining calls to the host driver. It also carries over Cordial's present-mode
+selection and Wayland current-extent adaptation. The implementation has not
+yet been observed creating a Vulkan surface, swapchain, or rendered frame, so
+no playable launch claim is made.
 
 `LoadedEngine::resize_surface` now updates the installed dimensions and sends
 both app-bridge surface updates followed by GameActivity's surface-changed
 callback. This path compiles but has not yet been observed against a running
 client.
 
-At this stage `cargo fmt --all -- --check`, `cargo check --workspace`, and
-`cargo test --workspace` pass, including ELF parser and resolver tests. Strict workspace Clippy remains failing in
-`roblox-abi` on inherited undocumented unsafe blocks and existing style lints
-in the copied bionic/stub code; the linker and JNI crate warnings introduced
-by extraction were corrected. These lint findings are not evidence of runtime
-parity.
+Before the Vulkan crate was added, `cargo fmt --all -- --check`,
+`cargo check --workspace`, and `cargo test --workspace` passed, including ELF
+parser and resolver tests. For this port, formatting passes and
+`cargo check -p roblox-graphics-vulkan` passes. The full workspace check has not
+completed in this environment because the linker build script requires CMake,
+which is unavailable here; the runtime integration and live Vulkan path remain
+unverified. Strict workspace Clippy previously failed in `roblox-abi` on
+inherited undocumented unsafe blocks and existing style lints in the copied
+bionic/stub code. These lint findings are not evidence of runtime parity.
 
 ## Client and renderer contract
 
 `RuntimeConfig::apk_paths` carries the base APK and any split APKs as paths
 selected/imported by the client. `RuntimeOptions::graphics_backend` records an
-explicit runtime preference. Since the Vulkan interposer is not ported,
-Automatic selects GLES3 and a forced Vulkan request reports unavailable
-support. `RuntimeConfig::prepare_graphics` verifies that the client installed a
-surface and that the host EGL/GLES loader symbols exist. This is a readiness
-check only: the workspace does not yet create a renderer or EGL context.
+explicit runtime preference. `RuntimeConfig::prepare_graphics` verifies the
+client surface and selects the host Vulkan path when Ash loads Vulkan and the
+surface's WSI extension exists; Automatic falls back to GLES3, while an
+explicit unavailable backend reports an error. Roblox owns Vulkan device,
+swapchain and rendering creation; this path has not yet been observed against a
+running client.
 
 The client owns creation, visibility and destruction of the host window. The
 runtime accepts Xlib handles or same-connection Wayland display/surface plus a

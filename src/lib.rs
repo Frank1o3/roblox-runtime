@@ -135,6 +135,13 @@ impl RuntimeConfig {
             roblox_linker::register(name, &symbols)
                 .map_err(|error| LoadError::Linker(error.to_string()))?;
         }
+        if let Some(address) = roblox_graphics_vulkan::loader_symbol() {
+            let symbols = [("vkGetInstanceProcAddr".to_owned(), address)];
+            for name in roblox_graphics_vulkan::LIBRARY_NAMES {
+                roblox_linker::register(name, &symbols)
+                    .map_err(|error| LoadError::Linker(error.to_string()))?;
+            }
+        }
         let library_path = self.native_lib_dir.join("libroblox.so");
         let library_name = library_path
             .to_str()

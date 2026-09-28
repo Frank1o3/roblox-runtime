@@ -19,11 +19,16 @@ ABI matches bionic and keeps structure-sensitive APIs on runtime-owned
 wrappers. With the explicitly ABI-unsafe diagnostic `host_libc` option, the
 local APK probe returned from deferred constructors after pre-constructor JNI
 setup; normal ABI mode still has an unresolved constructor failure. The runtime
-has an initial EGL adapter for client-owned X11/Wayland surfaces; it does not
-yet create the client window or renderer context. GLES3 is the only supported
-backend; Vulkan requests fail explicitly until its Android loader and surface
-adapter are ported. The runtime checks the installed surface and host EGL/GLES
-libraries before engine constructors run.
+has EGL support for client-owned X11/Wayland surfaces and a Vulkan interposer
+in `roblox-graphics-vulkan`. The Vulkan crate uses Ash to load the host
+`libvulkan`, reports the host WSI extension to Roblox as Android surface
+support, and translates Android surface creation to the supplied Xlib or
+Wayland surface. Roblox's own renderer then submits to the host Vulkan driver
+and hardware. Automatic selects Vulkan when the loader and matching WSI
+extension are available, otherwise GLES3; explicit Vulkan requests fail if
+that support is unavailable. This path compiles independently but has not yet
+been observed rendering a Roblox frame. `RBX_RUNTIME_PRESENT_MODE` accepts
+`auto`, `mailbox`, `uncapped`, `immediate`, `fifo`, `fifo-relaxed`, or `off`.
 After startup, `LoadedEngine::resize_surface` updates the Android window
 dimensions and delivers both app-bridge surface updates plus GameActivity's
 surface-changed callback.
