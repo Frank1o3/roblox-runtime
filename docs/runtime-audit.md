@@ -162,16 +162,33 @@ Android libraries, and maps `libroblox.so` through bionic with ELF constructors
 deferred. The CMake build applies a small linker patch to a build-tree copy of
 the pinned submodule, leaving the submodule checkout untouched.
 The real Sober APK run reported 565 required and 8 weak imports and mapped the
-112,661,808-byte executable segment successfully. The earlier direct load ran
-constructors before Android setup and exited with SIGSEGV after calls reached
-unimplemented stubs including `pthread_mutex_lock`, `syscall`, and locale APIs;
-constructors therefore remain deferred until those compatibility gaps and
-runtime setup are ready. The runtime does not yet launch Roblox.
-The remaining Android surface, graphics, Wayland, input, platform, and
-runtime orchestration have not yet been extracted, and native Android
-compatibility shims still share the linker crate's CMake build. Therefore this
-is an audited workspace foundation, not runtime parity; no client launch claim
-is made.
+112,661,808-byte executable segment successfully. Because this workspace has no
+launch binary for the development MCP to drive, a temporary constructor probe
+was used against the supplied local APK. It first reported zero-return stubs
+for `syscall`, `memset`, `__cxa_atexit`, and
+locale functions, then a zero-return stub for `__ctype_get_mb_cur_max`. The
+resolver now maps these seven observed ABI-compatible libc calls from host
+glibc. It resolves pthread mutex calls directly on x86-64, where the layouts
+match, and keeps dedicated bionic wrappers on aarch64. Resolver tests verify
+those registrations and the architecture-specific handling. The linker
+initially also exposed unresolved references to four `roblox_local_storage_*`
+callbacks; these are now implemented by a private per-user JSON store. The
+probe then followed the source-observed order: create the JavaVM, call the four
+native directory setters, and run deferred constructors. In the explicit,
+ABI-unsafe `host_libc` diagnostic mode, the observed output ended with
+`constructor probe: deferred ELF constructors returned` (with a `time` stub
+still reported). This does not establish that normal ABI mode succeeds or that
+Roblox launches; the mode can pass incompatible glibc structures and remains
+diagnostic only.
+
+The Android native-window shim now exposes a client-supplied surface token,
+dimensions and EGL adaptations for host Xlib/Wayland windows. Installing a
+surface also supplies its dimensions to the JNI display shim. The graphics
+readiness check confirms the surface and EGL/GLES loader exports before
+constructors run. Vulkan is not ported, so Automatic currently selects GLES3
+and an explicit Vulkan request reports unavailable support. The runtime does
+not yet create a host window, EGL context, Vulkan surface, or perform a rendered
+game launch; no client launch claim is made.
 
 At this stage `cargo fmt --all -- --check`, `cargo check --workspace`, and
 `cargo test --workspace` pass, including ELF parser and resolver tests. Strict workspace Clippy remains failing in
@@ -184,17 +201,16 @@ parity.
 
 `RuntimeConfig::apk_paths` carries the base APK and any split APKs as paths
 selected/imported by the client. `RuntimeOptions::graphics_backend` records an
-explicit runtime preference:
-automatic chooses Vulkan when available for the supplied surface and otherwise
-OpenGL ES; a forced Vulkan request reports unavailable support instead of
-silently changing the user's choice. This is preference resolution only: the
-workspace does not yet create either renderer or consume a host surface.
+explicit runtime preference. Since the Vulkan interposer is not ported,
+Automatic selects GLES3 and a forced Vulkan request reports unavailable
+support. `RuntimeConfig::prepare_graphics` verifies that the client installed a
+surface and that the host EGL/GLES loader symbols exist. This is a readiness
+check only: the workspace does not yet create a renderer or EGL context.
 
-The host-window API is still pending extraction. The client owns creation,
-visibility and destruction of the host window, then provides the runtime a
-surface handle with a lifetime covering the runtime session. The eventual
-surface contract must support both the current Wayland same-connection
-requirement and X11 without making the runtime create a toplevel. Host events
+The client owns creation, visibility and destruction of the host window. The
+runtime accepts Xlib handles or same-connection Wayland display/surface plus a
+`wl_egl_window`; those objects must outlive the runtime surface. `rusty-blox`
+does not yet instantiate winit or hand off these handles. Host events will
 enter through a runtime input API, where Android `MotionEvent` and `KeyEvent`
 delivery remains implemented; no host event loop belongs in the runtime core.
 `rusty-blox` now discovers Sober's base and x86-64 split APK, imports both into

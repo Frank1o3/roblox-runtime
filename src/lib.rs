@@ -37,6 +37,10 @@ pub struct RuntimeOptions {
     /// Renderer preference. The runtime resolves `Automatic` after inspecting
     /// the supplied host surface and available graphics loaders.
     pub graphics_backend: graphics::BackendPreference,
+    /// Resolve otherwise-unhandled libc symbols from glibc for diagnostics.
+    /// This mirrors Cordial's `--host-libc` and is ABI-unsafe; keep it off for
+    /// ordinary runtime execution until each required interface is ported.
+    pub host_libc: bool,
 }
 
 impl RuntimeConfig {
@@ -67,7 +71,15 @@ impl RuntimeConfig {
     pub fn prepare_android_environment(&self) -> Result<PathBuf, ConfigError> {
         self.validate_paths()?;
         android::asset::set_apks(&self.apk_paths).map_err(ConfigError::AssetSetup)?;
-        android::system::set_files_dir(&self.data_dir);
+        let files_dir = self.data_dir.join("files");
+        let external_dir = self.data_dir.join("external");
+        for path in [&files_dir, &self.cache_dir, &external_dir] {
+            std::fs::create_dir_all(path).map_err(|error| {
+                ConfigError::DirectorySetup(format!("{}: {error}", path.display()))
+            })?;
+        }
+        android::system::set_files_dir(&files_dir);
+        android::local_storage::set_store_dir(&files_dir);
         Ok(android::system::install(&self.cache_dir))
     }
 
@@ -76,6 +88,12 @@ impl RuntimeConfig {
         self.validate_paths()?;
         android::asset::extract_to(&self.apk_paths, &self.cache_dir.join("android-assets"))
             .map_err(ConfigError::AssetExtraction)
+    }
+
+    /// Check that the client surface and requested renderer are ready before
+    /// engine constructors run. Install the client-owned surface first.
+    pub fn prepare_graphics(&self) -> Result<graphics::Backend, graphics::BackendUnavailable> {
+        graphics::prepare(self.options.graphics_backend)
     }
 
     /// Inspect the supplied engine library's required and optional imports.
@@ -92,7 +110,7 @@ impl RuntimeConfig {
     pub fn load_engine(&self) -> Result<LoadedEngine, LoadError> {
         self.validate_paths().map_err(LoadError::Config)?;
         let imports = self.engine_imports().map_err(LoadError::Config)?;
-        let tables = symbols::build(&imports);
+        let tables = symbols::build(&imports, self.options.host_libc);
         if !tables.missing.is_empty() {
             return Err(LoadError::UnresolvedImports(
                 tables
@@ -128,7 +146,12 @@ impl RuntimeConfig {
         Ok(LoadedEngine {
             library,
             constructors_pending: true,
+            constructors_ready: false,
+            vm_initialized: false,
             jni_initialized: false,
+            files_dir: self.data_dir.join("files"),
+            cache_dir: self.cache_dir.clone(),
+            external_dir: self.data_dir.join("external"),
         })
     }
 }
@@ -138,7 +161,12 @@ impl RuntimeConfig {
 pub struct LoadedEngine {
     library: roblox_linker::Library,
     constructors_pending: bool,
+    constructors_ready: bool,
+    vm_initialized: bool,
     jni_initialized: bool,
+    files_dir: PathBuf,
+    cache_dir: PathBuf,
+    external_dir: PathBuf,
 }
 
 impl LoadedEngine {
@@ -160,11 +188,90 @@ impl LoadedEngine {
     /// Run the engine's deferred ELF constructors once the caller has finished
     /// preparing Android services and graphics state. This executes engine
     /// code and can reach compatibility APIs that are not implemented yet.
-    pub fn run_constructors(&mut self) {
+    pub fn run_constructors(&mut self) -> Result<(), JniError> {
         if self.constructors_pending {
+            if !self.constructors_ready {
+                return Err(JniError::PreConstructorSetupRequired);
+            }
             roblox_linker::run_deferred_ctors(self.library);
             self.constructors_pending = false;
         }
+        Ok(())
+    }
+
+    /// Create the JavaVM, prepare the engine-owned storage directories, and
+    /// deliver the four directory setters which `RbxStorage` reads from ELF
+    /// constructors. This must run before [`Self::run_constructors`].
+    #[allow(unsafe_code)]
+    pub fn prepare_before_constructors(&mut self) -> Result<(), JniError> {
+        if !self.constructors_pending {
+            return Err(JniError::ConstructorsAlreadyRun);
+        }
+        let data_dir = self.data_dir_for_storage();
+        let directories = [
+            self.files_dir.clone(),
+            self.cache_dir.clone(),
+            self.external_dir.clone(),
+            data_dir,
+            self.files_dir.join("appData/LocalStorage"),
+            self.files_dir.join("appData/rbx-storage"),
+            self.files_dir.join("appData/ClientSettings"),
+            self.cache_dir.join("ContentProvider_2"),
+            self.cache_dir.join("rbx-storage"),
+            self.cache_dir.join("sounds"),
+        ];
+        for path in &directories {
+            std::fs::create_dir_all(path).map_err(|error| {
+                JniError::DirectorySetup(format!("{}: {error}", path.display()))
+            })?;
+        }
+        if !self.vm_initialized {
+            roblox_jni::jni::create_vm().ok_or(JniError::VmAlreadyExists)?;
+            self.vm_initialized = true;
+        }
+
+        const SETTINGS_CLASS: &str = "com/roblox/engine/jni/NativeSettingsInterface";
+        let files = self.files_dir.to_string_lossy().into_owned();
+        let cache = self.cache_dir.to_string_lossy().into_owned();
+        let external = self.external_dir.to_string_lossy().into_owned();
+        let setters: [(&str, Vec<&str>); 4] = [
+            (
+                "Java_com_roblox_engine_jni_NativeSettingsInterface_nativeSetFilesDirectory",
+                vec![files.as_str()],
+            ),
+            (
+                "Java_com_roblox_engine_jni_NativeSettingsInterface_nativeSetCacheDirectory",
+                vec![cache.as_str()],
+            ),
+            (
+                "Java_com_roblox_engine_jni_NativeSettingsInterface_nativeSetExternalDirectory",
+                vec![external.as_str()],
+            ),
+            (
+                "Java_com_roblox_engine_jni_NativeSettingsInterface_nativeSetBaseDataDirectories",
+                vec![files.as_str(), cache.as_str()],
+            ),
+        ];
+        for (name, args) in setters {
+            let native = self
+                .symbol(name)
+                .ok_or(JniError::MissingPreConstructorNative(name))?;
+            // SAFETY: this export belongs to the mapped engine and the VM above
+            // is live. The JNI shim supplies its current JNIEnv.
+            unsafe {
+                roblox_jni::game_activity::call_static_strings(native, SETTINGS_CLASS, &args)
+            }
+            .map_err(|error| JniError::PreConstructorNative(format!("{name}: {error}")))?;
+        }
+        self.constructors_ready = true;
+        Ok(())
+    }
+
+    fn data_dir_for_storage(&self) -> PathBuf {
+        self.files_dir
+            .parent()
+            .unwrap_or(self.files_dir.as_path())
+            .to_path_buf()
     }
 
     /// Create libjnivm's JavaVM and call Roblox's `JNI_OnLoad` export.
@@ -175,11 +282,14 @@ impl LoadedEngine {
             return Err(JniError::ConstructorsDeferred);
         }
         let on_load = self.symbol("JNI_OnLoad").ok_or(JniError::MissingOnLoad)?;
-        roblox_jni::jni::create_vm().ok_or(JniError::VmAlreadyExists)?;
+        if !self.vm_initialized {
+            roblox_jni::jni::create_vm().ok_or(JniError::VmAlreadyExists)?;
+            self.vm_initialized = true;
+        }
         // SAFETY: the function pointer is this live library's JNI_OnLoad;
         // the native shim contains exceptions at the FFI boundary.
-        let version = unsafe { roblox_jni::jni::call_on_load(on_load) }
-            .map_err(JniError::OnLoad)?;
+        let version =
+            unsafe { roblox_jni::jni::call_on_load(on_load) }.map_err(JniError::OnLoad)?;
         self.jni_initialized = true;
         Ok(version)
     }
@@ -215,10 +325,15 @@ impl LoadedEngine {
 #[derive(Debug)]
 pub enum JniError {
     ConstructorsDeferred,
+    ConstructorsAlreadyRun,
+    PreConstructorSetupRequired,
     VmAlreadyExists,
     JniNotInitialized,
     MissingOnLoad,
     MissingGameActivityInit,
+    MissingPreConstructorNative(&'static str),
+    DirectorySetup(String),
+    PreConstructorNative(String),
     OnLoad(String),
     GameActivity(String),
 }
@@ -227,6 +342,12 @@ impl std::fmt::Display for JniError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::ConstructorsDeferred => f.write_str("engine constructors have not run"),
+            Self::ConstructorsAlreadyRun => {
+                f.write_str("pre-constructor setup must run before engine constructors")
+            }
+            Self::PreConstructorSetupRequired => {
+                f.write_str("prepare the JavaVM and engine directories before running constructors")
+            }
             Self::VmAlreadyExists => f.write_str("a JavaVM already exists in this process"),
             Self::JniNotInitialized => {
                 f.write_str("complete JNI_OnLoad before GameActivity initialization")
@@ -234,6 +355,15 @@ impl std::fmt::Display for JniError {
             Self::MissingOnLoad => f.write_str("libroblox.so does not export JNI_OnLoad"),
             Self::MissingGameActivityInit => {
                 f.write_str("GameActivity.initializeNativeCode is not exported")
+            }
+            Self::MissingPreConstructorNative(name) => {
+                write!(f, "required pre-constructor native is not exported: {name}")
+            }
+            Self::DirectorySetup(message) => {
+                write!(f, "cannot prepare engine directories: {message}")
+            }
+            Self::PreConstructorNative(message) => {
+                write!(f, "pre-constructor directory setter failed: {message}")
             }
             Self::OnLoad(message) => write!(f, "JNI_OnLoad failed: {message}"),
             Self::GameActivity(message) => {
@@ -289,6 +419,7 @@ impl std::error::Error for LoadError {}
 pub enum ConfigError {
     EmptyPath(&'static str),
     NoApks,
+    DirectorySetup(String),
     AssetSetup(String),
     AssetExtraction(String),
     ElfInspection(String),
@@ -299,6 +430,9 @@ impl std::fmt::Display for ConfigError {
         match self {
             Self::EmptyPath(name) => write!(f, "{name} path is empty"),
             Self::NoApks => f.write_str("at least one APK path is required"),
+            Self::DirectorySetup(message) => {
+                write!(f, "could not prepare Android directories: {message}")
+            }
             Self::AssetSetup(message) => write!(f, "could not configure APK assets: {message}"),
             Self::AssetExtraction(message) => {
                 write!(f, "could not extract APK filesystem assets: {message}")

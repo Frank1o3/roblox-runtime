@@ -181,6 +181,7 @@ name = "roblox-android"
 version = "0.1.0"
 dependencies = [
  "roblox-linker",
+ "serde_json",
  "zip",
 ]
 

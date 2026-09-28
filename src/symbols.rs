@@ -86,19 +86,45 @@ fn host_candidates(library: &str) -> &'static [(&'static str, &'static str)] {
 }
 
 fn host_address(library: &str, symbol: &str) -> Option<(&'static str, *mut c_void)> {
-    host_candidates(library)
+    let registered = host_candidates(library)
         .iter()
         .find_map(|(candidate, android_library)| {
             roblox_linker::host_symbol(candidate, symbol).map(|address| (*android_library, address))
-        })
+        });
+    if registered.is_some() {
+        return registered;
+    }
+
+    // These functions have matching call/data ABIs on glibc and bionic. Keep
+    // this list explicit: resolving every libc import from glibc would silently
+    // cross incompatible structures such as bionic's `stat` and `sigaction`.
+    const HOST_LIBC_COMPATIBLE: &[&str] = &[
+        "__cxa_atexit",
+        "__ctype_get_mb_cur_max",
+        "mbtowc",
+        "memset",
+        "newlocale",
+        "strlen",
+        "syscall",
+        "uselocale",
+    ];
+    let host_pthread_mutex_compatible = cfg!(target_arch = "x86_64")
+        && matches!(symbol, "pthread_mutex_lock" | "pthread_mutex_unlock");
+    if library == "libc.so"
+        && (HOST_LIBC_COMPATIBLE.contains(&symbol) || host_pthread_mutex_compatible)
+    {
+        return roblox_linker::host_symbol("libc.so.6", symbol).map(|address| ("libc.so", address));
+    }
+    None
 }
 
-pub(crate) fn build(imports: &roblox_linker::elf::Imports) -> SymbolTables {
+pub(crate) fn build(imports: &roblox_linker::elf::Imports, host_libc: bool) -> SymbolTables {
     let mut result = SymbolTables::default();
     let overrides: BTreeMap<&str, *mut c_void> = roblox_abi::bionic::function_overrides()
         .into_iter()
         .chain(roblox_abi::bionic::data_overrides())
         .chain(roblox_android::overrides())
+        .chain(crate::graphics::function_overrides())
         .collect();
     let override_names: BTreeSet<&str> = overrides.keys().copied().collect();
 
@@ -109,8 +135,13 @@ pub(crate) fn build(imports: &roblox_linker::elf::Imports) -> SymbolTables {
             continue;
         }
         let library = library_for(name);
-        let (library, address) =
-            host_address(library, name).unwrap_or((library, *stub as *const () as *mut c_void));
+        let host = host_address(library, name).or_else(|| {
+            (host_libc && library == "libc.so")
+                .then(|| roblox_linker::host_symbol("libc.so.6", name))
+                .flatten()
+                .map(|address| ("libc.so", address))
+        });
+        let (library, address) = host.unwrap_or((library, *stub as *const () as *mut c_void));
         result
             .libraries
             .entry(library)
@@ -134,7 +165,13 @@ pub(crate) fn build(imports: &roblox_linker::elf::Imports) -> SymbolTables {
             continue;
         }
         let library = library_for(name);
-        if let Some((library, address)) = host_address(library, name) {
+        let host = host_address(library, name).or_else(|| {
+            (host_libc && library == "libc.so")
+                .then(|| roblox_linker::host_symbol("libc.so.6", name))
+                .flatten()
+                .map(|address| ("libc.so", address))
+        });
+        if let Some((library, address)) = host {
             result
                 .libraries
                 .entry(library)
@@ -176,7 +213,7 @@ mod tests {
                 Binding::Weak,
             ),
         ]);
-        let tables = build(&imports);
+        let tables = build(&imports, false);
 
         assert!(
             tables.libraries["libm.so"]
@@ -195,11 +232,67 @@ mod tests {
 
     #[test]
     fn android_assets_are_registered_under_libandroid() {
-        let tables = build(&BTreeMap::new());
+        let tables = build(&BTreeMap::new(), false);
         assert!(
             tables.libraries["libandroid.so"]
                 .iter()
                 .any(|(name, address)| name == "AAssetManager_fromJava" && !address.is_null())
+        );
+    }
+
+    #[test]
+    fn observed_constructor_libc_calls_use_host_functions() {
+        let tables = build(&BTreeMap::new(), false);
+        for name in [
+            "__cxa_atexit",
+            "__ctype_get_mb_cur_max",
+            "mbtowc",
+            "memset",
+            "newlocale",
+            "strlen",
+            "syscall",
+            "uselocale",
+        ] {
+            assert!(
+                tables.libraries["libc.so"]
+                    .iter()
+                    .any(|(registered, address)| registered == name && !address.is_null()),
+                "{name} must resolve to the host libc function"
+            );
+        }
+
+        #[cfg(target_arch = "x86_64")]
+        for name in ["pthread_mutex_lock", "pthread_mutex_unlock"] {
+            let host = roblox_linker::host_symbol("libc.so.6", name).unwrap();
+            assert!(
+                tables.libraries["libc.so"]
+                    .iter()
+                    .any(|(registered, address)| registered == name && *address == host)
+            );
+        }
+
+        #[cfg(target_arch = "aarch64")]
+        for name in ["pthread_mutex_lock", "pthread_mutex_unlock"] {
+            let wrapper = roblox_abi::bionic::pthread::overrides()
+                .into_iter()
+                .find(|(registered, _)| *registered == name)
+                .expect("bionic pthread mutex wrapper");
+            assert!(
+                tables.libraries["libc.so"]
+                    .iter()
+                    .any(|(registered, address)| registered == wrapper.0 && *address == wrapper.1)
+            );
+        }
+    }
+
+    #[test]
+    fn host_libc_diagnostic_resolves_the_remaining_libc_stubs() {
+        let imports = BTreeMap::from([("stat".to_owned(), Binding::Strong)]);
+        let tables = build(&imports, true);
+        assert!(
+            tables.libraries["libc.so"]
+                .iter()
+                .any(|(name, address)| name == "stat" && !address.is_null())
         );
     }
 }
