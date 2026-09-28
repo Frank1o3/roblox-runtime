@@ -1,19 +1,19 @@
 [package]
-name = "roblox-android"
-description = "Android framework compatibility APIs for the Roblox runtime"
-version.workspace = true
-edition.workspace = true
-license.workspace = true
-build = "build.rs"
+    build="build.rs"
+    description="Android framework compatibility APIs for the Roblox runtime"
+    edition.workspace=true
+    license.workspace=true
+    name="roblox-android"
+    version.workspace=true
 
 [dependencies]
-roblox-linker = { path = "../linker" }
-serde_json = "1"
-zip = { version = "2", default-features = false, features = ["deflate"] }
+    roblox-linker={path="../linker"}
+    serde_json="1.0.151"
+    zip={version="8.6.0", default-features=false, features=["deflate"]}
 
 [lints.rust]
-unsafe_code = "allow"
-unsafe_op_in_unsafe_fn = "deny"
+    unsafe_code="allow"
+    unsafe_op_in_unsafe_fn="deny"
 
 [lints.clippy]
-undocumented_unsafe_blocks = "warn"
+    undocumented_unsafe_blocks="warn"

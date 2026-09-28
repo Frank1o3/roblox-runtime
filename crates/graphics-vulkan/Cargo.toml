@@ -1,16 +1,16 @@
 [package]
-name = "roblox-graphics-vulkan"
-description = "Vulkan loader and Android WSI compatibility for the Roblox runtime"
-version.workspace = true
-edition.workspace = true
-license.workspace = true
+    description="Vulkan loader and Android WSI compatibility for the Roblox runtime"
+    edition.workspace=true
+    license.workspace=true
+    name="roblox-graphics-vulkan"
+    version.workspace=true
 
 [dependencies]
-ash = { version = "0.38.0", default-features = false, features = ["loaded", "std"] }
+    ash={version="0.38.0", default-features=false, features=["loaded", "std"]}
 
 [lints.rust]
-unsafe_code = "allow"
-unsafe_op_in_unsafe_fn = "deny"
+    unsafe_code="allow"
+    unsafe_op_in_unsafe_fn="deny"
 
 [lints.clippy]
-undocumented_unsafe_blocks = "warn"
+    undocumented_unsafe_blocks="warn"

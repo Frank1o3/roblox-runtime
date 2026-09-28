@@ -1,18 +1,18 @@
 [package]
-name = "roblox-linker"
-description = "AOSP bionic linker compatibility bindings for Roblox runtime"
-version.workspace = true
-edition.workspace = true
-license.workspace = true
-links = "roblox_linker_shim"
-build = "build.rs"
+    build="build.rs"
+    description="AOSP bionic linker compatibility bindings for Roblox runtime"
+    edition.workspace=true
+    license.workspace=true
+    links="roblox_linker_shim"
+    name="roblox-linker"
+    version.workspace=true
 
 [lints.rust]
-unsafe_code = "allow"
-unsafe_op_in_unsafe_fn = "deny"
+    unsafe_code="allow"
+    unsafe_op_in_unsafe_fn="deny"
 
 [lints.clippy]
-undocumented_unsafe_blocks = "warn"
+    undocumented_unsafe_blocks="warn"
 
 [build-dependencies]
-cmake = "0.1.58"
+    cmake="0.1.58"

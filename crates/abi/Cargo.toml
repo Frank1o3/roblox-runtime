@@ -1,17 +1,17 @@
 [package]
-name = "roblox-abi"
-description = "Bionic and libc ABI compatibility for the Roblox Android runtime"
-version.workspace = true
-edition.workspace = true
-license.workspace = true
-build = "build.rs"
+    build="build.rs"
+    description="Bionic and libc ABI compatibility for the Roblox Android runtime"
+    edition.workspace=true
+    license.workspace=true
+    name="roblox-abi"
+    version.workspace=true
 
 [dependencies]
-roblox-linker = { path = "../linker" }
+    roblox-linker={path="../linker"}
 
 [lints.rust]
-unsafe_code = "allow"
-unsafe_op_in_unsafe_fn = "deny"
+    unsafe_code="allow"
+    unsafe_op_in_unsafe_fn="deny"
 
 [lints.clippy]
-undocumented_unsafe_blocks = "warn"
+    undocumented_unsafe_blocks="warn"

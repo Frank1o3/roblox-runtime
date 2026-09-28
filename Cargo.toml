@@ -1,34 +1,34 @@
 [workspace]
-resolver = "3"
-members = [".", "crates/jni", "crates/linker", "crates/abi", "crates/android", "crates/graphics-vulkan"]
-default-members = ["."]
+    default-members=["."]
+    members=[".", "crates/abi", "crates/android", "crates/graphics-vulkan", "crates/jni", "crates/linker"]
+    resolver="3"
 
-[workspace.package]
-version = "0.1.1"
-edition = "2024"
-license = "GPL-3.0-or-later"
+    [workspace.package]
+        edition="2024"
+        license="GPL-3.0-or-later"
+        version="0.1.1"
 
 [package]
-name = "roblox-runtime"
-description = "Embeddable Roblox Android runtime for Linux"
-version.workspace = true
-edition.workspace = true
-license.workspace = true
+    description="Embeddable Roblox Android runtime for Linux"
+    edition.workspace=true
+    license.workspace=true
+    name="roblox-runtime"
+    version.workspace=true
 
 [dependencies]
-roblox-jni = { path = "crates/jni" }
-roblox-linker = { path = "crates/linker" }
-roblox-abi = { path = "crates/abi" }
-roblox-android = { path = "crates/android" }
-roblox-graphics-vulkan = { path = "crates/graphics-vulkan" }
-serde_json = "1.0.151"
+    roblox-abi={path="crates/abi"}
+    roblox-android={path="crates/android"}
+    roblox-graphics-vulkan={path="crates/graphics-vulkan"}
+    roblox-jni={path="crates/jni"}
+    roblox-linker={path="crates/linker"}
+    serde_json="1.0.151"
 
 [lints.rust]
-unsafe_code = "deny"
-unsafe_op_in_unsafe_fn = "deny"
+    unsafe_code="deny"
+    unsafe_op_in_unsafe_fn="deny"
 
 [lints.clippy]
-undocumented_unsafe_blocks = "warn"
+    undocumented_unsafe_blocks="warn"
 
 [profile.release]
-debug = true
+    debug=true
