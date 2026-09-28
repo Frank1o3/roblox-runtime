@@ -278,7 +278,7 @@ int roblox_report_battery_state_changed(void* fn, int status, int plugged, char*
 /// sysfs's `temp` node — this class's field is declared `Ljava/lang/Float;`,
 /// not `Integer`, which only makes sense as an already-converted value, so the
 /// division happens on the Rust side before this struct is filled in.
-struct CordialBatteryStatus {
+struct RobloxRuntimeBatteryStatus {
     int32_t has_present;
     int32_t present;
     int32_t has_percentage;
@@ -306,7 +306,7 @@ struct CordialBatteryStatus {
 };
 
 /// `NativeGLInterface.reportBatteryStatus(Lcom/roblox/engine/jni/model/BatteryStatus;)V`.
-int roblox_report_battery_status(void* fn, const CordialBatteryStatus* in, char* err,
+int roblox_report_battery_status(void* fn, const RobloxRuntimeBatteryStatus* in, char* err,
                                    size_t err_len) {
     using Call = void (*)(JNIEnv*, jclass, jobject);
     auto* env = cordial::process_env();

@@ -543,7 +543,7 @@ extern "C" {
 
 /// One sink, as the shell shows it. Both pointers are NUL-terminated UTF-8
 /// owned by the array they came in, and are valid until it is freed.
-struct CordialAudioSink {
+struct RuntimeAudioSink {
     /// `node.name` — what gets stored in `shell.json` and handed back as
     /// `RBX_RUNTIME_AUDIO_SINK`. Stable across replug; never shown to a user.
     const char* node_name;
@@ -564,8 +564,8 @@ struct CordialAudioSink {
 ///
 /// The caller owns the array and must hand it back to
 /// `roblox_audio_sinks_free`.
-size_t roblox_audio_sinks(CordialAudioSink** out);
+size_t roblox_audio_sinks(RuntimeAudioSink** out);
 
-void roblox_audio_sinks_free(CordialAudioSink* sinks, size_t count);
+void roblox_audio_sinks_free(RuntimeAudioSink* sinks, size_t count);
 
 } // extern "C"

@@ -202,13 +202,13 @@ void android_set_abort_message(const char* msg) {
 /// duplicate-symbol error. Roblox never resolves these by name through the host
 /// linker anyway — they reach it through this table and Cordial's virtual
 /// `liblog.so`, which is the only path that matters.
-extern "C" struct CordialSymbol {
+extern "C" struct RuntimeSymbol {
     const char* name;
     void* addr;
 };
 
-extern "C" const CordialSymbol* roblox_liblog_symbols(size_t* count) {
-    static const CordialSymbol table[] = {
+extern "C" const RuntimeSymbol* roblox_liblog_symbols(size_t* count) {
+    static const RuntimeSymbol table[] = {
         {"__android_log_write", (void*)&__android_log_write},
         {"__android_log_buf_write", (void*)&__android_log_buf_write},
         {"__android_log_print", (void*)&__android_log_print},

@@ -37,7 +37,7 @@
 // The other direction — pasting *into* Roblox — has no engine-side ask at all,
 // and that is not an omission here. On Android a focused TextBox is edited by a
 // real `android.widget.EditText` laid over the GL surface (see
-// `CordialTextBoxInfo` in `android_classes.cpp`), so Android's own editor
+// `RobloxRuntimeTextBoxInfo` in `android_classes.cpp`), so Android's own editor
 // handles the paste and the engine only ever sees the resulting text arrive
 // through `gametextinput`. Cordial's equivalent of that editor is
 // `android::input`, so the paste path is `android::clipboard::paste_into_engine`

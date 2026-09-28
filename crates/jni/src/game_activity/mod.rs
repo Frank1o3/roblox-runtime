@@ -6,6 +6,7 @@ pub mod game_activity {
     use std::ffi::{CString, c_char, c_int, c_void};
 
     include!("bootstrap.rs");
+    include!("services.rs");
     include!("display.rs");
     include!("input.rs");
     include!("lifecycle_text.rs");

@@ -758,11 +758,11 @@ int cmd_record_selfstop() {
 // each state.
 
 extern "C" {
-struct CordialAAudioSymbol {
+struct RuntimeAAudioSymbol {
     const char* name;
     void* address;
 };
-const CordialAAudioSymbol* roblox_aaudio_symbols(size_t* count);
+const RuntimeAAudioSymbol* roblox_aaudio_symbols(size_t* count);
 }
 
 namespace aa {
@@ -800,7 +800,7 @@ int32_t (*getXRunCount)(stream_t*) = nullptr;
 
 void* find(const char* name) {
     size_t count = 0;
-    const CordialAAudioSymbol* table = roblox_aaudio_symbols(&count);
+    const RuntimeAAudioSymbol* table = roblox_aaudio_symbols(&count);
     for (size_t i = 0; i < count; ++i) {
         if (std::strcmp(table[i].name, name) == 0) return table[i].address;
     }

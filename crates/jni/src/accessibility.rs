@@ -9,7 +9,7 @@
 pub mod accessibility {
     use std::ffi::{CString, c_char, c_int};
 
-    /// Layout must match `CordialA11yNode` in `native/accessibility.cpp`
+    /// Layout must match `RobloxRuntimeA11yNode` in `native/accessibility.cpp`
     /// field-for-field — this is a `#[repr(C)]` mirror, not a coincidence.
     #[repr(C)]
     #[derive(Clone, Copy)]

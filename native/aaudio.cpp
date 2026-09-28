@@ -1284,12 +1284,12 @@ static aaudio_result_t AAudioStream_read(AAudioStream* stream, void* buffer, int
 
 // ------------------------------------------------------------- symbol table
 
-struct CordialAAudioSymbol {
+struct RuntimeAAudioSymbol {
     const char* name;
     void* address;
 };
 
-static const CordialAAudioSymbol kSymbols[] = {
+static const RuntimeAAudioSymbol kSymbols[] = {
     {"AAudio_createStreamBuilder", reinterpret_cast<void*>(&AAudio_createStreamBuilder)},
     {"AAudioStreamBuilder_delete", reinterpret_cast<void*>(&AAudioStreamBuilder_delete)},
     {"AAudioStreamBuilder_openStream", reinterpret_cast<void*>(&AAudioStreamBuilder_openStream)},
@@ -1325,7 +1325,7 @@ static const CordialAAudioSymbol kSymbols[] = {
      reinterpret_cast<void*>(&AAudioStream_setBufferSizeInFrames)},
 };
 
-const CordialAAudioSymbol* roblox_aaudio_symbols(size_t* count) {
+const RuntimeAAudioSymbol* roblox_aaudio_symbols(size_t* count) {
     if (count) *count = sizeof(kSymbols) / sizeof(kSymbols[0]);
     return kSymbols;
 }

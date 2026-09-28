@@ -1631,12 +1631,12 @@ uint32_t slCreateEngine(void** engine, uint32_t numOptions, const void* pEngineO
     return SL_RESULT_SUCCESS;
 }
 
-struct CordialSymbol {
+struct RuntimeSymbol {
     const char* name;
     void* address;
 };
 
-static const CordialSymbol kSymbols[] = {
+static const RuntimeSymbol kSymbols[] = {
     {"slCreateEngine", reinterpret_cast<void*>(&slCreateEngine)},
     {"SL_IID_ENGINE", &SL_IID_ENGINE},
     {"SL_IID_PLAY", &SL_IID_PLAY},
@@ -1647,7 +1647,7 @@ static const CordialSymbol kSymbols[] = {
     {"SL_IID_ANDROIDCONFIGURATION", &SL_IID_ANDROIDCONFIGURATION},
 };
 
-const CordialSymbol* roblox_opensles_symbols(size_t* count) {
+const RuntimeSymbol* roblox_opensles_symbols(size_t* count) {
     if (count) *count = sizeof(kSymbols) / sizeof(kSymbols[0]);
     return kSymbols;
 }

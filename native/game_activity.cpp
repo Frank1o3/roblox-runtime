@@ -35,9 +35,9 @@
 ///
 /// At file scope rather than inside `namespace cordial` because it appears in
 /// the signature of an `extern "C"` entry point at the bottom of this file, and
-/// an elaborated `struct CordialTouchContact` written there would silently
+/// an elaborated `struct RobloxRuntimeTouchContact` written there would silently
 /// declare a *second*, unrelated type rather than referring to this one.
-struct CordialTouchContact {
+struct RobloxRuntimeTouchContact {
     int id;
     float x, y;
 };
@@ -456,7 +456,7 @@ public:
     /// `action` arrives already packed: for `ACTION_POINTER_DOWN`/`_UP` Android
     /// carries the index of the contact the event is *about* in bits 8-15, and
     /// the caller in `android::input` is where that packing is done and tested.
-    static std::shared_ptr<MotionEvent> CreateTouch(ENV* env, const CordialTouchContact* contacts,
+    static std::shared_ptr<MotionEvent> CreateTouch(ENV* env, const RobloxRuntimeTouchContact* contacts,
                                                     int count, jint action, jlong eventTime,
                                                     jlong downTime) {
         auto p = std::make_shared<MotionEvent>();
@@ -1977,7 +1977,7 @@ int roblox_game_activity_touch(long handle, int action, float x, float y, int bu
 ///
 /// Returns 0 / -1 / -2 exactly as `roblox_game_activity_touch` does.
 int roblox_game_activity_touch_multi(long handle, int action,
-                                      const struct CordialTouchContact* contacts, int count,
+                                      const struct RobloxRuntimeTouchContact* contacts, int count,
                                       long long event_time_ms, long long down_time_ms,
                                       int* consumed, char* err, size_t err_len) {
     if (!contacts || count <= 0) {

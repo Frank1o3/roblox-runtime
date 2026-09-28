@@ -268,7 +268,7 @@ int s_statvfs(const char* path, bionic_statvfs* out) {
 
 } // namespace
 
-extern "C" struct CordialSystemSymbol {
+extern "C" struct RuntimeSystemSymbol {
     const char* name;
     void* addr;
 };
@@ -295,8 +295,8 @@ extern "C" void roblox_set_path_trace(int on) {
     g_trace = on != 0;
 }
 
-extern "C" const CordialSystemSymbol* roblox_system_symbols(size_t* count) {
-    static const CordialSystemSymbol table[] = {
+extern "C" const RuntimeSystemSymbol* roblox_system_symbols(size_t* count) {
+    static const RuntimeSystemSymbol table[] = {
         {"stat", (void*)&s_stat},
         {"lstat", (void*)&s_lstat},
         {"access", (void*)&s_access},

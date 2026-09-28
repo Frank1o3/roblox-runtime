@@ -159,13 +159,13 @@ extern "C" void roblox_set_thread_trace(int on) {
     g_trace = on != 0;
 }
 
-extern "C" struct CordialThreadSymbol {
+extern "C" struct RuntimeThreadSymbol {
     const char* name;
     void* addr;
 };
 
-extern "C" const CordialThreadSymbol* roblox_thread_symbols(size_t* count) {
-    static const CordialThreadSymbol table[] = {
+extern "C" const RuntimeThreadSymbol* roblox_thread_symbols(size_t* count) {
+    static const RuntimeThreadSymbol table[] = {
         {"pthread_create", (void*)&roblox_pthread_create},
     };
     *count = sizeof(table) / sizeof(table[0]);

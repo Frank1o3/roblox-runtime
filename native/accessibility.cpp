@@ -680,7 +680,7 @@ void register_accessibility_classes(ENV* env) {
 
 extern "C" {
 
-struct CordialA11yNode {
+struct RobloxRuntimeA11yNode {
     unsigned id;
     char class_name[128];
     char text[256];
@@ -697,7 +697,7 @@ struct CordialA11yNode {
     unsigned action_count;
 };
 
-static void fill_node(const cordial::NodeState& n, CordialA11yNode* out) {
+static void fill_node(const cordial::NodeState& n, RobloxRuntimeA11yNode* out) {
     out->id = n.id;
     std::snprintf(out->class_name, sizeof(out->class_name), "%s", n.class_name.c_str());
     std::snprintf(out->text, sizeof(out->text), "%s", n.text.c_str());
@@ -718,7 +718,7 @@ static void fill_node(const cordial::NodeState& n, CordialA11yNode* out) {
 /// Copy up to `max` live nodes into `out`. Returns the number written — not
 /// the total live count, which callers get from
 /// `roblox_accessibility_node_count` if they need to size the buffer first.
-size_t roblox_accessibility_snapshot(CordialA11yNode* out, size_t max) {
+size_t roblox_accessibility_snapshot(RobloxRuntimeA11yNode* out, size_t max) {
     if (!out || max == 0) return 0;
     std::lock_guard<std::mutex> lock(cordial::g_registry_mutex);
     size_t n = 0;

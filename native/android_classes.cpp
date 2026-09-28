@@ -160,7 +160,7 @@
 /// When a slot is settled, rename it here and in `RawTextBoxInfo` in
 /// `crates/cordial-linker-sys/src/lib.rs` together. A wrong name would be
 /// worse than no name, because it would be believed.
-struct CordialTextBoxInfo {
+struct RobloxRuntimeTextBoxInfo {
     float x, y, width, height, font_size;
     // The four `Z` slots are widened to `int` rather than kept as `jboolean`.
     // This struct is mirrored field-for-field on the Rust side, and a one-byte
@@ -195,14 +195,14 @@ std::mutex g_textbox_mutex;
 std::string g_textbox_text;
 /// The focused box's spec, and whether one was ever supplied. Guarded by
 /// `g_textbox_mutex` alongside the text, which it always arrives with.
-CordialTextBoxInfo g_textbox_info{};
+RobloxRuntimeTextBoxInfo g_textbox_info{};
 bool g_textbox_info_known = false;
 /// The most recently constructed `NativeTextBoxInfo`, kept because the engine
 /// builds the object and hands it to `showKeyboard` as a separate step, and it
 /// is only at `showKeyboard` that Cordial learns a box has focus. Also the
 /// fallback for the object arriving null there, which would otherwise lose the
 /// spec silently — the trace says which of the two supplied it.
-CordialTextBoxInfo g_textbox_last_built{};
+RobloxRuntimeTextBoxInfo g_textbox_last_built{};
 bool g_textbox_last_built_known = false;
 /// Bumped on every focus change so the input side can tell "same box, keep
 /// editing" from "new box, reseed the buffer" without comparing handles — a
@@ -229,7 +229,7 @@ std::atomic<unsigned> g_textbox_property_generation{0};
 /// match — was invisible in every capture this project holds. A trace that
 /// silently drops a field is worse than no trace of it: three of the four
 /// booleans were being argued about from a log that only ever showed two.
-void trace_textbox_info(const char* source, const CordialTextBoxInfo& i) {
+void trace_textbox_info(const char* source, const RobloxRuntimeTextBoxInfo& i) {
     fprintf(stderr,
             "[cordial] textbox spec from %s x=%g y=%g w=%g h=%g fontSize=%g "
             "multiline=%d xAlign=%d yAlign=%d textColor=%#x font=%d "
@@ -244,7 +244,7 @@ void trace_textbox_info(const char* source, const CordialTextBoxInfo& i) {
 }
 } // namespace
 
-extern "C" void roblox_textbox_last_built(const CordialTextBoxInfo* info) {
+extern "C" void roblox_textbox_last_built(const RobloxRuntimeTextBoxInfo* info) {
     if (!info) return;
     std::lock_guard<std::mutex> lock(g_textbox_mutex);
     g_textbox_last_built = *info;
@@ -252,7 +252,7 @@ extern "C" void roblox_textbox_last_built(const CordialTextBoxInfo* info) {
 }
 
 extern "C" void roblox_textbox_focused(long long handle, const char* text,
-                                        const CordialTextBoxInfo* info) {
+                                        const RobloxRuntimeTextBoxInfo* info) {
     const bool trace = getenv("RBX_RUNTIME_TRACE_TEXT") != nullptr;
     if (trace) {
         fprintf(stderr, "[cordial] textbox focused handle=%lld current=%zu bytes\n",
@@ -275,7 +275,7 @@ extern "C" void roblox_textbox_focused(long long handle, const char* text,
             // would be worse than admitting the gap: an editor styled from a
             // stale spec sits in the wrong place and looks like a layout bug
             // rather than a missing value.
-            g_textbox_info = CordialTextBoxInfo{};
+            g_textbox_info = RobloxRuntimeTextBoxInfo{};
             g_textbox_info_known = false;
         }
         if (trace) {
@@ -358,7 +358,7 @@ extern "C" long long roblox_last_place(void) {
 /// `*out` is left untouched rather than zeroed. A box at (0, 0) sized 0x0 is
 /// indistinguishable from a box Cordial was never told about, and only one of
 /// those is worth drawing an editor for.
-extern "C" int roblox_textbox_info(CordialTextBoxInfo* out) {
+extern "C" int roblox_textbox_info(RobloxRuntimeTextBoxInfo* out) {
     if (!out) return 0;
     std::lock_guard<std::mutex> lock(g_textbox_mutex);
     if (!g_textbox_info_known) return 0;
@@ -380,7 +380,7 @@ extern "C" void roblox_textbox_test_focus(long long handle, const char* text,
                                            float s4, int s5, int s6, int s7, int s8,
                                            int s9, int s10, int s11, int s12, int s13,
                                            int s14) {
-    CordialTextBoxInfo info{};
+    RobloxRuntimeTextBoxInfo info{};
     info.x = s0;
     info.y = s1;
     info.width = s2;
@@ -504,8 +504,8 @@ public:
         // `OS Ver. = 13, Lvl = 33`. The default path reached Vulkan with either
         // value in two control runs.
         p->osVersion       = str("33");
-        p->deviceName      = str("Cordial");
-        p->manufacturer    = str("Cordial");
+        p->deviceName      = str("Roblox Runtime");
+        p->manufacturer    = str("Roblox Runtime");
         p->deviceSku       = str("cordial");
         p->socModel        = str("cordial");
         p->appBuildVariant = str("release");
@@ -533,7 +533,7 @@ public:
 /// `com.roblox.engine.jni.model.NativeTextBoxInfo`
 ///
 /// The spec for the editor Android lays over the focused text box. See
-/// `CordialTextBoxInfo` at the top of this file for what the fourteen values
+/// `RobloxRuntimeTextBoxInfo` at the top of this file for what the fourteen values
 /// are, what is established about their order and what is not, and why an
 /// editor is needed on a machine with no on-screen keyboard.
 class NativeTextBoxInfo : public Object {
@@ -542,7 +542,7 @@ public:
     /// `showKeyboard` is handed the object itself, so reading them back off it
     /// is exact where the process-wide "most recently built" slot is only a
     /// good guess about which box the engine meant.
-    CordialTextBoxInfo spec{};
+    RobloxRuntimeTextBoxInfo spec{};
     bool spec_known = false;
 
     // The engine constructs one of these and hands it to `showKeyboard`. With no
@@ -591,8 +591,8 @@ public:
         jboolean manual_focus_release, jboolean text_wrapped, jboolean z14) {
         auto o = std::make_shared<NativeTextBoxInfo>();
         // Positional, because that is what the constructor is. Every slot but
-        // the fifteenth has a name now; see `CordialTextBoxInfo`.
-        o->spec = CordialTextBoxInfo{
+        // the fifteenth has a name now; see `RobloxRuntimeTextBoxInfo`.
+        o->spec = RobloxRuntimeTextBoxInfo{
             f0, f1, f2, f3, f4,
             multiline ? 1 : 0,
             x_alignment, y_alignment, text_color, font, text_input_type,
@@ -831,7 +831,7 @@ public:
         // engine actually named. A null falls back to the last one constructed
         // rather than to nothing, because an unmatched hook here would look
         // exactly like a box with no spec.
-        const CordialTextBoxInfo* spec =
+        const RobloxRuntimeTextBoxInfo* spec =
             (info && info->spec_known) ? &info->spec : nullptr;
         // Separates the two ways this arrives empty, which look identical from
         // "textbox spec unavailable" and lead somewhere completely different: a
@@ -1987,13 +1987,13 @@ jnivm::ENV* process_env();
 /// read with `tools/dex_method.py`, not guessed, because a wrong arity here
 /// would be the same silent nothing the `<init>` hook was for a year. The
 /// object it returns is built through that same hook, so every slot arrives
-/// named the way `CordialTextBoxInfo` names them.
+/// named the way `RobloxRuntimeTextBoxInfo` names them.
 ///
 /// Returns 1 with `*out` filled, 0 when the engine answered null — which it
 /// does for the whole of the sign-in page — and -1 on error. **A 0 is not a
 /// zeroed box:** `*out` is left untouched, for the reason
 /// `roblox_textbox_info` gives at more length.
-extern "C" int roblox_textbox_info_now(void* fn, CordialTextBoxInfo* out,
+extern "C" int roblox_textbox_info_now(void* fn, RobloxRuntimeTextBoxInfo* out,
                                         char* err, size_t err_len) {
     using Call = jobject (*)(JNIEnv*, jobject);
     auto* env = cordial::process_env();

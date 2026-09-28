@@ -93,12 +93,12 @@ std::unique_ptr<OutputStream> make_output_stream() { return std::make_unique<Fak
 
 extern "C" {
 
-struct CordialAAudioSymbol {
+struct RuntimeAAudioSymbol {
     const char* name;
     void* address;
 };
 
-const CordialAAudioSymbol* roblox_aaudio_symbols(size_t* count);
+const RuntimeAAudioSymbol* roblox_aaudio_symbols(size_t* count);
 
 } // extern "C"
 
@@ -107,7 +107,7 @@ namespace {
 template <typename Function>
 Function symbol(const char* name) {
     size_t count = 0;
-    const CordialAAudioSymbol* symbols = roblox_aaudio_symbols(&count);
+    const RuntimeAAudioSymbol* symbols = roblox_aaudio_symbols(&count);
     for (size_t i = 0; i < count; ++i) {
         if (std::strcmp(symbols[i].name, name) == 0) {
             return reinterpret_cast<Function>(symbols[i].address);

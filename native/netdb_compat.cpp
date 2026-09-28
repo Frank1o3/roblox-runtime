@@ -191,13 +191,13 @@ void roblox_freeaddrinfo(BionicAddrinfo* p) {
 
 } // extern "C"
 
-extern "C" struct CordialNetdbSymbol {
+extern "C" struct RuntimeNetdbSymbol {
     const char* name;
     void* addr;
 };
 
-extern "C" const CordialNetdbSymbol* roblox_netdb_symbols(size_t* count) {
-    static const CordialNetdbSymbol table[] = {
+extern "C" const RuntimeNetdbSymbol* roblox_netdb_symbols(size_t* count) {
+    static const RuntimeNetdbSymbol table[] = {
         {"getaddrinfo", (void*)&roblox_getaddrinfo},
         {"freeaddrinfo", (void*)&roblox_freeaddrinfo},
     };

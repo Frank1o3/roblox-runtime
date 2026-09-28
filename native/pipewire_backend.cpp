@@ -1872,7 +1872,7 @@ std::unique_ptr<OutputStream> make_output_stream() {
 
 extern "C" {
 
-size_t roblox_audio_sinks(CordialAudioSink** out) {
+size_t roblox_audio_sinks(RuntimeAudioSink** out) {
     if (!out) return 0;
     *out = nullptr;
 
@@ -1884,7 +1884,7 @@ size_t roblox_audio_sinks(CordialAudioSink** out) {
     }
     if (count == 0) return 0;
 
-    auto* list = static_cast<CordialAudioSink*>(std::calloc(count, sizeof(CordialAudioSink)));
+    auto* list = static_cast<RuntimeAudioSink*>(std::calloc(count, sizeof(RuntimeAudioSink)));
     if (!list) return 0;
 
     size_t i = 0;
@@ -1907,7 +1907,7 @@ size_t roblox_audio_sinks(CordialAudioSink** out) {
     return count;
 }
 
-void roblox_audio_sinks_free(CordialAudioSink* sinks, size_t count) {
+void roblox_audio_sinks_free(RuntimeAudioSink* sinks, size_t count) {
     if (!sinks) return;
     for (size_t i = 0; i < count; ++i) {
         std::free(const_cast<char*>(sinks[i].node_name));

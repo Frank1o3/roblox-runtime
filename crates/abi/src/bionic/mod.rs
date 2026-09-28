@@ -420,11 +420,11 @@ const PROPERTIES: &[(&str, &str)] = &[
     // refused Vulkan outright ("Android version is too old to activate Vulkan").
     ("ro.build.version.sdk", "33"),
     ("ro.build.version.release", "13"),
-    ("ro.product.model", "Cordial"),
-    ("ro.product.manufacturer", "Cordial"),
-    ("ro.product.brand", "cordial"),
+    ("ro.product.model", "Roblox Runtime"),
+    ("ro.product.manufacturer", "Linux"),
+    ("ro.product.brand", "roblox-runtime"),
     ("ro.product.device", "linux"),
-    ("ro.product.name", "cordial"),
+    ("ro.product.name", "roblox-runtime"),
     ("ro.hardware", "cordial"),
     // **`ro.soc.manufacturer` is deliberately not here, and this comment is the
     // answer to issue #12 rather than a note that nobody got round to it.**
