@@ -34,6 +34,7 @@
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <memory>
 #include <map>
 #include <mutex>
@@ -74,6 +75,8 @@ using jnivm::String;
 
 jnivm::ENV* process_env();
 std::shared_ptr<String> jstr_shared(const char* v);
+
+extern "C" void* roblox_jnivm_new_string_array(const char* const* values, int count);
 
 /// Who is signed in — defined in `android_classes.cpp`, beside the
 /// `NativeUserJavaInterface` mirror it also answers.
@@ -2394,14 +2397,29 @@ int roblox_init_flags(void* fn, const char* settings_json, char* err, size_t err
                 pos = nl + 1;
             }
         }
-        auto arr = std::make_shared<jnivm::Array<jnivm::String>>(names.size());
-        for (size_t k = 0; k < names.size(); ++k) {
-            (*arr)[k] = std::make_shared<jnivm::String>(names[k]);
+        jobjectArray array = nullptr;
+        const char* experimental = getenv("USE_EXPERIMENTAL_JNIVM");
+        if (experimental && (strcmp(experimental, "1") == 0 || strcmp(experimental, "true") == 0)) {
+            std::vector<const char*> raw_names;
+            raw_names.reserve(names.size());
+            for (const auto& name : names) raw_names.push_back(name.c_str());
+            array = static_cast<jobjectArray>(roblox_runtime::roblox_jnivm_new_string_array(
+                raw_names.data(), static_cast<int>(raw_names.size())));
+            if (!array) {
+                snprintf(err, err_len, "Rust JNI could not allocate flag name array");
+                return -1;
+            }
+        } else {
+            auto arr = std::make_shared<jnivm::Array<jnivm::String>>(names.size());
+            for (size_t k = 0; k < names.size(); ++k) {
+                (*arr)[k] = std::make_shared<jnivm::String>(names[k]);
+            }
+            array = (jobjectArray)roblox_runtime::to_jni(env, arr);
         }
         reinterpret_cast<Call>(fn)(
             env->GetJNIEnv(),
             (jclass)roblox_runtime::to_jni(env, cls),
-            (jobjectArray)roblox_runtime::to_jni(env, arr));
+            array);
         return 0;
     } catch (const std::exception& e) {
         snprintf(err, err_len, "%s", e.what());

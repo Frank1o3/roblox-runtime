@@ -7,7 +7,8 @@ mod descriptor;
 mod vm;
 
 pub use abi::{
-    call_on_load, create_vm, current_env, new_opaque_object, new_string_ref,
+    call_on_load, create_vm, current_env, new_configuration, new_opaque_object,
+    new_string_array_ref, new_string_ref,
     set_fmod_aaudio_support, set_game_loaded_callback, set_startup_bootstrap, vm_exists,
 };
 pub use descriptor::{

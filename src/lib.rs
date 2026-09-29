@@ -530,6 +530,8 @@ impl LoadedEngine {
         internal_path: &str,
         obb_path: &str,
         external_path: &str,
+        width: u32,
+        height: u32,
     ) -> Result<i64, JniError> {
         if self.constructors_pending {
             return Err(JniError::ConstructorsDeferred);
@@ -552,7 +554,17 @@ impl LoadedEngine {
                 .map_err(JniError::ExperimentalJniVmUnavailable)?;
             let assets = jnivm::new_opaque_object("android/content/res/AssetManager")
                 .map_err(JniError::ExperimentalJniVmUnavailable)?;
-            let configuration = jnivm::new_opaque_object("android/content/res/Configuration")
+            let width = i32::try_from(width).map_err(|_| {
+                JniError::ExperimentalJniVmUnavailable(
+                    "configuration width exceeds Android limits".into(),
+                )
+            })?;
+            let height = i32::try_from(height).map_err(|_| {
+                JniError::ExperimentalJniVmUnavailable(
+                    "configuration height exceeds Android limits".into(),
+                )
+            })?;
+            let configuration = jnivm::new_configuration(width, height)
                 .map_err(JniError::ExperimentalJniVmUnavailable)?;
             // SAFETY: all JNI references and the native export belong to the
             // mapped engine and selected Rust VM, and remain live during call.

@@ -297,6 +297,24 @@ int roblox_jni_fallback_has_method(const char* class_name, const char* name,
     }
 }
 
+/// Mirror a RegisterNatives entry from the experimental Rust VM into the
+/// companion libjnivm class table used by the runtime's lifecycle driver.
+int roblox_jni_fallback_register_native(const char* class_name, const char* name,
+                                        const char* signature, void* function) {
+    try {
+        if (!g_vm || !class_name || !name || !signature || !function) return -1;
+        auto* env = roblox_runtime::process_env();
+        if (!env) return -1;
+        auto cls = env->GetClass(class_name);
+        if (!cls) return -1;
+        std::lock_guard<std::mutex> lock(cls->mtx);
+        cls->natives[name] = function;
+        return 0;
+    } catch (...) {
+        return -1;
+    }
+}
+
 int roblox_jni_fallback_has_field(const char* class_name, const char* name,
                                  const char* type, int is_static, int is_set) {
     try {

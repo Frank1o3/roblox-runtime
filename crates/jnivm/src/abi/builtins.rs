@@ -279,6 +279,11 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
     )?;
     vm.register_class("androidx/core/graphics/Insets")
         .map_err(|error| error.to_string())?;
+    let insets = vm.find_or_define_class("androidx/core/graphics/Insets")
+        .map_err(|error| error.to_string())?;
+    for name in ["left", "top", "right", "bottom"] {
+        vm.register_field(insets, name, "I", false).map_err(|error| error.to_string())?;
+    }
     install_instance_builtin(
         vm,
         game_activity,
@@ -305,6 +310,17 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
     let configuration = vm
         .find_or_define_class("android/content/res/Configuration")
         .map_err(|error| error.to_string())?;
+    for (name, descriptor) in [
+        ("colorMode", "I"), ("densityDpi", "I"), ("fontScale", "F"),
+        ("fontWeightAdjustment", "I"), ("hardKeyboardHidden", "I"),
+        ("keyboard", "I"), ("keyboardHidden", "I"), ("mcc", "I"), ("mnc", "I"),
+        ("navigation", "I"), ("navigationHidden", "I"), ("orientation", "I"),
+        ("screenHeightDp", "I"), ("screenLayout", "I"), ("screenWidthDp", "I"),
+        ("smallestScreenWidthDp", "I"), ("touchscreen", "I"), ("uiMode", "I"),
+    ] {
+        vm.register_field(configuration, name, descriptor, false)
+            .map_err(|error| error.to_string())?;
+    }
     install_instance_builtin(
         vm,
         configuration,
@@ -449,8 +465,37 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
         vm.register_field(text_state, name, descriptor, false)
             .map_err(|error| error.to_string())?;
     }
-    vm.register_class("com/google/androidgamesdk/gametextinput/InputConnection")
+    let input_connection = vm.register_class("com/google/androidgamesdk/gametextinput/InputConnection")
         .map_err(|error| error.to_string())?;
+    for (name, descriptor) in [
+        ("setState", "(Lcom/google/androidgamesdk/gametextinput/State;)V"),
+        ("setSoftKeyboardActive", "(ZI)V"),
+        ("restartInput", "()V"),
+    ] {
+        register_unhandled_instance(vm, input_connection, name, descriptor)?;
+    }
+
+    // AGDK resolves these accessors while registering GameActivity, before it
+    // receives any input. Runtime-created event objects are backed by the
+    // companion C++ VM, whose reference implementations provide their values.
+    let motion = vm.register_class("android/view/MotionEvent").map_err(|e| e.to_string())?;
+    for (name, descriptor) in [
+        ("getDeviceId", "()I"), ("getSource", "()I"), ("getAction", "()I"),
+        ("getEventTime", "()J"), ("getDownTime", "()J"), ("getFlags", "()I"),
+        ("getMetaState", "()I"), ("getActionButton", "()I"), ("getButtonState", "()I"),
+        ("getClassification", "()I"), ("getEdgeFlags", "()I"), ("getHistorySize", "()I"),
+        ("getHistoricalEventTime", "(I)J"), ("getPointerCount", "()I"),
+        ("getPointerId", "(I)I"), ("getToolType", "(I)I"), ("getRawX", "(I)F"),
+        ("getRawY", "(I)F"), ("getXPrecision", "()F"), ("getYPrecision", "()F"),
+        ("getAxisValue", "(II)F"), ("getHistoricalAxisValue", "(III)F"),
+    ] { register_unhandled_instance(vm, motion, name, descriptor)?; }
+    let key = vm.register_class("android/view/KeyEvent").map_err(|e| e.to_string())?;
+    for (name, descriptor) in [
+        ("getDeviceId", "()I"), ("getSource", "()I"), ("getAction", "()I"),
+        ("getEventTime", "()J"), ("getDownTime", "()J"), ("getFlags", "()I"),
+        ("getMetaState", "()I"), ("getModifiers", "()I"), ("getRepeatCount", "()I"),
+        ("getKeyCode", "()I"), ("getScanCode", "()I"), ("getUnicodeChar", "()I"),
+    ] { register_unhandled_instance(vm, key, name, descriptor)?; }
 
     install_platform_methods(vm)?;
     install_fmod_methods(vm)?;
@@ -594,6 +639,11 @@ fn zero_insets(vm: &Vm, _receiver: Option<crate::ObjectId>, _args: &[JniValue]) 
         .or_else(|| Some(vm.attach_current_thread()))
         .and_then(|env| vm.new_local_object(&env, class, crate::ObjectValue::Opaque).ok())
         .map_or(JniValue::Object(None), |object| {
+            for name in ["left", "top", "right", "bottom"] {
+                if let Ok(field) = vm.resolve_field(class, name, "I", false) {
+                    let _ = vm.set_field_value(field, Some(object), JniValue::Int(0));
+                }
+            }
             JniValue::Object(Some(object))
         })
 }
@@ -803,6 +853,12 @@ fn install_instance_builtin(
         .register_method(class, name, descriptor, false)
         .map_err(|error| error.to_string())?;
     vm.install_method_handler(method, handler)
+        .map_err(|error| error.to_string())
+}
+
+fn register_unhandled_instance(vm: &Vm, class: crate::ClassId, name: &str, descriptor: &str) -> Result<(), String> {
+    vm.register_method(class, name, descriptor, false)
+        .map(|_| ())
         .map_err(|error| error.to_string())
 }
 

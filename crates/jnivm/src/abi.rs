@@ -22,6 +22,15 @@ static VM_HANDLE: OnceLock<usize> = OnceLock::new();
 static UTF8_BUFFERS: OnceLock<Mutex<HashMap<usize, CString>>> = OnceLock::new();
 static UTF16_BUFFERS: OnceLock<Mutex<HashMap<usize, Box<[u16]>>>> = OnceLock::new();
 
+unsafe extern "C" {
+    fn roblox_jni_fallback_register_native(
+        class_name: *const c_char,
+        name: *const c_char,
+        signature: *const c_char,
+        function: *mut c_void,
+    ) -> i32;
+}
+
 thread_local! {
     /// Points to a boxed `JNIEnv` table pointer, the layout expected by JNI.
     static THREAD_ENV: Cell<usize> = const { Cell::new(0) };
@@ -253,6 +262,60 @@ pub fn new_configuration(width: i32, height: i32) -> Result<*mut c_void, String>
             .map_err(|error| error.to_string())?;
     }
     Ok(object)
+}
+
+/// Build a Java String[] whose references belong to the Rust VM for native
+/// runtime entry points that call engine JNI exports directly.
+pub fn new_string_array_ref(values: &[String]) -> Result<*mut c_void, String> {
+    let vm = vm().ok_or("Rust JavaVM has not been created")?;
+    let env = vm.get_env().unwrap_or_else(|| vm.attach_current_thread());
+    let string_class = vm.find_or_define_class("java/lang/String").map_err(|e| e.to_string())?;
+    let array = vm.new_local_object_array(&env, values.len(), None).map_err(|e| e.to_string())?;
+    for (index, value) in values.iter().enumerate() {
+        let object = vm.new_local_object(
+            &env,
+            string_class,
+            ObjectValue::String(value.encode_utf16().collect()),
+        ).map_err(|e| e.to_string())?;
+        vm.set_object_array_element(&env, array, index, Some(object)).map_err(|e| e.to_string())?;
+    }
+    Ok(array.0 as usize as *mut c_void)
+}
+
+/// C ABI adapter for runtime-owned startup code that needs a Java array in the
+/// selected Rust VM. `values` points to `count` NUL-terminated UTF-8 strings.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn roblox_jnivm_new_string_array(
+    values: *const *const c_char,
+    count: i32,
+) -> *mut c_void {
+    if count < 0 || (count > 0 && values.is_null()) {
+        return ptr::null_mut();
+    }
+    // SAFETY: the C caller promises an array of `count` string pointers for
+    // this synchronous call.
+    let raw_values = if count == 0 {
+        &[]
+    } else {
+        // SAFETY: positive count implies a non-null pointer and the caller
+        // promises an array of that many entries.
+        unsafe { std::slice::from_raw_parts(values, count as usize) }
+    };
+    let mut owned = Vec::with_capacity(raw_values.len());
+    for value in raw_values {
+        // SAFETY: each entry is promised to be a NUL-terminated C string.
+        let Some(value) = (unsafe { c_string(*value) }) else {
+            return ptr::null_mut();
+        };
+        owned.push(value);
+    }
+    match new_string_array_ref(&owned) {
+        Ok(array) => array,
+        Err(error) => {
+            eprintln!("[jnivm] Java String[] allocation failed: {error}");
+            ptr::null_mut()
+        }
+    }
 }
 
 /// Invoke a mapped engine's `JNI_OnLoad` with the experimental JavaVM.
@@ -498,6 +561,22 @@ unsafe extern "system" fn register_natives(
         if let Err(error) = vm.register_native(class, &name, &signature, method.fnPtr as usize) {
             eprintln!("[jnivm] RegisterNatives {name}{signature} failed: {error}");
             return jni::JNI_ERR;
+        }
+        if let Some(class_name) = vm.class_name(class) {
+            let (Ok(class_name), Ok(name), Ok(signature)) = (
+                CString::new(class_name), CString::new(name), CString::new(signature),
+            ) else { return jni::JNI_ERR; };
+            // The runtime's lifecycle driver calls AGDK's registered natives
+            // through its companion libjnivm class table. Keep that table in
+            // sync with the selected Rust JavaVM's RegisterNatives calls.
+            let status = unsafe {
+                roblox_jni_fallback_register_native(
+                    class_name.as_ptr(), name.as_ptr(), signature.as_ptr(), method.fnPtr,
+                )
+            };
+            if status != 0 {
+                eprintln!("[jnivm:fallback] could not mirror native registration");
+            }
         }
     }
     jni::JNI_OK

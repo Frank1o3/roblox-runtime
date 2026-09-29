@@ -1,5 +1,5 @@
 // Object-array support used by Java methods that return arrays.
-use crate::{ObjectId, ObjectValue};
+use crate::ObjectId;
 
 unsafe extern "system" fn new_object_array(
     env: *mut jni::JNIEnv,
@@ -45,10 +45,10 @@ unsafe extern "system" fn get_array_length(
         return 0;
     }
     match vm.object_value(&env, ObjectId(array as usize as u64)) {
-        Ok(ObjectValue::ObjectArray(values)) => values.len() as jni::jsize,
-        Ok(ObjectValue::ByteArray(values)) => values.len() as jni::jsize,
-        Ok(ObjectValue::IntArray(values)) => values.len() as jni::jsize,
-        Ok(ObjectValue::LongArray(values)) => values.len() as jni::jsize,
+        Ok(crate::ObjectValue::ObjectArray(values)) => values.len() as jni::jsize,
+        Ok(crate::ObjectValue::ByteArray(values)) => values.len() as jni::jsize,
+        Ok(crate::ObjectValue::IntArray(values)) => values.len() as jni::jsize,
+        Ok(crate::ObjectValue::LongArray(values)) => values.len() as jni::jsize,
         Ok(_) => {
             eprintln!("[jnivm] GetArrayLength received a non-array object");
             0
