@@ -44,8 +44,45 @@ impl Session {
     pub fn directory(&self) -> &Path {
         &self.directory
     }
+
+    /// List valid profiles stored under a runtime session root.
+    pub fn list(root: &Path) -> Result<Vec<Self>, String> {
+        let entries = match std::fs::read_dir(root) {
+            Ok(entries) => entries,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(error) => return Err(format!("read session directory: {error}")),
+        };
+        let mut sessions = Vec::new();
+        for entry in entries {
+            let entry = entry.map_err(|error| format!("read session entry: {error}"))?;
+            if !entry
+                .file_type()
+                .map_err(|error| format!("inspect session entry: {error}"))?
+                .is_dir()
+            {
+                continue;
+            }
+            let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
+                continue;
+            };
+            if name.is_empty()
+                || !name
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+            {
+                continue;
+            }
+            sessions.push(Self {
+                name,
+                directory: entry.path(),
+            });
+        }
+        sessions.sort_by(|a, b| a.name.cmp(&b.name));
+        Ok(sessions)
+    }
 }
 
+#[allow(unsafe_code)]
 pub fn restore(engine: &crate::LoadedEngine, session_dir: &Path) -> Result<(), String> {
     let path = session_dir.join("roblox-cookies");
     let Ok(contents) = std::fs::read_to_string(&path) else {
@@ -119,6 +156,7 @@ pub fn flush_if_due(engine: &crate::LoadedEngine, data_dir: &Path) {
     }
 }
 
+#[allow(unsafe_code)]
 pub fn save(engine: &crate::LoadedEngine, data_dir: &Path) -> Result<(), String> {
     let Some(native) = engine
         .symbol("Java_com_roblox_engine_jni_NativeSettingsInterface_nativeGetCookiesForDomain")
