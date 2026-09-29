@@ -101,17 +101,33 @@ pub struct RuntimeConfig {
 }
 
 /// Options whose interpretation belongs to the runtime.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct RuntimeOptions {
     /// Optional client settings document supplied by the caller.
     pub client_settings: Option<PathBuf>,
     /// Renderer preference. The runtime resolves `Automatic` after inspecting
     /// the supplied host surface and available graphics loaders.
     pub graphics_backend: graphics::BackendPreference,
+    /// Requested Vulkan presentation mode (`fifo`, `fifo-relaxed`, `mailbox`, `immediate`, `auto`).
+    pub present_mode: Option<String>,
+    /// Override GLES swap intervals to zero when VSync is disabled.
+    pub vsync: bool,
     /// Resolve otherwise-unhandled libc symbols from glibc for diagnostics.
     /// This mirrors Cordial's `--host-libc` and is ABI-unsafe; keep it off for
     /// ordinary runtime execution until each required interface is ported.
     pub host_libc: bool,
+}
+
+impl Default for RuntimeOptions {
+    fn default() -> Self {
+        Self {
+            client_settings: None,
+            graphics_backend: graphics::BackendPreference::default(),
+            present_mode: None,
+            vsync: true,
+            host_libc: false,
+        }
+    }
 }
 
 impl RuntimeConfig {
@@ -204,7 +220,11 @@ impl RuntimeConfig {
     /// Check that the client surface and requested renderer are ready before
     /// engine constructors run. Install the client-owned surface first.
     pub fn prepare_graphics(&self) -> Result<graphics::Backend, graphics::BackendUnavailable> {
-        graphics::prepare(self.options.graphics_backend)
+        graphics::prepare(
+            self.options.graphics_backend,
+            self.options.present_mode.as_deref(),
+            self.options.vsync,
+        )
     }
 
     /// Inspect the supplied engine library's required and optional imports.

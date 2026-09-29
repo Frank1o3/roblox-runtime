@@ -6,6 +6,9 @@
 //! responsibilities.
 
 use std::ffi::{c_int, c_void};
+use std::sync::atomic::{AtomicBool, Ordering};
+
+static VSYNC: AtomicBool = AtomicBool::new(true);
 
 pub use roblox_android::native_window::{HostSurface, SurfaceError};
 
@@ -106,19 +109,42 @@ pub fn host_egl_available() -> bool {
 /// Vulkan is offered only when Ash can load the host loader and the matching
 /// Xlib or Wayland WSI extension is available. Roblox then renders through the
 /// host Vulkan implementation; this crate translates Android WSI requests.
-pub fn prepare(preference: BackendPreference) -> Result<Backend, BackendUnavailable> {
+pub fn prepare(
+    preference: BackendPreference,
+    present_mode: Option<&str>,
+    vsync: bool,
+) -> Result<Backend, BackendUnavailable> {
     if !has_surface() {
         return Err(BackendUnavailable::NoSurface);
     }
     let vulkan_available = roblox_graphics_vulkan::available_for_surface();
     let selected = preference.select(vulkan_available)?;
     roblox_graphics_vulkan::set_enabled(selected == Backend::Vulkan);
-    let mode = std::env::var("RBX_RUNTIME_PRESENT_MODE").ok();
-    roblox_graphics_vulkan::set_present_mode(mode.as_deref());
+    VSYNC.store(vsync, Ordering::Relaxed);
+    roblox_graphics_vulkan::set_present_mode(present_mode);
     if selected == Backend::OpenGlEs && !host_egl_available() {
         return Err(BackendUnavailable::OpenGlEs);
     }
     Ok(selected)
+}
+
+/// Apply the user's VSync setting to the engine's EGL swap interval request.
+#[allow(unsafe_code)]
+extern "C" fn egl_swap_interval(display: *mut c_void, interval: c_int) -> c_int {
+    let Some(address) = roblox_linker::host_symbol("libEGL.so.1", "eglSwapInterval") else {
+        return 0;
+    };
+    type Function = extern "C" fn(*mut c_void, c_int) -> c_int;
+    // SAFETY: this host address has EGL's exact swap interval ABI.
+    let function: Function = unsafe { std::mem::transmute(address) };
+    function(
+        display,
+        if VSYNC.load(Ordering::Relaxed) {
+            interval.max(1)
+        } else {
+            0
+        },
+    )
 }
 
 /// Present the supplied Android surface through the host EGL window type.
@@ -185,6 +211,10 @@ pub(crate) fn function_overrides() -> Vec<(&'static str, *mut c_void)> {
             egl_create_window_surface as *const () as *mut c_void,
         ),
         ("eglGetDisplay", egl_get_display as *const () as *mut c_void),
+        (
+            "eglSwapInterval",
+            egl_swap_interval as *const () as *mut c_void,
+        ),
     ]
 }
 
