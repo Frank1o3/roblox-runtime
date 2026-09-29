@@ -27,7 +27,7 @@ fn native_helper_flags_loaded(
             &vm.get_env().unwrap_or_else(|| vm.attach_current_thread()),
             *buffer,
         ) {
-            Ok(crate::ObjectValue::DirectByteBuffer { capacity, .. }) => *capacity,
+            Ok(crate::ObjectValue::DirectByteBuffer { capacity, .. }) => capacity,
             _ => -1,
         },
         _ => -1,
