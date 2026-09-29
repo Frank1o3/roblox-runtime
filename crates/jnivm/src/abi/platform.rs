@@ -3,6 +3,10 @@
 use std::fs;
 use std::path::PathBuf;
 
+unsafe extern "C" {
+    fn roblox_get_display_physical_mm(width_mm: *mut i32, height_mm: *mut i32);
+}
+
 #[derive(Default)]
 struct PreferenceEditor {
     owner: String,
@@ -151,7 +155,60 @@ fn install_platform_methods(vm: &Vm) -> Result<(), String> {
         .map_err(|error| error.to_string())?;
     vm.set_field_value(sdk_int, None, JniValue::Int(33))
         .map_err(|error| error.to_string())?;
+
+    let point = vm
+        .register_class("android/graphics/Point")
+        .map_err(|error| error.to_string())?;
+    vm.register_field(point, "x", "I", false)
+        .map_err(|error| error.to_string())?;
+    vm.register_field(point, "y", "I", false)
+        .map_err(|error| error.to_string())?;
+
+    let device_utils = vm
+        .register_class("com/roblox/platform/util/DeviceUtils")
+        .map_err(|error| error.to_string())?;
+    install_builtin(
+        vm,
+        device_utils,
+        "getScreenPhysicalSizeInMillimeters",
+        "(Landroid/content/Context;)Landroid/graphics/Point;",
+        device_utils_physical_size,
+    )?;
     Ok(())
+}
+
+fn device_utils_physical_size(
+    vm: &Vm,
+    _receiver: Option<crate::ObjectId>,
+    _args: &[JniValue],
+) -> JniValue {
+    let mut width_mm = 0;
+    let mut height_mm = 0;
+    // The native runtime owns the same atomic dimensions used by the C++
+    // DeviceUtils implementation. Zero means that the output's physical size
+    // is unknown, for which the reference returns null.
+    unsafe { roblox_get_display_physical_mm(&mut width_mm, &mut height_mm) };
+    if width_mm <= 0 || height_mm <= 0 {
+        return JniValue::Object(None);
+    }
+
+    let env = vm.get_env().unwrap_or_else(|| vm.attach_current_thread());
+    let Ok(class) = vm.find_class("android/graphics/Point") else {
+        return JniValue::Object(None);
+    };
+    let Ok(point) = vm.new_local_object(&env, class, crate::ObjectValue::Opaque) else {
+        return JniValue::Object(None);
+    };
+    for (name, value) in [("x", width_mm), ("y", height_mm)] {
+        let Ok(field) = vm.find_field(class, name, "I", false) else {
+            return JniValue::Object(None);
+        };
+        if let Err(error) = vm.set_field_value(field, Some(point), JniValue::Int(value)) {
+            eprintln!("[jnivm] DeviceUtils could not set Point.{name}: {error}");
+            return JniValue::Object(None);
+        }
+    }
+    JniValue::Object(Some(point))
 }
 
 fn install_fmod_methods(vm: &Vm) -> Result<(), String> {

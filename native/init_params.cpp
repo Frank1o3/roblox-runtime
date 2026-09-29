@@ -2693,6 +2693,17 @@ extern "C" void roblox_set_display_physical_mm(int width_mm, int height_mm) {
                                      height_mm > 0 ? height_mm : 0);
 }
 
+/// Read the physical display dimensions used by the C++ DeviceUtils handler.
+/// Zero means the compositor has not supplied a physical size.
+extern "C" void roblox_get_display_physical_mm(int* width_mm, int* height_mm) {
+    if (width_mm) {
+        *width_mm = roblox_runtime::g_width_mm.load(std::memory_order_relaxed);
+    }
+    if (height_mm) {
+        *height_mm = roblox_runtime::g_height_mm.load(std::memory_order_relaxed);
+    }
+}
+
 /// `FlagJniInterface.nativeGetFInt(String, int)I` — read a live `FInt` back out
 /// of the engine.
 ///

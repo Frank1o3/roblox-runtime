@@ -441,6 +441,10 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
         .register_class("java/lang/Object")
         .map_err(|error| error.to_string())?;
     let _ = java_object;
+    let byte_buffer = vm
+        .register_class("java/nio/ByteBuffer")
+        .map_err(|error| error.to_string())?;
+    let _ = byte_buffer;
     let device_static_params_class = vm
         .register_class("com/roblox/engine/jni/model/DeviceStaticParams")
         .map_err(|error| error.to_string())?;
