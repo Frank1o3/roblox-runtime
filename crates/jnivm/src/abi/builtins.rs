@@ -1,4 +1,6 @@
 // Small Java-side behaviors used during the observed startup path.
+use std::time::Instant;
+
 fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
     let class = vm
         .find_or_define_class("java/lang/Class")
@@ -64,7 +66,213 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
         device_static_params,
     )?;
 
+    let logging = vm
+        .register_class("com/roblox/universalapp/logging/LoggingProtocol")
+        .map_err(|error| error.to_string())?;
+    install_builtin(
+        vm,
+        logging,
+        "getProcessTimestamp",
+        "()J",
+        process_timestamp,
+    )?;
+
+    let reporter = vm
+        .register_class("com/roblox/engine/jni/reporter/SessionReporterJavaInterface")
+        .map_err(|error| error.to_string())?;
+    install_builtin(
+        vm,
+        reporter,
+        "getFilesDir",
+        "()Ljava/lang/String;",
+        reporter_files_dir,
+    )?;
+    for method_name in ["getAppVersion", "getLastLoggedInUser", "getLastLoggedInUserId"] {
+        install_builtin(
+            vm,
+            reporter,
+            method_name,
+            "()Ljava/lang/String;",
+            reporter_empty_string,
+        )?;
+    }
+    install_builtin(
+        vm,
+        reporter,
+        "sendSessionReport",
+        "(Ljava/lang/String;Ljava/lang/String;)V",
+        reporter_noop,
+    )?;
+    install_builtin(
+        vm,
+        reporter,
+        "setEventTrackingGoogleAnalytics",
+        "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;J)V",
+        reporter_noop,
+    )?;
+
+    // The current experimental trace reaches an Activity through an unknown
+    // Java reference, so GetObjectClass reports `Invalid`. Keep the same
+    // minimal context answers the C++ Activity hooks provide, allowing the
+    // startup path to obtain Resources and display density even before the
+    // cross-VM object bridge is implemented.
+    let invalid = vm
+        .find_or_define_class("Invalid")
+        .map_err(|error| error.to_string())?;
+    install_instance_builtin(
+        vm,
+        invalid,
+        "getResources",
+        "()Landroid/content/res/Resources;",
+        invalid_get_resources,
+    )?;
+    install_instance_builtin(
+        vm,
+        invalid,
+        "getDisplayMetrics",
+        "()Landroid/util/DisplayMetrics;",
+        invalid_get_display_metrics,
+    )?;
+    install_instance_builtin(
+        vm,
+        invalid,
+        "getNativeHelper",
+        "()Lcom/roblox/client/startup/NativeHelper;",
+        invalid_get_native_helper,
+    )?;
+    install_instance_builtin(vm, invalid, "bootstrapTheApp", "()V", invalid_bootstrap)?;
+
+    let resources = vm
+        .find_or_define_class("android/content/res/Resources")
+        .map_err(|error| error.to_string())?;
+    install_instance_builtin(
+        vm,
+        resources,
+        "getDisplayMetrics",
+        "()Landroid/util/DisplayMetrics;",
+        invalid_get_display_metrics,
+    )?;
+
+    let native_helper = vm
+        .find_or_define_class("com/roblox/client/startup/NativeHelper")
+        .map_err(|error| error.to_string())?;
+    install_instance_builtin(
+        vm,
+        native_helper,
+        "gameActivity_onFlagsFailed",
+        "()V",
+        reporter_noop,
+    )?;
+
     Ok(())
+}
+
+fn new_opaque_local(vm: &Vm, class_name: &str) -> JniValue {
+    let env = vm.get_env().unwrap_or_else(|| vm.attach_current_thread());
+    let Ok(class) = vm.find_or_define_class(class_name) else {
+        return JniValue::Object(None);
+    };
+    match vm.new_local_object(&env, class, crate::ObjectValue::Opaque) {
+        Ok(object) => JniValue::Object(Some(object)),
+        Err(error) => {
+            eprintln!("[jnivm] {class_name} allocation failed: {error}");
+            JniValue::Object(None)
+        }
+    }
+}
+
+fn invalid_get_resources(
+    vm: &Vm,
+    _receiver: Option<crate::ObjectId>,
+    _args: &[JniValue],
+) -> JniValue {
+    new_opaque_local(vm, "android/content/res/Resources")
+}
+
+fn invalid_get_display_metrics(
+    vm: &Vm,
+    _receiver: Option<crate::ObjectId>,
+    _args: &[JniValue],
+) -> JniValue {
+    let value = new_opaque_local(vm, "android/util/DisplayMetrics");
+    let JniValue::Object(Some(object)) = value else {
+        return value;
+    };
+    let Ok(class) = vm.find_or_define_class("android/util/DisplayMetrics") else {
+        return JniValue::Object(Some(object));
+    };
+    if let Ok(field) = vm.resolve_field(class, "density", "F", false) {
+        let _ = vm.set_field_value(field, Some(object), JniValue::Float(1.0));
+    }
+    JniValue::Object(Some(object))
+}
+
+fn invalid_get_native_helper(
+    vm: &Vm,
+    _receiver: Option<crate::ObjectId>,
+    _args: &[JniValue],
+) -> JniValue {
+    new_opaque_local(vm, "com/roblox/client/startup/NativeHelper")
+}
+
+fn invalid_bootstrap(
+    _vm: &Vm,
+    _receiver: Option<crate::ObjectId>,
+    _args: &[JniValue],
+) -> JniValue {
+    eprintln!("[jnivm] Invalid.bootstrapTheApp has no Rust host bootstrap callback");
+    JniValue::Void
+}
+
+fn process_timestamp(
+    _vm: &Vm,
+    _receiver: Option<crate::ObjectId>,
+    _args: &[JniValue],
+) -> JniValue {
+    static START: OnceLock<Instant> = OnceLock::new();
+    JniValue::Long(START.get_or_init(Instant::now).elapsed().as_millis() as i64)
+}
+
+fn reporter_files_dir(
+    vm: &Vm,
+    _receiver: Option<crate::ObjectId>,
+    _args: &[JniValue],
+) -> JniValue {
+    let path = std::env::var("RBX_RUNTIME_FILES_DIR")
+        .ok()
+        .filter(|path| !path.is_empty())
+        .unwrap_or_else(default_files_dir);
+    java_string(vm, &path, "SessionReporterJavaInterface")
+}
+
+fn default_files_dir() -> String {
+    let base = std::env::var("XDG_DATA_HOME")
+        .ok()
+        .filter(|path| !path.is_empty())
+        .or_else(|| {
+            std::env::var("HOME")
+                .ok()
+                .filter(|path| !path.is_empty())
+                .map(|home| format!("{home}/.local/share"))
+        })
+        .unwrap_or_else(|| "/tmp".to_owned());
+    format!("{base}/cordial/instances/default/data")
+}
+
+fn reporter_empty_string(
+    vm: &Vm,
+    _receiver: Option<crate::ObjectId>,
+    _args: &[JniValue],
+) -> JniValue {
+    java_string(vm, "", "SessionReporterJavaInterface")
+}
+
+fn reporter_noop(
+    _vm: &Vm,
+    _receiver: Option<crate::ObjectId>,
+    _args: &[JniValue],
+) -> JniValue {
+    JniValue::Void
 }
 
 fn class_get_class_loader(
