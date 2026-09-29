@@ -709,8 +709,10 @@ unsafe extern "system" fn new_global_ref(
         return ptr::null_mut();
     };
     let id = crate::ObjectId(object as usize as u64);
-    if let Ok(crate::ObjectValue::CppObject(_)) = vm.object_value(&env, id) {
-        if let Some(global) = promote_companion_reference(vm, &env, object) {
+    if let Ok(crate::ObjectValue::CppObject(reference)) = vm.object_value(&env, id) {
+        if let Some(global) =
+            promote_companion_reference(vm, &env, reference as *mut c_void)
+        {
             return global.0 as usize as jni::jobject;
         }
     } else if vm.object_class_name(id.0).is_none() {
@@ -731,7 +733,7 @@ unsafe extern "system" fn new_global_ref(
 fn promote_companion_reference(
     vm: &Vm,
     env: &crate::ThreadEnv,
-    object: jni::jobject,
+    object: *mut c_void,
 ) -> Option<crate::ObjectId> {
     let mut class_name = vec![0 as c_char; 1024];
     let mut global_reference = ptr::null_mut();
@@ -739,7 +741,7 @@ fn promote_companion_reference(
     // C++ validates and promotes the companion VM's object reference.
     let status = unsafe {
         roblox_jni_fallback_promote_reference(
-            object as *mut c_void,
+            object,
             class_name.as_mut_ptr(),
             class_name.len(),
             &mut global_reference,
