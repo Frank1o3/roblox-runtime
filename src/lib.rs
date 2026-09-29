@@ -12,6 +12,7 @@ pub use roblox_android as android;
 pub use roblox_jni as jni;
 pub use roblox_linker::elf::{Binding as ImportBinding, Imports as EngineImports};
 pub mod graphics;
+pub mod session;
 mod symbols;
 
 struct StartupBootstrap {
@@ -98,6 +99,8 @@ pub struct RuntimeConfig {
     pub fast_flags: serde_json::Value,
     /// Runtime-specific options supplied by the caller.
     pub options: RuntimeOptions,
+    /// Optional named login profile. With no profile the runtime starts logged out.
+    pub session: Option<session::Session>,
 }
 
 /// Options whose interpretation belongs to the runtime.
