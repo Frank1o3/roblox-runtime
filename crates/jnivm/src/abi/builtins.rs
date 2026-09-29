@@ -1,5 +1,6 @@
 // Small Java-side behaviors used during the observed startup path.
 use std::time::Instant;
+use std::net::UdpSocket;
 
 fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
     let class = vm
@@ -64,6 +65,64 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
         "getDeviceStaticParams",
         "()Lcom/roblox/engine/jni/model/DeviceStaticParams;",
         device_static_params,
+    )?;
+    for (method_name, descriptor) in [
+        ("showKeyboard", "(JZ[BLcom/roblox/engine/jni/model/NativeTextBoxInfo;)V"),
+        ("hideKeyboard", "()V"),
+        ("promptNativePurchase", "(JLjava/lang/String;Ljava/lang/String;)V"),
+        ("promptNativePurchase", "(JLjava/lang/String;)V"),
+        ("promptNativePurchaseWithPayload", "(JLjava/lang/String;Ljava/lang/String;)V"),
+        (
+            "promptNativePurchaseWithPaymentSessionId",
+            "(JLjava/lang/String;Ljava/lang/String;)V",
+        ),
+        (
+            "promptNativePurchaseWithPaymentSessionId",
+            "(JLjava/lang/String;Ljava/lang/String;Ljava/lang/String;)V",
+        ),
+        ("exitGameWithError", "(I)V"),
+        ("gameDidLeave", "()V"),
+        ("onAppShellReloadNeeded", "()V"),
+        ("listenToMotionEvents", "(Ljava/lang/String;)V"),
+        ("screenOrientationChanged", "(I)V"),
+        ("openNativeOverlay", "(Ljava/lang/String;Ljava/lang/String;)V"),
+        (
+            "onDataModelNotificationCallback",
+            "(Ljava/lang/String;Ljava/lang/String;)V",
+        ),
+        ("gameLoadedCallback", "(J)V"),
+        ("onLuaTextBoxChangedCallback", "(Ljava/lang/String;)V"),
+        ("onLuaTextBoxPropertyChangedCallback", "()V"),
+        ("onAppBridgeNotification", "(Ljava/lang/String;Ljava/lang/String;)V"),
+        ("onExtendedAnalyticsRecvCallback", "([BI)V"),
+        ("saveImageToAlbum", "(Ljava/lang/String;)V"),
+        ("onVrSessionStateUpdate", "(I)V"),
+        ("getWebViewUserAgent", "()V"),
+        ("getMobileAdvertisingId", "()V"),
+    ] {
+        install_builtin(vm, native_gl, method_name, descriptor, reporter_noop)?;
+    }
+
+    let media_codec = vm
+        .register_class("com/roblox/engine/jni/video/MediaCodecInfoUtils")
+        .map_err(|error| error.to_string())?;
+    install_builtin(
+        vm,
+        media_codec,
+        "hevcHardwareEncodingSupported",
+        "(III)Z",
+        no_hardware_codec,
+    )?;
+
+    let network_utils = vm
+        .register_class("com/roblox/engine/jni/util/NetworkUtils")
+        .map_err(|error| error.to_string())?;
+    install_builtin(
+        vm,
+        network_utils,
+        "getPublicIPv4Addresseses",
+        "()Ljava/lang/String;",
+        network_ipv4_address,
     )?;
 
     let logging = vm
@@ -273,6 +332,33 @@ fn reporter_noop(
     _args: &[JniValue],
 ) -> JniValue {
     JniValue::Void
+}
+
+fn no_hardware_codec(
+    _vm: &Vm,
+    _receiver: Option<crate::ObjectId>,
+    _args: &[JniValue],
+) -> JniValue {
+    // C++ reports false because this runtime has no Android MediaCodec.
+    JniValue::Boolean(false)
+}
+
+fn network_ipv4_address(
+    vm: &Vm,
+    _receiver: Option<crate::ObjectId>,
+    _args: &[JniValue],
+) -> JniValue {
+    // Match the C++ handler's local-address semantics without contacting a
+    // public service. UDP connect selects the host's default IPv4 route but
+    // sends no packet; this reports that route's address when one exists.
+    let address = UdpSocket::bind("0.0.0.0:0")
+        .and_then(|socket| {
+            socket.connect("192.0.2.1:9")?;
+            socket.local_addr()
+        })
+        .map(|address| address.ip().to_string())
+        .unwrap_or_default();
+    java_string(vm, &address, "NetworkUtils")
 }
 
 fn class_get_class_loader(
