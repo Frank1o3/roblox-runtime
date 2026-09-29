@@ -2,13 +2,18 @@
 //! Roblox runtime. The implementation is being built against the observed
 //! surface in [`OBSERVED_SURFACE.md`](../OBSERVED_SURFACE.md).
 
+mod abi;
 mod descriptor;
 mod vm;
 
+pub use abi::{call_on_load, create_vm, current_env, vm_exists};
 pub use descriptor::{
     DescriptorError, MethodDescriptor, Type, parse_field_descriptor, parse_method_descriptor,
 };
-pub use vm::{ClassId, FieldId, JniError, MethodId, ObjectId, ObjectValue, ThreadEnv, Vm};
+pub use vm::{
+    ClassId, FieldId, JniError, JniValue, MethodHandler, MethodId, ObjectId, ObjectValue,
+    ThreadEnv, Vm,
+};
 
 /// Whether the process explicitly selected the experimental pure Rust VM.
 /// This is opt-in because the backend is still under development.

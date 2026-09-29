@@ -9,168 +9,7 @@ use std::fmt;
 use std::sync::{Mutex, RwLock};
 use std::thread::{self, ThreadId};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct ClassId(u64);
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct MethodId(u64);
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct FieldId(u64);
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct ObjectId(u64);
-
-/// An attached thread's environment token. The eventual JNI ABI adapter maps
-/// this token to the stable `JNIEnv*` table for that thread.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ThreadEnv {
-    owner: ThreadId,
-}
-
-impl ThreadEnv {
-    pub fn owner(&self) -> ThreadId {
-        self.owner
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum JniError {
-    InvalidClassName,
-    InvalidMemberName,
-    InvalidDescriptor(String),
-    DuplicateClass(String),
-    UnknownClass(String),
-    UnknownMethod(String),
-    UnknownField(String),
-    NotAttached,
-    WrongThread,
-    UnknownReference,
-    ReferenceNotLocal,
-}
-
-impl fmt::Display for JniError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::InvalidClassName => f.write_str("invalid JNI class name"),
-            Self::InvalidMemberName => f.write_str("invalid JNI member name"),
-            Self::InvalidDescriptor(error) => write!(f, "invalid JNI descriptor: {error}"),
-            Self::DuplicateClass(name) => write!(f, "JNI class is already registered: {name}"),
-            Self::UnknownClass(name) => write!(f, "JNI class is not registered: {name}"),
-            Self::UnknownMethod(name) => write!(f, "JNI method is not registered: {name}"),
-            Self::UnknownField(name) => write!(f, "JNI field is not registered: {name}"),
-            Self::NotAttached => f.write_str("current thread is not attached to the JNI VM"),
-            Self::WrongThread => f.write_str("JNI environment belongs to a different thread"),
-            Self::UnknownReference => f.write_str("unknown JNI object reference"),
-            Self::ReferenceNotLocal => f.write_str("JNI reference is not local to this thread"),
-        }
-    }
-}
-
-impl std::error::Error for JniError {}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-struct MethodKey {
-    name: String,
-    descriptor: String,
-    is_static: bool,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-struct FieldKey {
-    name: String,
-    descriptor: String,
-    is_static: bool,
-}
-
-#[derive(Debug)]
-struct ClassRecord {
-    name: String,
-    methods: HashMap<MethodKey, MethodId>,
-    fields: HashMap<FieldKey, FieldId>,
-    natives: HashMap<(String, String), usize>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ObjectValue {
-    /// Java strings are represented as Rust UTF-16 units, matching JNI's
-    /// `jchar` storage and preserving unpaired surrogates.
-    String(Vec<u16>),
-    ByteArray(Vec<i8>),
-    IntArray(Vec<i32>),
-    LongArray(Vec<i64>),
-    Opaque,
-}
-
-/// JNI values used by the Rust-side method dispatcher.
-#[derive(Clone, Debug, PartialEq)]
-pub enum JniValue {
-    Boolean(bool),
-    Byte(i8),
-    Char(u16),
-    Short(i16),
-    Int(i32),
-    Long(i64),
-    Float(f32),
-    Double(f64),
-    Object(Option<ObjectId>),
-    Void,
-}
-
-impl JniValue {
-    fn default_for(ty: &Type) -> Self {
-        match ty {
-            Type::Boolean => Self::Boolean(false),
-            Type::Byte => Self::Byte(0),
-            Type::Char => Self::Char(0),
-            Type::Short => Self::Short(0),
-            Type::Int => Self::Int(0),
-            Type::Long => Self::Long(0),
-            Type::Float => Self::Float(0.0),
-            Type::Double => Self::Double(0.0),
-            Type::Object(_) | Type::Array(_) => Self::Object(None),
-            Type::Void => Self::Void,
-        }
-    }
-}
-
-/// Safe Rust implementation of a Java method. The JNI adapter validates and
-/// converts raw `jvalue`s before entering this function.
-pub type MethodHandler = fn(&Vm, Option<ObjectId>, &[JniValue]) -> JniValue;
-
-#[derive(Debug)]
-struct ObjectRecord {
-    class: ClassId,
-    value: ObjectValue,
-    global: bool,
-}
-
-#[derive(Default)]
-struct State {
-    next_id: u64,
-    classes: HashMap<String, ClassId>,
-    class_records: HashMap<ClassId, ClassRecord>,
-    method_descriptors: HashMap<MethodId, MethodDescriptor>,
-    method_handlers: HashMap<MethodId, MethodHandler>,
-    field_types: HashMap<FieldId, Type>,
-    objects: HashMap<ObjectId, ObjectRecord>,
-    locals: HashMap<ThreadId, HashSet<ObjectId>>,
-}
-
-impl State {
-    fn id(&mut self) -> u64 {
-        self.next_id = self.next_id.wrapping_add(1).max(1);
-        self.next_id
-    }
-}
-
-/// Process-wide JNI VM model. JNI environments are tracked per native thread;
-/// classes and member IDs are stable for the VM lifetime.
-#[derive(Default)]
-pub struct Vm {
-    attached: Mutex<HashSet<ThreadId>>,
-    state: RwLock<State>,
-}
+include!("vm/types.rs");
 
 impl Vm {
     pub fn new() -> Self {
@@ -244,7 +83,8 @@ impl Vm {
     }
 
     pub fn find_class(&self, name: &str) -> Result<ClassId, JniError> {
-        let found = self.state
+        let found = self
+            .state
             .read()
             .unwrap_or_else(|p| p.into_inner())
             .classes
@@ -346,7 +186,10 @@ impl Vm {
             })
             .copied()
             .ok_or_else(|| {
-                eprintln!("[jnivm] unimplemented method lookup: {}.{name}{descriptor}", record.name);
+                eprintln!(
+                    "[jnivm] unimplemented method lookup: {}.{name}{descriptor}",
+                    record.name
+                );
                 JniError::UnknownMethod(format!("{}.{name}{descriptor}", record.name))
             })
     }
@@ -364,7 +207,9 @@ impl Vm {
     ) -> Result<MethodId, JniError> {
         match self.find_method(class, name, descriptor, is_static) {
             Ok(id) => Ok(id),
-            Err(JniError::UnknownMethod(_)) => self.register_method(class, name, descriptor, is_static),
+            Err(JniError::UnknownMethod(_)) => {
+                self.register_method(class, name, descriptor, is_static)
+            }
             Err(error) => Err(error),
         }
     }
@@ -390,18 +235,36 @@ impl Vm {
     ) -> Result<JniValue, JniError> {
         let (descriptor, handler, method_name) = {
             let state = self.state.read().unwrap_or_else(|p| p.into_inner());
-            let descriptor = state.method_descriptors.get(&method)
-                .cloned().ok_or_else(|| JniError::UnknownMethod(format!("method id {}", method.0)))?;
+            let descriptor = state
+                .method_descriptors
+                .get(&method)
+                .cloned()
+                .ok_or_else(|| JniError::UnknownMethod(format!("method id {}", method.0)))?;
             let handler = state.method_handlers.get(&method).copied();
-            let method_name = state.class_records.values().find_map(|class| {
-                class.methods.iter().find_map(|(key, id)| (*id == method).then(|| format!("{}.{}`{}{}", class.name, if key.is_static { "static " } else { "" }, key.name, key.descriptor)))
-            }).unwrap_or_else(|| format!("method id {}", method.0));
+            let method_name = state
+                .class_records
+                .values()
+                .find_map(|class| {
+                    class.methods.iter().find_map(|(key, id)| {
+                        (*id == method).then(|| {
+                            format!(
+                                "{}.{}`{}{}",
+                                class.name,
+                                if key.is_static { "static " } else { "" },
+                                key.name,
+                                key.descriptor
+                            )
+                        })
+                    })
+                })
+                .unwrap_or_else(|| format!("method id {}", method.0));
             (descriptor, handler, method_name)
         };
         if arguments.len() != descriptor.parameters.len() {
             return Err(JniError::InvalidDescriptor(format!(
                 "{method_name} expects {} arguments, got {}",
-                descriptor.parameters.len(), arguments.len()
+                descriptor.parameters.len(),
+                arguments.len()
             )));
         }
         if let Some(handler) = handler {
@@ -410,6 +273,30 @@ impl Vm {
             eprintln!("[jnivm] unimplemented method call: {method_name}");
             Ok(JniValue::default_for(&descriptor.result))
         }
+    }
+
+    /// Invoke a method without an implementation using descriptor-correct
+    /// zero/null arguments. Useful for JNI table entry points that receive a
+    /// platform `va_list` which the current Rust backend cannot decode yet.
+    pub fn invoke_default(
+        &self,
+        method: MethodId,
+        receiver: Option<ObjectId>,
+    ) -> Result<JniValue, JniError> {
+        let arguments = {
+            let state = self.state.read().unwrap_or_else(|p| p.into_inner());
+            let descriptor = state
+                .method_descriptors
+                .get(&method)
+                .cloned()
+                .ok_or_else(|| JniError::UnknownMethod(format!("method id {}", method.0)))?;
+            descriptor
+                .parameters
+                .iter()
+                .map(JniValue::default_for)
+                .collect::<Vec<_>>()
+        };
+        self.invoke_method(method, receiver, &arguments)
     }
 
     pub fn method_descriptor(&self, method: MethodId) -> Option<MethodDescriptor> {
@@ -513,9 +400,28 @@ impl Vm {
             })
             .copied()
             .ok_or_else(|| {
-                eprintln!("[jnivm] unimplemented field lookup: {}.{name}:{descriptor}", record.name);
+                eprintln!(
+                    "[jnivm] unimplemented field lookup: {}.{name}:{descriptor}",
+                    record.name
+                );
                 JniError::UnknownField(format!("{}.{name}:{descriptor}", record.name))
             })
+    }
+
+    pub fn resolve_field(
+        &self,
+        class: ClassId,
+        name: &str,
+        descriptor: &str,
+        is_static: bool,
+    ) -> Result<FieldId, JniError> {
+        match self.find_field(class, name, descriptor, is_static) {
+            Ok(id) => Ok(id),
+            Err(JniError::UnknownField(_)) => {
+                self.register_field(class, name, descriptor, is_static)
+            }
+            Err(error) => Err(error),
+        }
     }
 
     pub fn field_type(&self, field: FieldId) -> Option<Type> {
@@ -622,6 +528,28 @@ impl Vm {
             return Err(JniError::ReferenceNotLocal);
         }
         Ok(record.value.clone())
+    }
+
+    pub fn object_class_name(&self, object: u64) -> Option<String> {
+        let state = self.state.read().unwrap_or_else(|p| p.into_inner());
+        let record = state.objects.get(&ObjectId(object))?;
+        state
+            .class_records
+            .get(&record.class)
+            .map(|class| class.name.clone())
+    }
+
+    pub fn clone_local_ref(&self, env: &ThreadEnv, object: u64) -> Result<ObjectId, JniError> {
+        let value = self.object_value(env, ObjectId(object))?;
+        let class = {
+            let state = self.state.read().unwrap_or_else(|p| p.into_inner());
+            state
+                .objects
+                .get(&ObjectId(object))
+                .ok_or(JniError::UnknownReference)?
+                .class
+        };
+        self.new_local_object(env, class, value)
     }
 
     fn check_env(&self, env: &ThreadEnv) -> Result<(), JniError> {

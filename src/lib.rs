@@ -410,6 +410,9 @@ impl LoadedEngine {
         if !self.vm_initialized {
             return Err(JniError::VmNotInitialized);
         }
+        if jnivm::selected_from_environment() {
+            return Err(JniError::ExperimentalJniVmIncomplete);
+        }
         const SETTINGS_CLASS: &str = "com/roblox/engine/jni/NativeSettingsInterface";
         let files = self.files_dir.to_string_lossy().into_owned();
         let cache = self.cache_dir.to_string_lossy().into_owned();
@@ -505,8 +508,13 @@ impl LoadedEngine {
         }
         // SAFETY: the function pointer is this live library's JNI_OnLoad;
         // the native shim contains exceptions at the FFI boundary.
-        let version =
-            unsafe { roblox_jni::jni::call_on_load(on_load) }.map_err(JniError::OnLoad)?;
+        let version = if jnivm::selected_from_environment() {
+            // SAFETY: this is the live JNI_OnLoad export from the mapped engine.
+            unsafe { jnivm::call_on_load(on_load) }.map_err(JniError::OnLoad)?
+        } else {
+            // SAFETY: this is the live JNI_OnLoad export from the mapped engine.
+            unsafe { roblox_jni::jni::call_on_load(on_load) }.map_err(JniError::OnLoad)?
+        };
         self.jni_initialized = true;
         Ok(version)
     }
@@ -523,7 +531,7 @@ impl LoadedEngine {
         if self.constructors_pending {
             return Err(JniError::ConstructorsDeferred);
         }
-        if !self.jni_initialized || roblox_jni::jni::env().is_none() {
+        if !self.jni_initialized || current_jni_env().is_none() {
             return Err(JniError::JniNotInitialized);
         }
         let native = self
@@ -549,7 +557,7 @@ impl LoadedEngine {
         if self.constructors_pending {
             return Err(JniError::ConstructorsDeferred);
         }
-        if !self.jni_initialized || roblox_jni::jni::env().is_none() {
+        if !self.jni_initialized || current_jni_env().is_none() {
             return Err(JniError::JniNotInitialized);
         }
         let width = i32::try_from(width)
@@ -576,7 +584,7 @@ impl LoadedEngine {
         if self.constructors_pending {
             return Err(JniError::ConstructorsDeferred);
         }
-        if !self.jni_initialized || roblox_jni::jni::env().is_none() {
+        if !self.jni_initialized || current_jni_env().is_none() {
             return Err(JniError::JniNotInitialized);
         }
         let width_i32 = i32::try_from(width)
@@ -615,14 +623,22 @@ impl LoadedEngine {
 
 fn create_java_vm() -> Result<(), JniError> {
     if jnivm::selected_from_environment() {
-        // Do not silently fall back to C++ when the user explicitly selected
-        // the Rust backend. Its VM model has no JNI ABI tables yet, so it
-        // cannot safely be passed to Roblox at this stage.
-        return Err(JniError::ExperimentalJniVmUnavailable);
+        jnivm::create_vm()
+            .map(|_| ())
+            .map_err(JniError::ExperimentalJniVmUnavailable)
+    } else {
+        roblox_jni::jni::create_vm()
+            .map(|_| ())
+            .ok_or(JniError::VmAlreadyExists)
     }
-    roblox_jni::jni::create_vm()
-        .map(|_| ())
-        .ok_or(JniError::VmAlreadyExists)
+}
+
+fn current_jni_env() -> Option<*mut std::ffi::c_void> {
+    if jnivm::selected_from_environment() {
+        jnivm::current_env()
+    } else {
+        roblox_jni::jni::env()
+    }
 }
 
 /// Failure during JavaVM or AGDK GameActivity initialisation.
@@ -635,7 +651,8 @@ pub enum JniError {
     MissingStartupNative(&'static str),
     StartupNative(String),
     VmAlreadyExists,
-    ExperimentalJniVmUnavailable,
+    ExperimentalJniVmUnavailable(String),
+    ExperimentalJniVmIncomplete,
     JniNotInitialized,
     MissingOnLoad,
     MissingGameActivityInit,
@@ -668,8 +685,9 @@ impl std::fmt::Display for JniError {
             }
             Self::StartupNative(message) => write!(f, "startup directory setter failed: {message}"),
             Self::VmAlreadyExists => f.write_str("a JavaVM already exists in this process"),
-            Self::ExperimentalJniVmUnavailable => f.write_str(
-                "USE_EXPERIMENTAL_JNIVM selected the Rust backend, but its JNI ABI tables are not implemented yet; refusing to fall back to C++",
+            Self::ExperimentalJniVmUnavailable(error) => write!(f, "create experimental Rust JavaVM: {error}"),
+            Self::ExperimentalJniVmIncomplete => f.write_str(
+                "USE_EXPERIMENTAL_JNIVM selected the Rust backend; JNI_OnLoad ran, but the Rust Java compatibility bridge for startup-directory setup is not implemented yet",
             ),
             Self::JniNotInitialized => {
                 f.write_str("complete JNI_OnLoad before GameActivity initialization")
