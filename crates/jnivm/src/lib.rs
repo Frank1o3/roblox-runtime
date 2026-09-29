@@ -19,5 +19,5 @@ pub use vm::{
 /// This is opt-in because the backend is still under development.
 pub fn selected_from_environment() -> bool {
     std::env::var("USE_EXPERIMENTAL_JNIVM")
-        .is_ok_and(|value| value.trim().eq_ignore_ascii_case("true"))
+        .is_ok_and(|value| matches!(value.trim().to_ascii_lowercase().as_str(), "true" | "1"))
 }

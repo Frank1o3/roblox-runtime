@@ -31,55 +31,100 @@ fn vm() -> Option<&'static Vm> {
     VM.get()
 }
 
+include!("abi/builtins.rs");
+
 fn env_table() -> *const jni::JNINativeInterface_ {
     *ENV_TABLE.get_or_init(|| {
         // All-zero is a valid initial value for a C function table: null
         // function pointers mean an entry has not been implemented yet.
         let mut table: jni::JNINativeInterface_ = unsafe { std::mem::zeroed() };
-        table.GetVersion = Some(get_version);
-        table.FindClass = Some(find_class);
-        table.GetObjectClass = Some(get_object_class);
-        table.GetMethodID = Some(get_method_id);
-        table.GetStaticMethodID = Some(get_static_method_id);
-        table.GetFieldID = Some(get_field_id);
-        table.GetStaticFieldID = Some(get_static_field_id);
-        table.RegisterNatives = Some(register_natives);
-        table.NewLocalRef = Some(new_local_ref);
-        table.DeleteLocalRef = Some(delete_local_ref);
-        table.NewGlobalRef = Some(new_global_ref);
-        table.DeleteGlobalRef = Some(delete_global_ref);
-        table.IsSameObject = Some(is_same_object);
-        table.ExceptionCheck = Some(exception_check);
-        table.ExceptionClear = Some(exception_clear);
-        table.NewString = Some(new_string);
-        table.NewStringUTF = Some(new_string_utf);
-        table.GetStringLength = Some(get_string_length);
-        table.GetStringUTFLength = Some(get_string_utf_length);
-        table.GetStringChars = Some(get_string_chars);
-        table.ReleaseStringChars = Some(release_string_chars);
-        table.GetStringUTFChars = Some(get_string_utf_chars);
-        table.ReleaseStringUTFChars = Some(release_string_utf_chars);
-        table.GetJavaVM = Some(get_java_vm);
-        table.CallObjectMethodV = Some(call_object_v);
-        table.CallBooleanMethodV = Some(call_boolean_v);
-        table.CallIntMethodV = Some(call_int_v);
-        table.CallLongMethodV = Some(call_long_v);
-        table.CallVoidMethodV = Some(call_void_v);
-        table.CallStaticObjectMethodV = Some(call_static_object_v);
-        table.CallStaticBooleanMethodV = Some(call_static_boolean_v);
-        table.CallStaticIntMethodV = Some(call_static_int_v);
-        table.CallStaticLongMethodV = Some(call_static_long_v);
-        table.CallStaticVoidMethodV = Some(call_static_void_v);
-        table.CallObjectMethodA = Some(call_object_a);
-        table.CallBooleanMethodA = Some(call_boolean_a);
-        table.CallIntMethodA = Some(call_int_a);
-        table.CallLongMethodA = Some(call_long_a);
-        table.CallVoidMethodA = Some(call_void_a);
-        table.CallStaticObjectMethodA = Some(call_static_object_a);
-        table.CallStaticBooleanMethodA = Some(call_static_boolean_a);
-        table.CallStaticIntMethodA = Some(call_static_int_a);
-        table.CallStaticLongMethodA = Some(call_static_long_a);
-        table.CallStaticVoidMethodA = Some(call_static_void_a);
+        // jni-sys 0.4 exposes each versioned prefix as a union member and
+        // stores plain C function pointers rather than Option<fn>.
+        let slots = unsafe { &mut table.v24 };
+        slots.GetVersion = get_version;
+        slots.FindClass = find_class;
+        slots.GetObjectClass = get_object_class;
+        slots.GetMethodID = get_method_id;
+        slots.GetStaticMethodID = get_static_method_id;
+        slots.GetFieldID = get_field_id;
+        slots.GetStaticFieldID = get_static_field_id;
+        slots.GetObjectField = get_object_field;
+        slots.GetBooleanField = get_boolean_field;
+        slots.GetByteField = get_byte_field;
+        slots.GetCharField = get_char_field;
+        slots.GetShortField = get_short_field;
+        slots.GetIntField = get_int_field;
+        slots.GetLongField = get_long_field;
+        slots.GetFloatField = get_float_field;
+        slots.GetDoubleField = get_double_field;
+        slots.SetObjectField = set_object_field;
+        slots.SetBooleanField = set_boolean_field;
+        slots.SetByteField = set_byte_field;
+        slots.SetCharField = set_char_field;
+        slots.SetShortField = set_short_field;
+        slots.SetIntField = set_int_field;
+        slots.SetLongField = set_long_field;
+        slots.SetFloatField = set_float_field;
+        slots.SetDoubleField = set_double_field;
+        slots.GetStaticObjectField = get_static_object_field;
+        slots.GetStaticBooleanField = get_static_boolean_field;
+        slots.GetStaticByteField = get_static_byte_field;
+        slots.GetStaticCharField = get_static_char_field;
+        slots.GetStaticShortField = get_static_short_field;
+        slots.GetStaticIntField = get_static_int_field;
+        slots.GetStaticLongField = get_static_long_field;
+        slots.GetStaticFloatField = get_static_float_field;
+        slots.GetStaticDoubleField = get_static_double_field;
+        slots.SetStaticObjectField = set_static_object_field;
+        slots.SetStaticBooleanField = set_static_boolean_field;
+        slots.SetStaticByteField = set_static_byte_field;
+        slots.SetStaticCharField = set_static_char_field;
+        slots.SetStaticShortField = set_static_short_field;
+        slots.SetStaticIntField = set_static_int_field;
+        slots.SetStaticLongField = set_static_long_field;
+        slots.SetStaticFloatField = set_static_float_field;
+        slots.SetStaticDoubleField = set_static_double_field;
+        slots.RegisterNatives = register_natives;
+        slots.Throw = throw;
+        slots.ThrowNew = throw_new;
+        slots.ExceptionOccurred = exception_occurred;
+        slots.ExceptionDescribe = exception_describe;
+        slots.NewLocalRef = new_local_ref;
+        slots.DeleteLocalRef = delete_local_ref;
+        slots.NewGlobalRef = new_global_ref;
+        slots.DeleteGlobalRef = delete_global_ref;
+        slots.IsSameObject = is_same_object;
+        slots.ExceptionCheck = exception_check;
+        slots.ExceptionClear = exception_clear;
+        slots.NewString = new_string;
+        slots.NewStringUTF = new_string_utf;
+        slots.GetStringLength = get_string_length;
+        slots.GetStringUTFLength = get_string_utf_length;
+        slots.GetStringChars = get_string_chars;
+        slots.ReleaseStringChars = release_string_chars;
+        slots.GetStringUTFChars = get_string_utf_chars;
+        slots.ReleaseStringUTFChars = release_string_utf_chars;
+        slots.GetJavaVM = get_java_vm;
+        slots.CallObjectMethodV = call_object_v;
+        slots.CallBooleanMethodV = call_boolean_v;
+        slots.CallIntMethodV = call_int_v;
+        slots.CallLongMethodV = call_long_v;
+        slots.CallVoidMethodV = call_void_v;
+        slots.CallStaticObjectMethodV = call_static_object_v;
+        slots.CallStaticBooleanMethodV = call_static_boolean_v;
+        slots.CallStaticIntMethodV = call_static_int_v;
+        slots.CallStaticLongMethodV = call_static_long_v;
+        slots.CallStaticVoidMethodV = call_static_void_v;
+        slots.CallObjectMethodA = call_object_a;
+        slots.CallBooleanMethodA = call_boolean_a;
+        slots.CallIntMethodA = call_int_a;
+        slots.CallLongMethodA = call_long_a;
+        slots.CallVoidMethodA = call_void_a;
+        slots.CallStaticObjectMethodA = call_static_object_a;
+        slots.CallStaticBooleanMethodA = call_static_boolean_a;
+        slots.CallStaticIntMethodA = call_static_int_a;
+        slots.CallStaticLongMethodA = call_static_long_a;
+        slots.CallStaticVoidMethodA = call_static_void_a;
         Box::into_raw(Box::new(table)) as usize
     }) as *const jni::JNINativeInterface_
 }
@@ -87,11 +132,12 @@ fn env_table() -> *const jni::JNINativeInterface_ {
 fn vm_table() -> *const jni::JNIInvokeInterface_ {
     *VM_TABLE.get_or_init(|| {
         let mut table: jni::JNIInvokeInterface_ = unsafe { std::mem::zeroed() };
-        table.DestroyJavaVM = Some(destroy_vm);
-        table.AttachCurrentThread = Some(attach_current_thread);
-        table.AttachCurrentThreadAsDaemon = Some(attach_current_thread);
-        table.DetachCurrentThread = Some(detach_current_thread);
-        table.GetEnv = Some(get_env);
+        let slots = unsafe { &mut table.v1_4 };
+        slots.DestroyJavaVM = destroy_vm;
+        slots.AttachCurrentThread = attach_current_thread;
+        slots.AttachCurrentThreadAsDaemon = attach_current_thread;
+        slots.DetachCurrentThread = detach_current_thread;
+        slots.GetEnv = get_env;
         Box::into_raw(Box::new(table)) as usize
     }) as *const jni::JNIInvokeInterface_
 }
@@ -103,6 +149,7 @@ pub fn create_vm() -> Result<*mut c_void, String> {
     }
     VM.set(Vm::new())
         .map_err(|_| "a Rust JavaVM already exists")?;
+    install_builtin_methods(vm().expect("VM was just initialized"))?;
     let _ = env_table();
     let _ = vm_table();
     vm().expect("VM was just initialized")
@@ -112,6 +159,7 @@ pub fn create_vm() -> Result<*mut c_void, String> {
     VM_HANDLE
         .set(raw)
         .map_err(|_| "a Rust JavaVM already exists")?;
+    eprintln!("[jnivm] experimental pure Rust JavaVM initialized");
     Ok(raw as *mut c_void)
 }
 
@@ -182,9 +230,26 @@ unsafe extern "system" fn get_object_class(
     let Some(vm) = vm() else {
         return ptr::null_mut();
     };
+    if vm.class_name(ClassId(object as usize as u64)).is_some() {
+        return match vm.find_or_define_class("java/lang/Class") {
+            Ok(class) => class.0 as usize as jni::jclass,
+            Err(error) => {
+                eprintln!("[jnivm] GetObjectClass(java class) failed: {error}");
+                ptr::null_mut()
+            }
+        };
+    }
     let Some(name) = vm.object_class_name(object as usize as u64) else {
-        eprintln!("[jnivm] GetObjectClass on unknown object reference");
-        return ptr::null_mut();
+        eprintln!(
+            "[jnivm] GetObjectClass on unknown/null reference; using libjnivm-compatible Invalid class"
+        );
+        return match vm.find_or_define_class("Invalid") {
+            Ok(class) => class.0 as usize as jni::jclass,
+            Err(error) => {
+                eprintln!("[jnivm] GetObjectClass fallback failed: {error}");
+                ptr::null_mut()
+            }
+        };
     };
     match vm.find_or_define_class(&name) {
         Ok(class) => class.0 as usize as jni::jclass,
@@ -228,7 +293,17 @@ unsafe fn resolve_method(
     }) else {
         return ptr::null_mut();
     };
-    let class = ClassId(class as usize as u64);
+    let class = if class.is_null() {
+        match vm.find_or_define_class("Invalid") {
+            Ok(class) => class,
+            Err(error) => {
+                eprintln!("[jnivm] method ID resolution class fallback failed: {error}");
+                return ptr::null_mut();
+            }
+        }
+    } else {
+        ClassId(class as usize as u64)
+    };
     match vm.resolve_method(class, &name, &signature, is_static) {
         Ok(method) => method.0 as usize as jni::jmethodID,
         Err(error) => {
@@ -271,7 +346,18 @@ unsafe fn resolve_field(
     }) else {
         return ptr::null_mut();
     };
-    match vm.resolve_field(ClassId(class as usize as u64), &name, &signature, is_static) {
+    let class = if class.is_null() {
+        match vm.find_or_define_class("Invalid") {
+            Ok(class) => class,
+            Err(error) => {
+                eprintln!("[jnivm] field ID resolution class fallback failed: {error}");
+                return ptr::null_mut();
+            }
+        }
+    } else {
+        ClassId(class as usize as u64)
+    };
+    match vm.resolve_field(class, &name, &signature, is_static) {
         Ok(field) => field.0 as usize as jni::jfieldID,
         Err(error) => {
             eprintln!("[jnivm] field ID resolution failed: {error}");
@@ -321,6 +407,9 @@ unsafe extern "system" fn new_local_ref(
     let Some(env) = env_token(vm, env) else {
         return ptr::null_mut();
     };
+    if vm.class_name(ClassId(object as usize as u64)).is_some() {
+        return object;
+    }
     match vm.clone_local_ref(&env, object as usize as u64) {
         Ok(reference) => reference.0 as usize as jni::jobject,
         Err(error) => {
@@ -335,6 +424,9 @@ unsafe extern "system" fn delete_local_ref(env: *mut jni::JNIEnv, object: jni::j
         return;
     }
     let Some(vm) = vm() else { return };
+    if vm.class_name(ClassId(object as usize as u64)).is_some() {
+        return;
+    }
     let Some(env) = env_token(vm, env) else {
         return;
     };
@@ -353,6 +445,9 @@ unsafe extern "system" fn new_global_ref(
     let Some(vm) = vm() else {
         return ptr::null_mut();
     };
+    if vm.class_name(ClassId(object as usize as u64)).is_some() {
+        return object;
+    }
     let Some(env) = env_token(vm, env) else {
         return ptr::null_mut();
     };
@@ -370,6 +465,9 @@ unsafe extern "system" fn delete_global_ref(_env: *mut jni::JNIEnv, object: jni:
         return;
     }
     if let Some(vm) = vm() {
+        if vm.class_name(ClassId(object as usize as u64)).is_some() {
+            return;
+        }
         if let Err(error) = vm.delete_global_ref(crate::ObjectId(object as usize as u64)) {
             eprintln!("[jnivm] DeleteGlobalRef failed: {error}");
         }
@@ -388,9 +486,32 @@ unsafe extern "system" fn exception_check(_env: *mut jni::JNIEnv) -> jni::jboole
     jni::JNI_FALSE
 }
 
+unsafe extern "system" fn exception_occurred(_env: *mut jni::JNIEnv) -> jni::jthrowable {
+    ptr::null_mut()
+}
+
+unsafe extern "system" fn exception_describe(_env: *mut jni::JNIEnv) {
+    eprintln!("[jnivm] ExceptionDescribe called with no pending exception");
+}
+
+unsafe extern "system" fn throw(_env: *mut jni::JNIEnv, _exception: jni::jthrowable) -> jni::jint {
+    eprintln!("[jnivm] unimplemented JNI method: Throw");
+    jni::JNI_ERR
+}
+
+unsafe extern "system" fn throw_new(
+    _env: *mut jni::JNIEnv,
+    _class: jni::jclass,
+    _message: *const c_char,
+) -> jni::jint {
+    eprintln!("[jnivm] unimplemented JNI method: ThrowNew");
+    jni::JNI_ERR
+}
+
 unsafe extern "system" fn exception_clear(_env: *mut jni::JNIEnv) {}
 
 include!("abi/strings.rs");
+include!("abi/fields.rs");
 
 unsafe extern "system" fn get_java_vm(
     _env: *mut jni::JNIEnv,

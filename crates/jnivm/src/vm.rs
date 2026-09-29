@@ -433,6 +433,37 @@ impl Vm {
             .cloned()
     }
 
+    pub fn field_value(
+        &self,
+        field: FieldId,
+        receiver: Option<ObjectId>,
+    ) -> Result<JniValue, JniError> {
+        let state = self.state.read().unwrap_or_else(|p| p.into_inner());
+        let ty = state
+            .field_types
+            .get(&field)
+            .ok_or_else(|| JniError::UnknownField(format!("field id {}", field.0)))?;
+        Ok(state
+            .field_values
+            .get(&(field, receiver))
+            .cloned()
+            .unwrap_or_else(|| JniValue::default_for(ty)))
+    }
+
+    pub fn set_field_value(
+        &self,
+        field: FieldId,
+        receiver: Option<ObjectId>,
+        value: JniValue,
+    ) -> Result<(), JniError> {
+        let mut state = self.state.write().unwrap_or_else(|p| p.into_inner());
+        if !state.field_types.contains_key(&field) {
+            return Err(JniError::UnknownField(format!("field id {}", field.0)));
+        }
+        state.field_values.insert((field, receiver), value);
+        Ok(())
+    }
+
     /// Allocate a local object reference in the current thread's scope.
     pub fn new_local_object(
         &self,

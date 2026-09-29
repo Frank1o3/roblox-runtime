@@ -143,6 +143,7 @@ struct State {
     method_descriptors: HashMap<MethodId, MethodDescriptor>,
     method_handlers: HashMap<MethodId, MethodHandler>,
     field_types: HashMap<FieldId, Type>,
+    field_values: HashMap<(FieldId, Option<ObjectId>), JniValue>,
     objects: HashMap<ObjectId, ObjectRecord>,
     locals: HashMap<ThreadId, HashSet<ObjectId>>,
 }

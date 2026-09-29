@@ -41,7 +41,7 @@ unsafe extern "system" fn call_boolean_v(
         (!object.is_null()).then_some(crate::ObjectId(object as usize as u64)),
     )
     .and_then(|value| match value {
-        JniValue::Boolean(value) => Some(value as u8),
+        JniValue::Boolean(value) => Some(value),
         _ => None,
     })
     .unwrap_or(jni::JNI_FALSE)
@@ -97,7 +97,7 @@ unsafe extern "system" fn call_static_boolean_v(
 ) -> jni::jboolean {
     invoke(method, None)
         .and_then(|value| match value {
-            JniValue::Boolean(value) => Some(value as u8),
+            JniValue::Boolean(value) => Some(value),
             _ => None,
         })
         .unwrap_or(jni::JNI_FALSE)
@@ -154,7 +154,7 @@ unsafe extern "system" fn call_boolean_a(
     args: *const jni::jvalue,
 ) -> jni::jboolean {
     invoke_a(method, (!object.is_null()).then_some(crate::ObjectId(object as usize as u64)), args)
-        .and_then(|value| match value { JniValue::Boolean(value) => Some(value as u8), _ => None })
+        .and_then(|value| match value { JniValue::Boolean(value) => Some(value), _ => None })
         .unwrap_or(jni::JNI_FALSE)
 }
 unsafe extern "system" fn call_int_a(
@@ -198,7 +198,7 @@ unsafe extern "system" fn call_static_boolean_a(
     args: *const jni::jvalue,
 ) -> jni::jboolean {
     invoke_a(method, None, args)
-        .and_then(|value| match value { JniValue::Boolean(value) => Some(value as u8), _ => None })
+        .and_then(|value| match value { JniValue::Boolean(value) => Some(value), _ => None })
         .unwrap_or(jni::JNI_FALSE)
 }
 unsafe extern "system" fn call_static_int_a(
@@ -253,7 +253,7 @@ fn invoke_a(
             let value = unsafe { raw_arguments.add(index).read() };
             // SAFETY: the method descriptor selects the active jvalue union member.
             unsafe { match ty {
-                crate::Type::Boolean => JniValue::Boolean(value.z != 0),
+                crate::Type::Boolean => JniValue::Boolean(value.z),
                 crate::Type::Byte => JniValue::Byte(value.b),
                 crate::Type::Char => JniValue::Char(value.c),
                 crate::Type::Short => JniValue::Short(value.s),

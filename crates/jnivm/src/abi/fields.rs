@@ -1,0 +1,192 @@
+// JNI field accessors share one typed store keyed by field ID and receiver.
+fn field_receiver(object: jni::jobject) -> Option<crate::ObjectId> {
+    (!object.is_null()).then_some(crate::ObjectId(object as usize as u64))
+}
+
+fn read_field(field: jni::jfieldID, receiver: Option<crate::ObjectId>) -> Option<JniValue> {
+    let Some(vm) = vm() else { return None };
+    match vm.field_value(crate::FieldId(field as usize as u64), receiver) {
+        Ok(value) => Some(value),
+        Err(error) => {
+            eprintln!("[jnivm] unimplemented field access: {error}");
+            None
+        }
+    }
+}
+
+fn write_field(field: jni::jfieldID, receiver: Option<crate::ObjectId>, value: JniValue) {
+    let Some(vm) = vm() else { return };
+    if let Err(error) = vm.set_field_value(crate::FieldId(field as usize as u64), receiver, value) {
+        eprintln!("[jnivm] unimplemented field access: {error}");
+    }
+}
+
+macro_rules! scalar_field_access {
+    ($get:ident, $get_static:ident, $set:ident, $set_static:ident, $ty:ty, $variant:ident) => {
+        unsafe extern "system" fn $get(
+            _env: *mut jni::JNIEnv,
+            object: jni::jobject,
+            field: jni::jfieldID,
+        ) -> $ty {
+            match read_field(field, field_receiver(object)) {
+                Some(JniValue::$variant(value)) => value,
+                Some(_) => {
+                    eprintln!("[jnivm] JNI field getter type does not match its descriptor");
+                    <$ty>::default()
+                }
+                None => <$ty>::default(),
+            }
+        }
+        unsafe extern "system" fn $get_static(
+            _env: *mut jni::JNIEnv,
+            _class: jni::jclass,
+            field: jni::jfieldID,
+        ) -> $ty {
+            match read_field(field, None) {
+                Some(JniValue::$variant(value)) => value,
+                Some(_) => {
+                    eprintln!("[jnivm] JNI static field getter type does not match its descriptor");
+                    <$ty>::default()
+                }
+                None => <$ty>::default(),
+            }
+        }
+        unsafe extern "system" fn $set(
+            _env: *mut jni::JNIEnv,
+            object: jni::jobject,
+            field: jni::jfieldID,
+            value: $ty,
+        ) {
+            write_field(field, field_receiver(object), JniValue::$variant(value));
+        }
+        unsafe extern "system" fn $set_static(
+            _env: *mut jni::JNIEnv,
+            _class: jni::jclass,
+            field: jni::jfieldID,
+            value: $ty,
+        ) {
+            write_field(field, None, JniValue::$variant(value));
+        }
+    };
+}
+
+scalar_field_access!(
+    get_boolean_field,
+    get_static_boolean_field,
+    set_boolean_field,
+    set_static_boolean_field,
+    jni::jboolean,
+    Boolean
+);
+scalar_field_access!(
+    get_byte_field,
+    get_static_byte_field,
+    set_byte_field,
+    set_static_byte_field,
+    jni::jbyte,
+    Byte
+);
+scalar_field_access!(
+    get_char_field,
+    get_static_char_field,
+    set_char_field,
+    set_static_char_field,
+    jni::jchar,
+    Char
+);
+scalar_field_access!(
+    get_short_field,
+    get_static_short_field,
+    set_short_field,
+    set_static_short_field,
+    jni::jshort,
+    Short
+);
+scalar_field_access!(
+    get_int_field,
+    get_static_int_field,
+    set_int_field,
+    set_static_int_field,
+    jni::jint,
+    Int
+);
+scalar_field_access!(
+    get_long_field,
+    get_static_long_field,
+    set_long_field,
+    set_static_long_field,
+    jni::jlong,
+    Long
+);
+scalar_field_access!(
+    get_float_field,
+    get_static_float_field,
+    set_float_field,
+    set_static_float_field,
+    jni::jfloat,
+    Float
+);
+scalar_field_access!(
+    get_double_field,
+    get_static_double_field,
+    set_double_field,
+    set_static_double_field,
+    jni::jdouble,
+    Double
+);
+
+unsafe extern "system" fn get_object_field(
+    _env: *mut jni::JNIEnv,
+    object: jni::jobject,
+    field: jni::jfieldID,
+) -> jni::jobject {
+    match read_field(field, field_receiver(object)) {
+        Some(JniValue::Object(Some(id))) => id.0 as usize as jni::jobject,
+        Some(JniValue::Object(None)) | None => ptr::null_mut(),
+        Some(_) => {
+            eprintln!("[jnivm] JNI object field getter type does not match its descriptor");
+            ptr::null_mut()
+        }
+    }
+}
+
+unsafe extern "system" fn get_static_object_field(
+    _env: *mut jni::JNIEnv,
+    _class: jni::jclass,
+    field: jni::jfieldID,
+) -> jni::jobject {
+    match read_field(field, None) {
+        Some(JniValue::Object(Some(id))) => id.0 as usize as jni::jobject,
+        Some(JniValue::Object(None)) | None => ptr::null_mut(),
+        Some(_) => {
+            eprintln!("[jnivm] JNI static object field getter type does not match its descriptor");
+            ptr::null_mut()
+        }
+    }
+}
+
+unsafe extern "system" fn set_object_field(
+    _env: *mut jni::JNIEnv,
+    object: jni::jobject,
+    field: jni::jfieldID,
+    value: jni::jobject,
+) {
+    write_field(
+        field,
+        field_receiver(object),
+        JniValue::Object((!value.is_null()).then_some(crate::ObjectId(value as usize as u64))),
+    );
+}
+
+unsafe extern "system" fn set_static_object_field(
+    _env: *mut jni::JNIEnv,
+    _class: jni::jclass,
+    field: jni::jfieldID,
+    value: jni::jobject,
+) {
+    write_field(
+        field,
+        None,
+        JniValue::Object((!value.is_null()).then_some(crate::ObjectId(value as usize as u64))),
+    );
+}
