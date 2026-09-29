@@ -572,6 +572,7 @@ pub enum JniError {
     PreConstructorSetupRequired,
     VmNotInitialized,
     MissingStartupNative(&'static str),
+    StartupNative(String),
     VmAlreadyExists,
     JniNotInitialized,
     MissingOnLoad,
@@ -599,6 +600,7 @@ impl std::fmt::Display for JniError {
             }
             Self::VmNotInitialized => f.write_str("create the JavaVM before setting startup directories"),
             Self::MissingStartupNative(name) => write!(f, "required startup native is not exported: {name}"),
+            Self::StartupNative(message) => write!(f, "startup directory setter failed: {message}"),
             Self::VmAlreadyExists => f.write_str("a JavaVM already exists in this process"),
             Self::JniNotInitialized => {
                 f.write_str("complete JNI_OnLoad before GameActivity initialization")
