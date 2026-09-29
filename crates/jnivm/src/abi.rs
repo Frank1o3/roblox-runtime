@@ -247,10 +247,19 @@ unsafe extern "system" fn get_object_class(
             }
         };
     }
-    let Some(name) = vm.object_class_name(object as usize as u64) else {
-        eprintln!(
-            "[jnivm] GetObjectClass on unknown/null reference; using libjnivm-compatible Invalid class"
-        );
+    let object_id = object as usize as u64;
+    let Some(name) = vm.object_class_name(object_id) else {
+        if object.is_null() {
+            // libjnivm deliberately maps GetObjectClass(null) to Invalid.
+            // Roblox's startup parameter bridge relies on this behavior for
+            // absent parameter objects, so distinguish it from a foreign or
+            // otherwise untracked non-null handle in diagnostics.
+            eprintln!("[jnivm] GetObjectClass(null) -> Invalid (libjnivm compatibility)");
+        } else {
+            eprintln!(
+                "[jnivm] GetObjectClass on untracked reference {object_id:#x}; using libjnivm-compatible Invalid class"
+            );
+        }
         return match vm.find_or_define_class("Invalid") {
             Ok(class) => class.0 as usize as jni::jclass,
             Err(error) => {
