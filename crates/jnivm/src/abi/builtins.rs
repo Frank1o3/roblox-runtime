@@ -449,24 +449,8 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
         vm.register_field(text_state, name, descriptor, false)
             .map_err(|error| error.to_string())?;
     }
-    let input_connection = vm
-        .register_class("com/google/androidgamesdk/gametextinput/InputConnection")
+    vm.register_class("com/google/androidgamesdk/gametextinput/InputConnection")
         .map_err(|error| error.to_string())?;
-    install_instance_builtin(
-        vm,
-        input_connection,
-        "setState",
-        "(Lcom/google/androidgamesdk/gametextinput/State;)V",
-        reporter_noop,
-    )?;
-    install_instance_builtin(
-        vm,
-        input_connection,
-        "setSoftKeyboardActive",
-        "(ZI)V",
-        reporter_noop,
-    )?;
-    install_instance_builtin(vm, input_connection, "restartInput", "()V", reporter_noop)?;
 
     install_platform_methods(vm)?;
     install_fmod_methods(vm)?;

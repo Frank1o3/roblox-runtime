@@ -5,19 +5,48 @@ fn field_receiver(object: jni::jobject) -> Option<crate::ObjectId> {
 
 fn read_field(field: jni::jfieldID, receiver: Option<crate::ObjectId>) -> Option<JniValue> {
     let Some(vm) = vm() else { return None };
-    match vm.field_value(crate::FieldId(field as usize as u64), receiver) {
-        Ok(value) => Some(value),
-        Err(error) => {
-            eprintln!("[jnivm] unimplemented field access: {error}");
-            None
-        }
+    let field = crate::FieldId(field as usize as u64);
+    if vm.field_value_is_set(field, receiver) {
+        return match vm.field_value(field, receiver) {
+            Ok(value) => Some(value),
+            Err(error) => {
+                eprintln!("[jnivm] field access failed: {error}");
+                None
+            }
+        };
     }
+    if let Some(value) = fallback_cpp_field_get(vm, field, receiver) {
+        return Some(value);
+    }
+    if let Some((class_name, name, descriptor, _)) = vm.field_info(field) {
+        eprintln!(
+            "[jnivm:fallback] no C++ getter for {class_name}.{name}:{descriptor}; returning JNI default"
+        );
+    }
+    vm.field_value(field, receiver).ok()
 }
 
 fn write_field(field: jni::jfieldID, receiver: Option<crate::ObjectId>, value: JniValue) {
     let Some(vm) = vm() else { return };
-    if let Err(error) = vm.set_field_value(crate::FieldId(field as usize as u64), receiver, value) {
+    if let Err(error) =
+        vm.set_field_value(crate::FieldId(field as usize as u64), receiver, value.clone())
+    {
         eprintln!("[jnivm] unimplemented field access: {error}");
+        return;
+    }
+    if !fallback_cpp_field_set(
+        vm,
+        crate::FieldId(field as usize as u64),
+        receiver,
+        &value,
+    ) {
+        if let Some((class_name, name, descriptor, _)) =
+            vm.field_info(crate::FieldId(field as usize as u64))
+        {
+            eprintln!(
+                "[jnivm:fallback] no C++ setter for {class_name}.{name}:{descriptor}; Rust value retained"
+            );
+        }
     }
 }
 

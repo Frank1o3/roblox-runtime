@@ -308,6 +308,25 @@ impl Vm {
             .cloned()
     }
 
+    /// Return the declaring class, name, descriptor, staticness, and whether a
+    /// Rust handler is installed for this method ID.
+    pub fn method_info(&self, method: MethodId) -> Option<(String, String, String, bool, bool)> {
+        let state = self.state.read().unwrap_or_else(|p| p.into_inner());
+        state.class_records.iter().find_map(|(_class_id, class)| {
+            class.methods.iter().find_map(|(key, id)| {
+                (*id == method).then(|| {
+                    (
+                        class.name.clone(),
+                        key.name.clone(),
+                        key.descriptor.clone(),
+                        key.is_static,
+                        state.method_handlers.contains_key(&method),
+                    )
+                })
+            })
+        })
+    }
+
     /// Record a JNI `RegisterNatives` entry. Function addresses are opaque
     /// integers here; the unsafe ABI adapter owns their conversion/calling.
     pub fn register_native(
@@ -431,6 +450,30 @@ impl Vm {
             .field_types
             .get(&field)
             .cloned()
+    }
+
+    pub fn field_info(&self, field: FieldId) -> Option<(String, String, String, bool)> {
+        let state = self.state.read().unwrap_or_else(|p| p.into_inner());
+        state.class_records.iter().find_map(|(_class_id, class)| {
+            class.fields.iter().find_map(|(key, id)| {
+                (*id == field).then(|| {
+                    (
+                        class.name.clone(),
+                        key.name.clone(),
+                        key.descriptor.clone(),
+                        key.is_static,
+                    )
+                })
+            })
+        })
+    }
+
+    pub fn field_value_is_set(&self, field: FieldId, receiver: Option<ObjectId>) -> bool {
+        self.state
+            .read()
+            .unwrap_or_else(|p| p.into_inner())
+            .field_values
+            .contains_key(&(field, receiver))
     }
 
     pub fn field_value(

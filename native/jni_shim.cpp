@@ -25,6 +25,9 @@ namespace roblox_runtime { jnivm::ENV* process_env(); }
 #include <unistd.h>
 #include <stdexcept>
 #include <memory>
+#include <algorithm>
+#include <cstdint>
+#include <cstring>
 
 namespace {
 // The VM owns every class, object and environment it hands out, so it outlives
@@ -189,6 +192,277 @@ int roblox_jni_init_compat_bridge() {
 /// The current thread's `JNIEnv*`.
 void* roblox_jni_env() {
     return g_vm ? g_vm->GetJNIEnv() : nullptr;
+}
+
+/// Does libjnivm have a real C++ hook for this exact Java method?
+int roblox_jni_fallback_has_method(const char* class_name, const char* name,
+                                   const char* signature, int is_static) {
+    try {
+        if (!g_vm || !class_name || !name || !signature) return 0;
+        auto* env = roblox_runtime::process_env();
+        if (!env) return 0;
+        auto cls = env->GetClass(class_name);
+        if (!cls) return 0;
+        std::lock_guard<std::mutex> lock(cls->mtx);
+        return std::any_of(cls->methods.begin(), cls->methods.end(), [&](const auto& method) {
+            return method && method->name == name && method->signature == signature &&
+                   method->_static == (is_static != 0) && method->nativehandle;
+        }) ? 1 : 0;
+    } catch (...) {
+        return 0;
+    }
+}
+
+int roblox_jni_fallback_has_field(const char* class_name, const char* name,
+                                 const char* type, int is_static, int is_set) {
+    try {
+        if (!g_vm || !class_name || !name || !type) return 0;
+        auto* env = roblox_runtime::process_env();
+        if (!env) return 0;
+        auto cls = env->GetClass(class_name);
+        if (!cls) return 0;
+        std::lock_guard<std::mutex> lock(cls->mtx);
+        return std::any_of(cls->fields.begin(), cls->fields.end(), [&](const auto& field) {
+            return field && field->name == name && field->type == type &&
+                   field->_static == (is_static != 0) &&
+                   (is_set ? static_cast<bool>(field->setnativehandle)
+                           : static_cast<bool>(field->getnativehandle));
+        }) ? 1 : 0;
+    } catch (...) {
+        return 0;
+    }
+}
+
+int roblox_jni_fallback_get_field(const char* class_name, const char* name,
+                                 const char* type, int is_static, void* receiver,
+                                 jvalue* result) {
+    try {
+        if (!g_vm || !class_name || !name || !type || !result) return -1;
+        auto* env = roblox_runtime::process_env();
+        if (!env) return -1;
+        JNIEnv* jni = env->GetJNIEnv();
+        auto cls = env->GetClass(class_name);
+        jclass jcls = static_cast<jclass>(
+            jnivm::JNITypes<std::shared_ptr<jnivm::Class>>::ToJNIType(env, cls));
+        jfieldID field = is_static ? jni->GetStaticFieldID(jcls, name, type)
+                                   : jni->GetFieldID(jcls, name, type);
+        if (!field) return -2;
+        jvalue value{};
+        const char kind = type[0];
+        if (is_static) {
+            switch (kind) {
+            case 'Z': value.z = jni->GetStaticBooleanField(jcls, field); break;
+            case 'B': value.b = jni->GetStaticByteField(jcls, field); break;
+            case 'C': value.c = jni->GetStaticCharField(jcls, field); break;
+            case 'S': value.s = jni->GetStaticShortField(jcls, field); break;
+            case 'I': value.i = jni->GetStaticIntField(jcls, field); break;
+            case 'J': value.j = jni->GetStaticLongField(jcls, field); break;
+            case 'F': value.f = jni->GetStaticFloatField(jcls, field); break;
+            case 'D': value.d = jni->GetStaticDoubleField(jcls, field); break;
+            case 'L': case '[': value.l = jni->GetStaticObjectField(jcls, field); break;
+            default: return -3;
+            }
+        } else {
+            if (!receiver) return -4;
+            jobject object = static_cast<jobject>(receiver);
+            switch (kind) {
+            case 'Z': value.z = jni->GetBooleanField(object, field); break;
+            case 'B': value.b = jni->GetByteField(object, field); break;
+            case 'C': value.c = jni->GetCharField(object, field); break;
+            case 'S': value.s = jni->GetShortField(object, field); break;
+            case 'I': value.i = jni->GetIntField(object, field); break;
+            case 'J': value.j = jni->GetLongField(object, field); break;
+            case 'F': value.f = jni->GetFloatField(object, field); break;
+            case 'D': value.d = jni->GetDoubleField(object, field); break;
+            case 'L': case '[': value.l = jni->GetObjectField(object, field); break;
+            default: return -3;
+            }
+        }
+        if (kind == 'L' || kind == '[') value.l = value.l ? jni->NewGlobalRef(value.l) : nullptr;
+        *result = value;
+        return 0;
+    } catch (...) {
+        return -5;
+    }
+}
+
+int roblox_jni_fallback_set_field(const char* class_name, const char* name,
+                                 const char* type, int is_static, void* receiver,
+                                 jvalue value) {
+    try {
+        if (!g_vm || !class_name || !name || !type) return -1;
+        auto* env = roblox_runtime::process_env();
+        if (!env) return -1;
+        JNIEnv* jni = env->GetJNIEnv();
+        auto cls = env->GetClass(class_name);
+        jclass jcls = static_cast<jclass>(
+            jnivm::JNITypes<std::shared_ptr<jnivm::Class>>::ToJNIType(env, cls));
+        jfieldID field = is_static ? jni->GetStaticFieldID(jcls, name, type)
+                                   : jni->GetFieldID(jcls, name, type);
+        if (!field) return -2;
+        const char kind = type[0];
+        if (is_static) {
+            switch (kind) {
+            case 'Z': jni->SetStaticBooleanField(jcls, field, value.z); break;
+            case 'B': jni->SetStaticByteField(jcls, field, value.b); break;
+            case 'C': jni->SetStaticCharField(jcls, field, value.c); break;
+            case 'S': jni->SetStaticShortField(jcls, field, value.s); break;
+            case 'I': jni->SetStaticIntField(jcls, field, value.i); break;
+            case 'J': jni->SetStaticLongField(jcls, field, value.j); break;
+            case 'F': jni->SetStaticFloatField(jcls, field, value.f); break;
+            case 'D': jni->SetStaticDoubleField(jcls, field, value.d); break;
+            case 'L': case '[': jni->SetStaticObjectField(jcls, field, value.l); break;
+            default: return -3;
+            }
+        } else {
+            if (!receiver) return -4;
+            jobject object = static_cast<jobject>(receiver);
+            switch (kind) {
+            case 'Z': jni->SetBooleanField(object, field, value.z); break;
+            case 'B': jni->SetByteField(object, field, value.b); break;
+            case 'C': jni->SetCharField(object, field, value.c); break;
+            case 'S': jni->SetShortField(object, field, value.s); break;
+            case 'I': jni->SetIntField(object, field, value.i); break;
+            case 'J': jni->SetLongField(object, field, value.j); break;
+            case 'F': jni->SetFloatField(object, field, value.f); break;
+            case 'D': jni->SetDoubleField(object, field, value.d); break;
+            case 'L': case '[': jni->SetObjectField(object, field, value.l); break;
+            default: return -3;
+            }
+        }
+        return 0;
+    } catch (...) {
+        return -5;
+    }
+}
+
+/// Create a persistent C++-VM object for a Rust-side opaque reference.
+void* roblox_jni_fallback_new_object(const char* class_name) {
+    try {
+        if (!g_vm || !class_name) return nullptr;
+        auto* env = roblox_runtime::process_env();
+        if (!env) return nullptr;
+        auto cls = env->GetClass(class_name);
+        if (!cls || !cls->Instantiate) return nullptr;
+        auto object = cls->Instantiate(env);
+        if (!object) return nullptr;
+        object->clazz = cls;
+        jobject local = jnivm::JNITypes<std::shared_ptr<jnivm::Object>>::ToJNIType(env, object);
+        return env->GetJNIEnv()->NewGlobalRef(local);
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+/// Mirror a Rust UTF-16 Java string into the C++ compatibility VM.
+void* roblox_jni_fallback_new_string(const uint16_t* chars, int length) {
+    try {
+        if (!g_vm || length < 0 || (length && !chars)) return nullptr;
+        auto* env = roblox_runtime::process_env();
+        if (!env) return nullptr;
+        JNIEnv* jni = env->GetJNIEnv();
+        jstring local = jni->NewString(reinterpret_cast<const jchar*>(chars), length);
+        return local ? jni->NewGlobalRef(local) : nullptr;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+/// Invoke an already registered C++ hook. Object results are promoted to a
+/// global reference so the Rust VM can retain them as opaque fallback objects.
+int roblox_jni_fallback_invoke(const char* class_name, const char* name,
+                               const char* signature, int is_static,
+                               void* receiver, jvalue* args, jvalue* result) {
+    try {
+        if (!g_vm || !class_name || !name || !signature || !result) return -1;
+        auto* env = roblox_runtime::process_env();
+        if (!env) return -1;
+        JNIEnv* jni = env->GetJNIEnv();
+        auto cls = env->GetClass(class_name);
+        if (!cls) return -2;
+        jclass jcls = static_cast<jclass>(
+            jnivm::JNITypes<std::shared_ptr<jnivm::Class>>::ToJNIType(env, cls));
+        jmethodID method = is_static ? jni->GetStaticMethodID(jcls, name, signature)
+                                     : jni->GetMethodID(jcls, name, signature);
+        if (!method) return -2;
+        const char* result_type = std::strrchr(signature, ')');
+        if (!result_type || !result_type[1]) return -3;
+        ++result_type;
+        jvalue value{};
+        if (is_static) {
+            switch (*result_type) {
+            case 'V': jni->CallStaticVoidMethodA(jcls, method, args); break;
+            case 'Z': value.z = jni->CallStaticBooleanMethodA(jcls, method, args); break;
+            case 'B': value.b = jni->CallStaticByteMethodA(jcls, method, args); break;
+            case 'C': value.c = jni->CallStaticCharMethodA(jcls, method, args); break;
+            case 'S': value.s = jni->CallStaticShortMethodA(jcls, method, args); break;
+            case 'I': value.i = jni->CallStaticIntMethodA(jcls, method, args); break;
+            case 'J': value.j = jni->CallStaticLongMethodA(jcls, method, args); break;
+            case 'F': value.f = jni->CallStaticFloatMethodA(jcls, method, args); break;
+            case 'D': value.d = jni->CallStaticDoubleMethodA(jcls, method, args); break;
+            case 'L': case '[': value.l = jni->CallStaticObjectMethodA(jcls, method, args); break;
+            default: return -3;
+            }
+        } else {
+            if (!receiver) return -4;
+            jobject object = static_cast<jobject>(receiver);
+            switch (*result_type) {
+            case 'V': jni->CallVoidMethodA(object, method, args); break;
+            case 'Z': value.z = jni->CallBooleanMethodA(object, method, args); break;
+            case 'B': value.b = jni->CallByteMethodA(object, method, args); break;
+            case 'C': value.c = jni->CallCharMethodA(object, method, args); break;
+            case 'S': value.s = jni->CallShortMethodA(object, method, args); break;
+            case 'I': value.i = jni->CallIntMethodA(object, method, args); break;
+            case 'J': value.j = jni->CallLongMethodA(object, method, args); break;
+            case 'F': value.f = jni->CallFloatMethodA(object, method, args); break;
+            case 'D': value.d = jni->CallDoubleMethodA(object, method, args); break;
+            case 'L': case '[': value.l = jni->CallObjectMethodA(object, method, args); break;
+            default: return -3;
+            }
+        }
+        if (*result_type == 'L' || *result_type == '[') {
+            value.l = value.l ? jni->NewGlobalRef(value.l) : nullptr;
+        }
+        *result = value;
+        return 0;
+    } catch (const std::exception& error) {
+        fprintf(stderr, "[jnivm:fallback] C++ hook threw: %s\n", error.what());
+        return -5;
+    } catch (...) {
+        fprintf(stderr, "[jnivm:fallback] C++ hook threw a non-standard exception\n");
+        return -5;
+    }
+}
+
+/// Copy a C++-VM String into a caller-owned UTF-16 buffer. Returns -1 for a
+/// non-string or invalid reference; a short buffer returns the required length.
+int roblox_jni_fallback_copy_string(void* string_ref, uint16_t* output, int capacity) {
+    try {
+        if (!g_vm || !string_ref || capacity < 0) return -1;
+        auto* env = roblox_runtime::process_env();
+        if (!env) return -1;
+        JNIEnv* jni = env->GetJNIEnv();
+        auto string = static_cast<jstring>(string_ref);
+        const jsize length = jni->GetStringLength(string);
+        if (length < 0) return -1;
+        if (capacity < length || (length && !output)) return length;
+        const jchar* chars = jni->GetStringChars(string, nullptr);
+        if (!chars && length) return -1;
+        if (length) std::memcpy(output, chars, static_cast<size_t>(length) * sizeof(jchar));
+        if (chars) jni->ReleaseStringChars(string, chars);
+        return length;
+    } catch (...) {
+        return -1;
+    }
+}
+
+void roblox_jni_fallback_release_ref(void* object) {
+    try {
+        if (!g_vm || !object) return;
+        auto* env = roblox_runtime::process_env();
+        if (env) env->GetJNIEnv()->DeleteGlobalRef(static_cast<jobject>(object));
+    } catch (...) {
+    }
 }
 
 /// Write C++ stubs for every Java class and method the native code has reached

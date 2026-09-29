@@ -90,6 +90,10 @@ pub enum ObjectValue {
     IntArray(Vec<i32>),
     LongArray(Vec<i64>),
     ObjectArray(Vec<Option<ObjectId>>),
+    /// A global object reference owned by the companion C++ libjnivm VM.
+    /// This is only used for values returned from the experimental fallback
+    /// bridge; Rust code must not dereference the pointer directly.
+    CppObject(usize),
     Opaque,
 }
 
