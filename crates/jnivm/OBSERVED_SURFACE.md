@@ -148,6 +148,30 @@ Objects allocated by that companion VM are not interchangeable with Rust VM
 objects; the experimental GameActivity initialization path now avoids crossing
 that boundary for its input references.
 
+## 2026-09-29 startup trace and direct-buffer fix
+
+The 17:36 experimental run reached the system-dialog proxy lookups and then
+crashed with a null indirect call. The core dump's call site used JNI table
+offset `0x728`, which is `NewDirectByteBuffer` in `jni-sys 0.4.1`'s
+`JNINativeInterface_`. The C++ reference at
+`third_party/libjnivm/src/jnivm/internal/bytebuffer.cpp` wraps the supplied
+address and capacity in a `java/nio/ByteBuffer`; its VM installs that slot and
+the matching address and capacity accessors. Rust had left those three table
+entries null. The Rust VM now stores the same address and capacity and
+implements `NewDirectByteBuffer`, `GetDirectBufferAddress`, and
+`GetDirectBufferCapacity`; the flags-loaded callback also reports the buffer
+capacity, matching `native/init_params.cpp`.
+
+The next experimental run built from the nested submodule and passed that
+crash point. It logged `flags loaded (1339695 bytes)`, then reached the app
+ready callbacks for `PlatformAccountRouter`, `Startup`, `Landing`, and `Login`.
+This verifies progress through startup and the login screen, not that joining
+an experience works. The trace still contains a `NewGlobalRef` failure for an
+untracked object and placeholder system-theme methods. It also logs
+`ZSTD_trace_compress_begin`; the earlier `ZSTD_trace_decompress_begin` line
+preceded the direct-buffer call, and the core dump identified the null JNI slot
+as the actual crash site.
+
 The latest startup run reached app initialization, then the APK requested the
 Kotlin singleton field
 `com/roblox/protocols/systemdialog/PlatformSystemDialogHandler.INSTANCE`.
