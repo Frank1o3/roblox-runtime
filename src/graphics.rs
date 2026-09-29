@@ -9,8 +9,7 @@ use std::ffi::{c_int, c_void};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 static VSYNC: AtomicBool = AtomicBool::new(true);
-static OPENGL_SWAP_INTERVAL: std::sync::atomic::AtomicI32 =
-    std::sync::atomic::AtomicI32::new(1);
+static OPENGL_SWAP_INTERVAL: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(1);
 
 pub use roblox_android::native_window::{HostSurface, SurfaceError};
 

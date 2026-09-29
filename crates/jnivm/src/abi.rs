@@ -266,7 +266,11 @@ pub fn new_configuration(width: i32, height: i32) -> Result<*mut c_void, String>
         ("screenHeightDp", "I", JniValue::Int(height)),
         ("screenLayout", "I", JniValue::Int(0x13)),
         ("screenWidthDp", "I", JniValue::Int(width)),
-        ("smallestScreenWidthDp", "I", JniValue::Int(width.min(height))),
+        (
+            "smallestScreenWidthDp",
+            "I",
+            JniValue::Int(width.min(height)),
+        ),
         ("touchscreen", "I", JniValue::Int(1)),
         ("uiMode", "I", JniValue::Int(1)),
     ];
@@ -285,15 +289,22 @@ pub fn new_configuration(width: i32, height: i32) -> Result<*mut c_void, String>
 pub fn new_string_array_ref(values: &[String]) -> Result<*mut c_void, String> {
     let vm = vm().ok_or("Rust JavaVM has not been created")?;
     let env = vm.get_env().unwrap_or_else(|| vm.attach_current_thread());
-    let string_class = vm.find_or_define_class("java/lang/String").map_err(|e| e.to_string())?;
-    let array = vm.new_local_object_array(&env, values.len(), None).map_err(|e| e.to_string())?;
+    let string_class = vm
+        .find_or_define_class("java/lang/String")
+        .map_err(|e| e.to_string())?;
+    let array = vm
+        .new_local_object_array(&env, values.len(), None)
+        .map_err(|e| e.to_string())?;
     for (index, value) in values.iter().enumerate() {
-        let object = vm.new_local_object(
-            &env,
-            string_class,
-            ObjectValue::String(value.encode_utf16().collect()),
-        ).map_err(|e| e.to_string())?;
-        vm.set_object_array_element(&env, array, index, Some(object)).map_err(|e| e.to_string())?;
+        let object = vm
+            .new_local_object(
+                &env,
+                string_class,
+                ObjectValue::String(value.encode_utf16().collect()),
+            )
+            .map_err(|e| e.to_string())?;
+        vm.set_object_array_element(&env, array, index, Some(object))
+            .map_err(|e| e.to_string())?;
     }
     Ok(array.0 as usize as *mut c_void)
 }
@@ -364,11 +375,8 @@ pub unsafe extern "C" fn roblox_jnivm_call_native_flags(
             return -4;
         }
     };
-    type NativeFlags = unsafe extern "system" fn(
-        *mut jni::JNIEnv,
-        jni::jclass,
-        jni::jobjectArray,
-    ) -> jni::jobject;
+    type NativeFlags =
+        unsafe extern "system" fn(*mut jni::JNIEnv, jni::jclass, jni::jobjectArray) -> jni::jobject;
     // SAFETY: caller passes the mapped engine's nativeInitializeNativeFlags
     // export, whose signature is the JNI signature above.
     let native: NativeFlags = unsafe { std::mem::transmute(function) };
@@ -633,14 +641,21 @@ unsafe extern "system" fn register_natives(
         }
         if let Some(class_name) = vm.class_name(class) {
             let (Ok(class_name), Ok(name), Ok(signature)) = (
-                CString::new(class_name), CString::new(name), CString::new(signature),
-            ) else { return jni::JNI_ERR; };
+                CString::new(class_name),
+                CString::new(name),
+                CString::new(signature),
+            ) else {
+                return jni::JNI_ERR;
+            };
             // The runtime's lifecycle driver calls AGDK's registered natives
             // through its companion libjnivm class table. Keep that table in
             // sync with the selected Rust JavaVM's RegisterNatives calls.
             let status = unsafe {
                 roblox_jni_fallback_register_native(
-                    class_name.as_ptr(), name.as_ptr(), signature.as_ptr(), method.fnPtr,
+                    class_name.as_ptr(),
+                    name.as_ptr(),
+                    signature.as_ptr(),
+                    method.fnPtr,
                 )
             };
             if status != 0 {
@@ -710,9 +725,7 @@ unsafe extern "system" fn new_global_ref(
     };
     let id = crate::ObjectId(object as usize as u64);
     if let Ok(crate::ObjectValue::CppObject(reference)) = vm.object_value(&env, id) {
-        if let Some(global) =
-            promote_companion_reference(vm, &env, reference as *mut c_void)
-        {
+        if let Some(global) = promote_companion_reference(vm, &env, reference as *mut c_void) {
             return global.0 as usize as jni::jobject;
         }
     } else if vm.object_class_name(id.0).is_none() {
@@ -723,8 +736,13 @@ unsafe extern "system" fn new_global_ref(
     match vm.new_global_ref(&env, id) {
         Ok(reference) => reference.0 as usize as jni::jobject,
         Err(error) => {
-            let class = vm.object_class_name(id.0).unwrap_or_else(|| "<unknown>".into());
-            eprintln!("[jnivm] NewGlobalRef failed for {class} ref {}: {error}", id.0);
+            let class = vm
+                .object_class_name(id.0)
+                .unwrap_or_else(|| "<unknown>".into());
+            eprintln!(
+                "[jnivm] NewGlobalRef failed for {class} ref {}: {error}",
+                id.0
+            );
             ptr::null_mut()
         }
     }

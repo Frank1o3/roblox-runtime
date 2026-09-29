@@ -697,11 +697,17 @@ impl Vm {
             .ok_or(JniError::UnknownReference)?
             .global;
         if !is_global
-            && !state.locals.get(&env.owner).is_some_and(|locals| locals.contains(&array))
+            && !state
+                .locals
+                .get(&env.owner)
+                .is_some_and(|locals| locals.contains(&array))
         {
             return Err(JniError::ReferenceNotLocal);
         }
-        let record = state.objects.get_mut(&array).ok_or(JniError::UnknownReference)?;
+        let record = state
+            .objects
+            .get_mut(&array)
+            .ok_or(JniError::UnknownReference)?;
         match &mut record.value {
             ObjectValue::ByteArray(values) => Ok(values.as_mut_ptr()),
             _ => Err(JniError::UnknownReference),
@@ -718,7 +724,9 @@ impl Vm {
         let ObjectValue::ByteArray(values) = self.object_value(env, array)? else {
             return Err(JniError::UnknownReference);
         };
-        let end = start.checked_add(length).ok_or(JniError::UnknownReference)?;
+        let end = start
+            .checked_add(length)
+            .ok_or(JniError::UnknownReference)?;
         values
             .get(start..end)
             .map(<[i8]>::to_vec)
@@ -740,15 +748,23 @@ impl Vm {
             .ok_or(JniError::UnknownReference)?
             .global;
         if !is_global
-            && !state.locals.get(&env.owner).is_some_and(|locals| locals.contains(&array))
+            && !state
+                .locals
+                .get(&env.owner)
+                .is_some_and(|locals| locals.contains(&array))
         {
             return Err(JniError::ReferenceNotLocal);
         }
-        let record = state.objects.get_mut(&array).ok_or(JniError::UnknownReference)?;
+        let record = state
+            .objects
+            .get_mut(&array)
+            .ok_or(JniError::UnknownReference)?;
         let ObjectValue::ByteArray(elements) = &mut record.value else {
             return Err(JniError::UnknownReference);
         };
-        let end = start.checked_add(values.len()).ok_or(JniError::UnknownReference)?;
+        let end = start
+            .checked_add(values.len())
+            .ok_or(JniError::UnknownReference)?;
         let target = elements
             .get_mut(start..end)
             .ok_or(JniError::UnknownReference)?;
