@@ -53,7 +53,6 @@ unsafe extern "C" {
         output: *mut u16,
         capacity: i32,
     ) -> i32;
-    fn roblox_jni_fallback_release_ref(object: *mut std::ffi::c_void);
 }
 
 unsafe extern "system" fn alloc_object(
