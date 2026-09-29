@@ -1334,6 +1334,10 @@ int roblox_audio_backend_is_aaudio(void) {
     return selected_backend() == Backend::Java ? 0 : 1;
 }
 
+int roblox_audio_host_backend_available(void) {
+    return roblox_runtime::audio::host_backend_available() ? 1 : 0;
+}
+
 void roblox_audio_backend_announce(void) {
     (void)selected_backend();
     // **Said out loud, because `pipewire_backend.h` has claimed for some time

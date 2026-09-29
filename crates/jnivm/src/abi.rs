@@ -32,6 +32,7 @@ fn vm() -> Option<&'static Vm> {
 }
 
 include!("abi/builtins.rs");
+include!("abi/platform.rs");
 include!("abi/native_helper.rs");
 include!("abi/arrays.rs");
 

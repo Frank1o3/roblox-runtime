@@ -660,6 +660,17 @@ pub fn aaudio_selected() -> bool {
     unsafe { roblox_audio_backend_is_aaudio() != 0 }
 }
 
+/// Whether the selected host audio backend is reachable. AAudio support is a
+/// one-way FMOD choice, so the VM only advertises it when opening a stream can
+/// succeed.
+pub fn audio_host_backend_available() -> bool {
+    unsafe extern "C" {
+        fn roblox_audio_host_backend_available() -> c_int;
+    }
+    // SAFETY: reports the process-wide backend probe result.
+    unsafe { roblox_audio_host_backend_available() != 0 }
+}
+
 /// Prints which audio backend is in force, during startup.
 ///
 /// `RBX_RUNTIME_AUDIO` was described in conversation as the intended design and

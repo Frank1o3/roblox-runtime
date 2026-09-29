@@ -297,6 +297,9 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
     vm.register_field(display_metrics, "density", "F", false)
         .map_err(|error| error.to_string())?;
 
+    install_platform_methods(vm)?;
+    install_fmod_methods(vm)?;
+
     Ok(())
 }
 

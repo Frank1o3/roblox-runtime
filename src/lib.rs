@@ -480,6 +480,11 @@ impl LoadedEngine {
                 .map_err(|_| JniError::BootstrapAlreadyInstalled)?;
             jnivm::set_game_loaded_callback(report_rust_game_loaded)
                 .map_err(|_| JniError::BootstrapAlreadyInstalled)?;
+            jnivm::set_fmod_aaudio_support(|| {
+                roblox_abi::bionic::aaudio_selected()
+                    && roblox_abi::bionic::audio_host_backend_available()
+            })
+            .map_err(|_| JniError::BootstrapAlreadyInstalled)?;
         }
         roblox_jni::game_activity::set_bootstrap(Some(run_startup_bootstrap));
         // This host does not have Android's framework Activity to guarantee

@@ -7,8 +7,8 @@ mod descriptor;
 mod vm;
 
 pub use abi::{
-    call_on_load, create_vm, current_env, set_game_loaded_callback, set_startup_bootstrap,
-    vm_exists,
+    call_on_load, create_vm, current_env, set_fmod_aaudio_support, set_game_loaded_callback,
+    set_startup_bootstrap, vm_exists,
 };
 pub use descriptor::{
     DescriptorError, MethodDescriptor, Type, parse_field_descriptor, parse_method_descriptor,

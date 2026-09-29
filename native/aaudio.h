@@ -1,5 +1,5 @@
-// The two questions the rest of the tree asks the AAudio bridge, kept in a
-// header of their own so that `audio_classes.cpp` — which is compiled into a
+// The process-wide questions the rest of the tree asks the AAudio bridge live
+// here so that `audio_classes.cpp` — compiled into a
 // different static library and has no business including the whole AAudio ABI
 // — can ask them without pulling in `aaudio.cpp`'s internals.
 //
@@ -21,6 +21,7 @@ extern "C" {
 /// **AAudio is the default**, so this answers non-zero for an unset
 /// `RBX_RUNTIME_AUDIO`; `RBX_RUNTIME_AUDIO=java` is what makes it zero.
 int roblox_audio_backend_is_aaudio(void);
+int roblox_audio_host_backend_available(void);
 
 /// Forces the one-time selection and its log line to happen now, so that the
 /// backend is announced during startup rather than whenever the engine first
