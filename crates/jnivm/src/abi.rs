@@ -318,6 +318,59 @@ pub unsafe extern "C" fn roblox_jnivm_new_string_array(
     }
 }
 
+/// Invoke the engine's native flag initializer with JNI handles owned by the
+/// Rust VM. The runtime's C++ compatibility bridge has a separate object
+/// table, so its JNIEnv and jclass cannot be mixed with this String[] handle.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn roblox_jnivm_call_native_flags(
+    function: *mut c_void,
+    values: *const *const c_char,
+    count: i32,
+) -> i32 {
+    if function.is_null() || count < 0 || (count > 0 && values.is_null()) {
+        eprintln!("[jnivm] native flag call received an invalid function or argument array");
+        return -1;
+    }
+    let Some(vm) = vm() else {
+        eprintln!("[jnivm] native flag call requested before VM initialization");
+        return -2;
+    };
+    // Build both the Java array and receiver class in this VM. The function
+    // pointer is the mapped engine export and remains live for the process.
+    let array = unsafe { roblox_jnivm_new_string_array(values, count) };
+    if array.is_null() {
+        return -3;
+    }
+    let class = match vm.find_or_define_class("com/roblox/client/flags/FlagJniInterface") {
+        Ok(class) => class,
+        Err(error) => {
+            eprintln!("[jnivm] could not resolve FlagJniInterface: {error}");
+            return -4;
+        }
+    };
+    type NativeFlags = unsafe extern "system" fn(
+        *mut jni::JNIEnv,
+        jni::jclass,
+        jni::jobjectArray,
+    ) -> jni::jobject;
+    // SAFETY: caller passes the mapped engine's nativeInitializeNativeFlags
+    // export, whose signature is the JNI signature above.
+    let native: NativeFlags = unsafe { std::mem::transmute(function) };
+    let env = thread_env(vm);
+    eprintln!("[jnivm] calling nativeInitializeNativeFlags with {count} flag names");
+    // SAFETY: env, class and array all belong to this Rust VM and stay live
+    // through this synchronous native call.
+    let _result = unsafe {
+        native(
+            env,
+            class.0 as usize as jni::jclass,
+            array as jni::jobjectArray,
+        )
+    };
+    eprintln!("[jnivm] nativeInitializeNativeFlags returned");
+    0
+}
+
 /// Invoke a mapped engine's `JNI_OnLoad` with the experimental JavaVM.
 ///
 /// # Safety
