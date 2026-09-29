@@ -279,6 +279,11 @@ int roblox_jni_fallback_get_field(const char* class_name, const char* name,
             }
         }
         if (kind == 'L' || kind == '[') value.l = value.l ? jni->NewGlobalRef(value.l) : nullptr;
+        if (env->current_exception) {
+            jni->ExceptionDescribe();
+            jni->ExceptionClear();
+            return -5;
+        }
         *result = value;
         return 0;
     } catch (...) {
@@ -329,6 +334,11 @@ int roblox_jni_fallback_set_field(const char* class_name, const char* name,
             case 'L': case '[': jni->SetObjectField(object, field, value.l); break;
             default: return -3;
             }
+        }
+        if (env->current_exception) {
+            jni->ExceptionDescribe();
+            jni->ExceptionClear();
+            return -5;
         }
         return 0;
     } catch (...) {
@@ -422,6 +432,11 @@ int roblox_jni_fallback_invoke(const char* class_name, const char* name,
         }
         if (*result_type == 'L' || *result_type == '[') {
             value.l = value.l ? jni->NewGlobalRef(value.l) : nullptr;
+        }
+        if (env->current_exception) {
+            jni->ExceptionDescribe();
+            jni->ExceptionClear();
+            return -5;
         }
         *result = value;
         return 0;

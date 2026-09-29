@@ -487,7 +487,13 @@ fn invoke_cpp_fallback(
     let mut raw_arguments = Vec::with_capacity(arguments.len());
     for (index, value) in arguments.iter().enumerate() {
         let ty = descriptor.parameters.get(index)?;
-        raw_arguments.push(to_cpp_jvalue(vm, ty, value)?);
+        let Some(raw) = to_cpp_jvalue(vm, ty, value) else {
+            eprintln!(
+                "[jnivm:fallback] could not mirror argument {index} ({ty:?}) for {class_name}.{name}{signature}"
+            );
+            return None;
+        };
+        raw_arguments.push(raw);
     }
 
     let cpp_receiver = if is_static {

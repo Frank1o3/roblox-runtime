@@ -1,9 +1,9 @@
 //! JNI C ABI tables and process/thread handles.
 //!
-//! Only ABI entries with defined behavior are installed. Calls routed through
-//! the implemented member dispatch log unresolved Java methods and return the
-//! descriptor's zero/null default; the rest of the table remains to be filled
-//! from runtime observations.
+//! Only ABI entries with defined behavior are installed. A missing Java
+//! method or field is logged and offered to the companion C++ libjnivm bridge;
+//! handlers that cannot be mirrored safely return descriptor-correct defaults.
+//! The remaining function-table surface is filled from runtime observations.
 
 #![allow(unsafe_code)]
 

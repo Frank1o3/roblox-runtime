@@ -44,7 +44,7 @@ fn write_field(field: jni::jfieldID, receiver: Option<crate::ObjectId>, value: J
             vm.field_info(crate::FieldId(field as usize as u64))
         {
             eprintln!(
-                "[jnivm:fallback] no C++ setter for {class_name}.{name}:{descriptor}; Rust value retained"
+                "[jnivm:fallback] C++ setter unavailable for {class_name}.{name}:{descriptor}; Rust value retained"
             );
         }
     }
