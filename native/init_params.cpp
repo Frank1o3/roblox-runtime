@@ -422,14 +422,14 @@ static std::string build_user_agent() {
     switch (device_identity()) {
         case DeviceIdentity::PcWindows11:
             snprintf(buf, sizeof buf,
-                     "Mozilla/5.0 (%ldMB; %dx%d; 160x160; %dx%d; Cordial) "
+                     "Mozilla/5.0 (%ldMB; %dx%d; 160x160; %dx%d; roblox-runtime) "
                      "AppleWebKit/537.36 (KHTML, like Gecko)  ROBLOX Windows App %s Desktop "
-                     "Hybrid()  Cordial RobloxApp/%s (GlobalDist; Cordial)",
+                     "Hybrid()  roblox-runtime RobloxApp/%s (GlobalDist; roblox-runtime)",
                      ram_mb, g_width, g_height, g_width, g_height, app.c_str(), app.c_str());
             break;
         case DeviceIdentity::AndroidTablet:
             snprintf(buf, sizeof buf,
-                     "Mozilla/5.0 (%ldMB; %dx%d; 160x160; %dx%d; Cordial; 33) "
+                     "Mozilla/5.0 (%ldMB; %dx%d; 160x160; %dx%d; roblox-runtime; 33) "
                      "AppleWebKit/537.36 (KHTML, like Gecko)  ROBLOX Android App %s Tablet "
                      "Hybrid()  GooglePlayStore RobloxApp/%s (GlobalDist; GooglePlayStore)",
                      ram_mb, g_width, g_height, g_width, g_height, app.c_str(), app.c_str());
@@ -449,7 +449,7 @@ static std::string build_user_agent() {
             // here; see the doc above on why the device block is the part
             // worth dropping.
             (void)ram_mb;
-            snprintf(buf, sizeof buf, "RobloxApp/%s(GlobalDist; Cordial)", app.c_str());
+            snprintf(buf, sizeof buf, "RobloxApp/%s(GlobalDist; roblox-runtime)", app.c_str());
             break;
     }
     return std::string(buf);
