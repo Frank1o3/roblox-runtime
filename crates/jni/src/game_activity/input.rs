@@ -338,6 +338,7 @@ unsafe extern "C" {
     ) -> c_int;
     fn roblox_games_loaded() -> u32;
     fn roblox_last_place() -> i64;
+    fn roblox_note_game_loaded(place_id: i64);
     fn roblox_game_activity_window_focus(
         handle: i64,
         focused: c_int,
@@ -365,4 +366,11 @@ unsafe extern "C" {
     fn roblox_ime_soft_keyboard_active() -> c_int;
     fn roblox_ime_state_text(buf: *mut c_char, n: c_int) -> c_int;
     fn roblox_ime_state_selection(start: *mut c_int, end: *mut c_int);
+}
+
+/// Record the game's NativeHelper callback in the runtime's shared join state.
+pub fn note_game_loaded(place_id: i64) {
+    // SAFETY: the runtime provides this atomic counter callback for the
+    // process lifetime, alongside `roblox_games_loaded` above.
+    unsafe { roblox_note_game_loaded(place_id) }
 }
