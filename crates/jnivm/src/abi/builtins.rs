@@ -3,6 +3,34 @@ use std::net::UdpSocket;
 use std::time::Instant;
 
 static STARTUP_BOOTSTRAP: OnceLock<extern "C" fn()> = OnceLock::new();
+static TEXT_BOX_INFO: OnceLock<Mutex<HashMap<crate::ObjectId, NativeTextBoxInfo>>> =
+    OnceLock::new();
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct NativeTextBoxInfo {
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+    font_size: f32,
+    multiline: i32,
+    x_alignment: i32,
+    y_alignment: i32,
+    text_color: i32,
+    font: i32,
+    text_input_type: i32,
+    return_key_type: i32,
+    manual_focus_release: i32,
+    text_wrapped: i32,
+    z14: i32,
+}
+
+unsafe extern "C" {
+    fn roblox_textbox_last_built(info: *const NativeTextBoxInfo);
+    fn roblox_textbox_focused(handle: i64, text: *const std::ffi::c_char, info: *const NativeTextBoxInfo);
+    fn roblox_textbox_blurred();
+}
 
 /// Install the runtime-owned startup callback for the Rust VM's Java-side
 /// `GameActivity.bootstrapTheApp()` hook.
@@ -427,9 +455,12 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
         ("gameActivity_onMotionEventListening", "(Ljava/lang/String;)V", native_helper_motion_listening),
         ("gameActivity_onExperienceStop", "(D)V", native_helper_experience_stopped),
         ("gameActivity_setAppUpgradeStatus", "(IILjava/lang/String;Ljava/lang/String;)V", native_helper_upgrade_status),
+        ("gameActivity_showKeyboard", "(JZ[BLcom/roblox/engine/jni/model/NativeTextBoxInfo;)V", native_helper_show_keyboard),
+        ("gameActivity_hideKeyboard", "()V", native_helper_hide_keyboard),
     ] {
         install_instance_builtin(vm, native_helper, method_name, descriptor, handler)?;
     }
+    install_native_text_box_info(vm)?;
 
     // Register the Java classes and fields backed by values above so these
     // intentional implementations do not surface as placeholder lookups.
@@ -516,6 +547,26 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
     install_fmod_methods(vm)?;
     install_flags_methods(vm)?;
     install_system_dialog_singleton(vm)?;
+    install_system_dialog_methods(vm)?;
+    install_system_theme(vm)?;
+    install_build_manufacturer(vm)?;
+    install_quote_interface(vm)?;
+
+    // Startup resolves these Java types but the observed path makes no member
+    // calls on them. Register their identities; method behavior remains
+    // unresolved until a call or a reference implementation is available.
+    for class_name in [
+        "com/snapchat/djinni/NativeObjectManager",
+        "com/roblox/audio/AppRtcDeviceWrapper",
+        "org/fmod/MediaCodec",
+        "com/roblox/engine/jni/memstorage/Connection",
+        "com/roblox/universalapp/messagebus/Connection",
+        "org/webrtc/voiceengine/WebRtcAudioManager",
+        "com/roblox/client/flags/FlagJniInterface",
+    ] {
+        vm.register_class(class_name)
+            .map_err(|error| error.to_string())?;
+    }
 
     Ok(())
 }
@@ -560,6 +611,289 @@ fn install_system_dialog_singleton(vm: &Vm) -> Result<(), String> {
         .map_err(|error| error.to_string())?;
     vm.set_field_value(field, None, JniValue::Object(Some(instance)))
         .map_err(|error| error.to_string())
+}
+
+fn install_system_dialog_methods(vm: &Vm) -> Result<(), String> {
+    const INTERFACE: &str =
+        "com/roblox/protocols/systemdialogplatforminterface/generated/IPlatformSystemDialogHandler";
+    const PROXY: &str = "com/roblox/protocols/systemdialogplatforminterface/generated/IPlatformSystemDialogHandler$CppProxy";
+    const REQUEST: &str =
+        "com/roblox/protocols/systemdialogplatforminterface/generated/SystemDialogRequest";
+    const CALLBACK: &str =
+        "com/roblox/protocols/systemdialogplatforminterface/generated/ISystemDialogCallback";
+
+    let interface = vm
+        .register_class(INTERFACE)
+        .map_err(|error| error.to_string())?;
+    install_instance_builtin(
+        vm,
+        interface,
+        "isAvailable",
+        "()Z",
+        system_ui_unavailable,
+    )?;
+    install_instance_builtin(
+        vm,
+        interface,
+        "open",
+        &format!("(L{REQUEST};L{CALLBACK};)J"),
+        system_dialog_open_unavailable,
+    )?;
+    install_instance_builtin(vm, interface, "dismiss", "(J)V", reporter_noop)?;
+    install_instance_builtin(vm, interface, "dismissAll", "()V", reporter_noop)?;
+
+    let proxy = vm.register_class(PROXY).map_err(|error| error.to_string())?;
+    vm.register_field(proxy, "nativeRef", "J", false)
+        .map_err(|error| error.to_string())?;
+    install_builtin(
+        vm,
+        proxy,
+        "<init>",
+        &format!("(J)L{PROXY};"),
+        system_dialog_proxy_init,
+    )?;
+    vm.register_class(REQUEST)
+        .map_err(|error| error.to_string())?;
+    vm.register_class(CALLBACK)
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+fn install_system_theme(vm: &Vm) -> Result<(), String> {
+    let class = vm
+        .register_class("com/roblox/universalapp/systemtheme/SystemThemeProtocol")
+        .map_err(|error| error.to_string())?;
+    install_builtin(
+        vm,
+        class,
+        "isSystemThemeAvailable",
+        "()Z",
+        system_ui_unavailable,
+    )
+}
+
+fn install_build_manufacturer(vm: &Vm) -> Result<(), String> {
+    let class = vm
+        .register_class("android/os/Build")
+        .map_err(|error| error.to_string())?;
+    let field = vm
+        .register_field(class, "MANUFACTURER", "Ljava/lang/String;", true)
+        .map_err(|error| error.to_string())?;
+    let JniValue::Object(Some(manufacturer)) = java_string(vm, "Cordial", "Build") else {
+        return Err("could not allocate android/os/Build.MANUFACTURER".into());
+    };
+    let env = vm.get_env().unwrap_or_else(|| vm.attach_current_thread());
+    let manufacturer = vm
+        .new_global_ref(&env, manufacturer)
+        .map_err(|error| error.to_string())?;
+    vm.set_field_value(field, None, JniValue::Object(Some(manufacturer)))
+        .map_err(|error| error.to_string())
+}
+
+fn install_quote_interface(vm: &Vm) -> Result<(), String> {
+    let class = vm
+        .register_class("com/roblox/engine/jni/NativeQuoteInterface")
+        .map_err(|error| error.to_string())?;
+    install_builtin(
+        vm,
+        class,
+        "requestResponse",
+        "([B)[B",
+        quote_request_unavailable,
+    )
+}
+
+fn install_native_text_box_info(vm: &Vm) -> Result<(), String> {
+    let class = vm
+        .register_class("com/roblox/engine/jni/model/NativeTextBoxInfo")
+        .map_err(|error| error.to_string())?;
+    install_builtin(
+        vm,
+        class,
+        "<init>",
+        "(FFFFFZIIIIIIZZZ)Lcom/roblox/engine/jni/model/NativeTextBoxInfo;",
+        native_text_box_info_init,
+    )
+}
+
+fn system_ui_unavailable(
+    _vm: &Vm,
+    _receiver: Option<crate::ObjectId>,
+    _args: &[JniValue],
+) -> JniValue {
+    JniValue::Boolean(false)
+}
+
+fn system_dialog_open_unavailable(
+    _vm: &Vm,
+    _receiver: Option<crate::ObjectId>,
+    _args: &[JniValue],
+) -> JniValue {
+    JniValue::Long(0)
+}
+
+fn quote_request_unavailable(
+    _vm: &Vm,
+    _receiver: Option<crate::ObjectId>,
+    _args: &[JniValue],
+) -> JniValue {
+    // This runtime has no quote-response service; preserve the JNI null
+    // default that the previous no-handler path returned.
+    JniValue::Object(None)
+}
+
+fn native_text_box_info_init(
+    vm: &Vm,
+    _receiver: Option<crate::ObjectId>,
+    args: &[JniValue],
+) -> JniValue {
+    let Some(info) = NativeTextBoxInfo::from_args(args) else {
+        eprintln!("[jnivm] NativeTextBoxInfo constructor received invalid arguments");
+        return JniValue::Object(None);
+    };
+    let env = vm.get_env().unwrap_or_else(|| vm.attach_current_thread());
+    let Ok(class) = vm.find_or_define_class("com/roblox/engine/jni/model/NativeTextBoxInfo") else {
+        return JniValue::Object(None);
+    };
+    let Ok(object) = vm.new_local_object(&env, class, crate::ObjectValue::Opaque) else {
+        return JniValue::Object(None);
+    };
+    TEXT_BOX_INFO
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .insert(object, info);
+    // SAFETY: the pointer refers to a stack value with the exact C ABI layout
+    // shared with native/android_classes.cpp, which copies it before return.
+    unsafe { roblox_textbox_last_built(&info) };
+    JniValue::Object(Some(object))
+}
+
+impl NativeTextBoxInfo {
+    fn from_args(args: &[JniValue]) -> Option<Self> {
+        let floats = [
+            float_arg(args, 0)?,
+            float_arg(args, 1)?,
+            float_arg(args, 2)?,
+            float_arg(args, 3)?,
+            float_arg(args, 4)?,
+        ];
+        let multiline = bool_arg(args, 5)?;
+        Some(Self {
+            x: floats[0],
+            y: floats[1],
+            width: floats[2],
+            height: floats[3],
+            font_size: floats[4],
+            multiline: i32::from(multiline),
+            x_alignment: int_arg(args, 6)?,
+            y_alignment: int_arg(args, 7)?,
+            text_color: int_arg(args, 8)?,
+            font: int_arg(args, 9)?,
+            text_input_type: int_arg(args, 10)?,
+            return_key_type: int_arg(args, 11)?,
+            manual_focus_release: i32::from(bool_arg(args, 12)?),
+            text_wrapped: i32::from(bool_arg(args, 13)?),
+            z14: i32::from(bool_arg(args, 14)?),
+        })
+    }
+}
+
+fn float_arg(args: &[JniValue], index: usize) -> Option<f32> {
+    match args.get(index) {
+        Some(JniValue::Float(value)) => Some(*value),
+        _ => None,
+    }
+}
+
+fn int_arg(args: &[JniValue], index: usize) -> Option<i32> {
+    match args.get(index) {
+        Some(JniValue::Int(value)) => Some(*value),
+        _ => None,
+    }
+}
+
+fn bool_arg(args: &[JniValue], index: usize) -> Option<bool> {
+    match args.get(index) {
+        Some(JniValue::Boolean(value)) => Some(*value),
+        _ => None,
+    }
+}
+
+fn native_helper_show_keyboard(
+    vm: &Vm,
+    _receiver: Option<crate::ObjectId>,
+    args: &[JniValue],
+) -> JniValue {
+    let handle = match args.first() {
+        Some(JniValue::Long(handle)) => *handle,
+        _ => 0,
+    };
+    let text = match args.get(2) {
+        Some(JniValue::Object(Some(array))) => {
+            let env = vm.get_env().unwrap_or_else(|| vm.attach_current_thread());
+            match vm.object_value(&env, *array) {
+                Ok(crate::ObjectValue::ByteArray(bytes)) => bytes
+                    .into_iter()
+                    .map(|byte| byte as u8)
+                    .take_while(|byte| *byte != 0)
+                    .collect::<Vec<_>>(),
+                _ => Vec::new(),
+            }
+        }
+        _ => Vec::new(),
+    };
+    let Ok(text) = CString::new(text) else {
+        return JniValue::Void;
+    };
+    let info = match args.get(3) {
+        Some(JniValue::Object(Some(object))) => TEXT_BOX_INFO
+            .get_or_init(|| Mutex::new(HashMap::new()))
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .get(object)
+            .copied(),
+        _ => None,
+    };
+    let info_ptr = info
+        .as_ref()
+        .map_or(std::ptr::null(), |info| info as *const NativeTextBoxInfo);
+    // SAFETY: `text` and optional `info` stay alive for the synchronous copy.
+    unsafe { roblox_textbox_focused(handle, text.as_ptr(), info_ptr) };
+    JniValue::Void
+}
+
+fn native_helper_hide_keyboard(
+    _vm: &Vm,
+    _receiver: Option<crate::ObjectId>,
+    _args: &[JniValue],
+) -> JniValue {
+    // SAFETY: the C++ callback takes no pointers and updates its focus state.
+    unsafe { roblox_textbox_blurred() };
+    JniValue::Void
+}
+
+fn system_dialog_proxy_init(
+    vm: &Vm,
+    _receiver: Option<crate::ObjectId>,
+    args: &[JniValue],
+) -> JniValue {
+    let Some(JniValue::Long(native_ref)) = args.first() else {
+        return JniValue::Object(None);
+    };
+    let Ok(class) = vm.find_or_define_class(
+        "com/roblox/protocols/systemdialogplatforminterface/generated/IPlatformSystemDialogHandler$CppProxy",
+    ) else {
+        return JniValue::Object(None);
+    };
+    let env = vm.get_env().unwrap_or_else(|| vm.attach_current_thread());
+    let Ok(object) = vm.new_local_object(&env, class, crate::ObjectValue::Opaque) else {
+        return JniValue::Object(None);
+    };
+    if let Ok(field) = vm.resolve_field(class, "nativeRef", "J", false) {
+        let _ = vm.set_field_value(field, Some(object), JniValue::Long(*native_ref));
+    }
+    JniValue::Object(Some(object))
 }
 
 fn new_opaque_local(vm: &Vm, class_name: &str) -> JniValue {

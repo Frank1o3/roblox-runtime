@@ -190,14 +190,37 @@ not established. The `ZSTD_trace_decompress_begin` and
 `ZSTD_trace_compress_begin` stub lines appear in the same successful run and
 were not the source of the diagnosed crashes.
 
-The latest startup run reached app initialization, then the APK requested the
-Kotlin singleton field
+The APK requests the Kotlin singleton field
 `com/roblox/protocols/systemdialog/PlatformSystemDialogHandler.INSTANCE`.
-Neither C++ reference source contains this class, so the Rust VM now supplies a
-non-null opaque, VM-global singleton for the observed static field and returns
-a thread-local JNI reference when that field is read. The class's dialog
-methods remain unimplemented; their behavior must be driven by later observed
-calls or an authoritative implementation, not inferred from the field name.
+Neither C++ reference source contains this class, so the Rust VM supplies a
+non-null opaque, VM-global singleton for the observed static field. Its
+generated proxy constructor now stores the observed `nativeRef` and returns a
+Rust-owned proxy object. Since this Linux host has no Android system UI
+provider, `isAvailable` returns false, `open` returns ID zero, and dismissals
+are no-ops. These are host capability answers, not a general implementation of
+Android dialogs.
+
+The previously unresolved `SystemThemeProtocol.isSystemThemeAvailable()` now
+returns false for the same missing host capability. `Build.MANUFACTURER` is
+registered as the static string `Cordial`, matching `device_profile()` in
+`native/init_params.cpp`. `NativeQuoteInterface.requestResponse([B)[B` has no
+service implementation in the C++ runtime; the Rust handler explicitly
+preserves the prior JNI-default null response.
+
+The observed text-input constructor and `NativeHelper` show/hide callbacks now
+mirror `native/android_classes.cpp`: the 15 constructor values are retained per
+object, the C-compatible text-box struct is published to the input bridge, and
+focus/blur callbacks carry the handle and current text. A subsequent startup
+run reached place `127089247654125` without the earlier method/field lookup or
+C++ fallback warnings. It still emitted one `NewGlobalRef failed for <unknown>`
+warning for an object owned by the companion C++ VM; cross-VM object promotion
+is still unsupported, and this run did not establish the source object. The
+ZSTD stub trace lines also appeared and did not prevent startup.
+
+Several classes that were only looked up in this trace are now registered so
+they no longer masquerade as wholly unknown classes. Their unseen methods are
+still not implemented; a method observed later must be modeled from its call
+semantics or an authoritative implementation.
 
 The C++ `SystemClass` in `native/local_storage.cpp` implements
 `java/lang/System.identityHashCode(Object)` by deriving a stable value from
