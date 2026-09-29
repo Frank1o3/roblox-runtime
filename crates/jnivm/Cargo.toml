@@ -1,0 +1,16 @@
+[package]
+name = "jnivm"
+description = "Pure Rust JNI VM components for the Roblox runtime"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+jni-sys = "0.3.1"
+
+[lints.rust]
+unsafe_code = "allow"
+unsafe_op_in_unsafe_fn = "deny"
+
+[lints.clippy]
+undocumented_unsafe_blocks = "warn"

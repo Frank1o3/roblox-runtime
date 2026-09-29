@@ -35,6 +35,12 @@ After startup, `LoadedEngine::resize_surface` updates the Android window
 dimensions and delivers both app-bridge surface updates plus GameActivity's
 surface-changed callback.
 
+Set `USE_EXPERIMENTAL_JNIVM=true` to select the in-progress Rust JNI backend.
+The runtime currently fails early with an explicit message because the Rust
+crate does not yet provide the JNI ABI tables; it never silently falls back to
+the C++ `libjnivm` when this variable is set. Leave the variable unset to use
+the working C++ backend.
+
 Build with a recent stable Rust toolchain, Clang/Clang++, CMake, GNU `patch`,
 and initialized Git submodules:
 

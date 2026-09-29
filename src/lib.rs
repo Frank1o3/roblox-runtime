@@ -393,7 +393,7 @@ impl LoadedEngine {
             })?;
         }
         if !self.vm_initialized {
-            roblox_jni::jni::create_vm().ok_or(JniError::VmAlreadyExists)?;
+            create_java_vm()?;
             self.vm_initialized = true;
         }
         self.constructors_ready = true;
@@ -500,7 +500,7 @@ impl LoadedEngine {
         }
         let on_load = self.symbol("JNI_OnLoad").ok_or(JniError::MissingOnLoad)?;
         if !self.vm_initialized {
-            roblox_jni::jni::create_vm().ok_or(JniError::VmAlreadyExists)?;
+            create_java_vm()?;
             self.vm_initialized = true;
         }
         // SAFETY: the function pointer is this live library's JNI_OnLoad;
@@ -613,6 +613,18 @@ impl LoadedEngine {
     }
 }
 
+fn create_java_vm() -> Result<(), JniError> {
+    if jnivm::selected_from_environment() {
+        // Do not silently fall back to C++ when the user explicitly selected
+        // the Rust backend. Its VM model has no JNI ABI tables yet, so it
+        // cannot safely be passed to Roblox at this stage.
+        return Err(JniError::ExperimentalJniVmUnavailable);
+    }
+    roblox_jni::jni::create_vm()
+        .map(|_| ())
+        .ok_or(JniError::VmAlreadyExists)
+}
+
 /// Failure during JavaVM or AGDK GameActivity initialisation.
 #[derive(Debug)]
 pub enum JniError {
@@ -623,6 +635,7 @@ pub enum JniError {
     MissingStartupNative(&'static str),
     StartupNative(String),
     VmAlreadyExists,
+    ExperimentalJniVmUnavailable,
     JniNotInitialized,
     MissingOnLoad,
     MissingGameActivityInit,
@@ -655,6 +668,9 @@ impl std::fmt::Display for JniError {
             }
             Self::StartupNative(message) => write!(f, "startup directory setter failed: {message}"),
             Self::VmAlreadyExists => f.write_str("a JavaVM already exists in this process"),
+            Self::ExperimentalJniVmUnavailable => f.write_str(
+                "USE_EXPERIMENTAL_JNIVM selected the Rust backend, but its JNI ABI tables are not implemented yet; refusing to fall back to C++",
+            ),
             Self::JniNotInitialized => {
                 f.write_str("complete JNI_OnLoad before GameActivity initialization")
             }

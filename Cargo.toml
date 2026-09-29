@@ -1,6 +1,6 @@
 [workspace]
     default-members=["."]
-    members=[".", "crates/abi", "crates/android", "crates/graphics-vulkan", "crates/jni", "crates/linker"]
+    members=[".", "crates/abi", "crates/android", "crates/graphics-vulkan", "crates/jni", "crates/jnivm", "crates/linker"]
     resolver="3"
 
     [workspace.package]
@@ -20,6 +20,7 @@
     roblox-android={path="crates/android"}
     roblox-graphics-vulkan={path="crates/graphics-vulkan"}
     roblox-jni={path="crates/jni"}
+    jnivm={path="crates/jnivm"}
     roblox-linker={path="crates/linker"}
     serde_json="1.0.151"
 
