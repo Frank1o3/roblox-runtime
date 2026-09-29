@@ -491,6 +491,13 @@ fn dispatch_method(
         return vm.invoke_method(method, receiver, arguments);
     }
 
+    if !crate::cpp_fallback_enabled() {
+        eprintln!(
+            "[jnivm:fallback] C++ fallback disabled for {class_name}.{name}{signature}; returning JNI default"
+        );
+        return vm.invoke_method(method, receiver, arguments);
+    }
+
     eprintln!(
         "[jnivm:fallback] Rust handler missing; checking C++ libjnivm for {class_name}.{name}{signature}"
     );
@@ -727,6 +734,9 @@ fn fallback_cpp_field_get(
     field: crate::FieldId,
     receiver: Option<crate::ObjectId>,
 ) -> Option<JniValue> {
+    if !crate::cpp_fallback_enabled() {
+        return None;
+    }
     let (class_name, name, descriptor, is_static) = vm.field_info(field)?;
     let class_c = std::ffi::CString::new(class_name.as_str()).ok()?;
     let name_c = std::ffi::CString::new(name.as_str()).ok()?;
@@ -784,6 +794,9 @@ fn fallback_cpp_field_set(
     receiver: Option<crate::ObjectId>,
     value: &JniValue,
 ) -> bool {
+    if !crate::cpp_fallback_enabled() {
+        return false;
+    }
     let Some((class_name, name, descriptor, is_static)) = vm.field_info(field) else {
         return false;
     };

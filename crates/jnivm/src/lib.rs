@@ -6,6 +6,10 @@ mod abi;
 mod descriptor;
 mod vm;
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
+static CPP_FALLBACK_ENABLED: AtomicBool = AtomicBool::new(true);
+
 pub use abi::{
     call_on_load, create_vm, current_env, new_configuration, new_opaque_object,
     new_string_array_ref, new_string_ref,
@@ -24,4 +28,14 @@ pub use vm::{
 pub fn selected_from_environment() -> bool {
     std::env::var("USE_EXPERIMENTAL_JNIVM")
         .is_ok_and(|value| matches!(value.trim().to_ascii_lowercase().as_str(), "true" | "1"))
+}
+
+/// Enable or disable unresolved method and field dispatch through the
+/// companion C++ compatibility VM.
+pub fn set_cpp_fallback_enabled(enabled: bool) {
+    CPP_FALLBACK_ENABLED.store(enabled, Ordering::Relaxed);
+}
+
+pub(crate) fn cpp_fallback_enabled() -> bool {
+    CPP_FALLBACK_ENABLED.load(Ordering::Relaxed)
 }

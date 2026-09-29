@@ -23,6 +23,13 @@ static UTF8_BUFFERS: OnceLock<Mutex<HashMap<usize, CString>>> = OnceLock::new();
 static UTF16_BUFFERS: OnceLock<Mutex<HashMap<usize, Box<[u16]>>>> = OnceLock::new();
 
 unsafe extern "C" {
+    fn roblox_jni_fallback_promote_reference(
+        object: *mut c_void,
+        class_name: *mut c_char,
+        class_name_capacity: usize,
+        global_reference: *mut *mut c_void,
+    ) -> i32;
+    fn roblox_jni_fallback_release_ref(object: *mut c_void);
     fn roblox_jni_fallback_register_native(
         class_name: *const c_char,
         name: *const c_char,
@@ -701,15 +708,68 @@ unsafe extern "system" fn new_global_ref(
     let Some(env) = env_token(vm, env) else {
         return ptr::null_mut();
     };
-    match vm.new_global_ref(&env, crate::ObjectId(object as usize as u64)) {
+    let id = crate::ObjectId(object as usize as u64);
+    if let Ok(crate::ObjectValue::CppObject(_)) = vm.object_value(&env, id) {
+        if let Some(global) = promote_companion_reference(vm, &env, object) {
+            return global.0 as usize as jni::jobject;
+        }
+    } else if vm.object_class_name(id.0).is_none() {
+        if let Some(global) = promote_companion_reference(vm, &env, object) {
+            return global.0 as usize as jni::jobject;
+        }
+    }
+    match vm.new_global_ref(&env, id) {
         Ok(reference) => reference.0 as usize as jni::jobject,
         Err(error) => {
-            let id = crate::ObjectId(object as usize as u64);
             let class = vm.object_class_name(id.0).unwrap_or_else(|| "<unknown>".into());
             eprintln!("[jnivm] NewGlobalRef failed for {class} ref {}: {error}", id.0);
             ptr::null_mut()
         }
     }
+}
+
+fn promote_companion_reference(
+    vm: &Vm,
+    env: &crate::ThreadEnv,
+    object: jni::jobject,
+) -> Option<crate::ObjectId> {
+    let mut class_name = vec![0 as c_char; 1024];
+    let mut global_reference = ptr::null_mut();
+    // SAFETY: output buffers are writable for this synchronous bridge call;
+    // C++ validates and promotes the companion VM's object reference.
+    let status = unsafe {
+        roblox_jni_fallback_promote_reference(
+            object as *mut c_void,
+            class_name.as_mut_ptr(),
+            class_name.len(),
+            &mut global_reference,
+        )
+    };
+    if status != 0 || global_reference.is_null() {
+        eprintln!("[jnivm:fallback] could not import companion VM object (status {status})");
+        return None;
+    }
+    // SAFETY: successful C++ return writes a NUL-terminated class name into
+    // the supplied fixed-size buffer.
+    let class_name = unsafe { CStr::from_ptr(class_name.as_ptr()) }.to_string_lossy();
+    let result = (|| {
+        let class = vm.find_or_define_class(&class_name).ok()?;
+        let local = vm
+            .new_local_object(
+                env,
+                class,
+                ObjectValue::CppObject(global_reference as usize),
+            )
+            .ok()?;
+        let global = vm.new_global_ref(env, local).ok()?;
+        let _ = vm.delete_local_ref(env, local);
+        Some(global)
+    })();
+    if result.is_none() {
+        // SAFETY: the C++ bridge returned this owned global reference above.
+        unsafe { roblox_jni_fallback_release_ref(global_reference) };
+    }
+    result
 }
 
 unsafe extern "system" fn delete_global_ref(_env: *mut jni::JNIEnv, object: jni::jobject) {
@@ -720,7 +780,15 @@ unsafe extern "system" fn delete_global_ref(_env: *mut jni::JNIEnv, object: jni:
         if vm.class_name(ClassId(object as usize as u64)).is_some() {
             return;
         }
-        if let Err(error) = vm.delete_global_ref(crate::ObjectId(object as usize as u64)) {
+        let id = crate::ObjectId(object as usize as u64);
+        if let Some(env) = vm.get_env() {
+            if let Ok(crate::ObjectValue::CppObject(reference)) = vm.object_value(&env, id) {
+                // SAFETY: imported C++ references own a matching C++ global
+                // reference and this JNI operation releases that same handle.
+                unsafe { roblox_jni_fallback_release_ref(reference as *mut c_void) };
+            }
+        }
+        if let Err(error) = vm.delete_global_ref(id) {
             eprintln!("[jnivm] DeleteGlobalRef failed: {error}");
         }
     }

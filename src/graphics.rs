@@ -9,6 +9,8 @@ use std::ffi::{c_int, c_void};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 static VSYNC: AtomicBool = AtomicBool::new(true);
+static OPENGL_SWAP_INTERVAL: std::sync::atomic::AtomicI32 =
+    std::sync::atomic::AtomicI32::new(1);
 
 pub use roblox_android::native_window::{HostSurface, SurfaceError};
 
@@ -114,6 +116,17 @@ pub fn prepare(
     present_mode: Option<&str>,
     vsync: bool,
 ) -> Result<Backend, BackendUnavailable> {
+    prepare_with_swap_interval(preference, present_mode, vsync, 1)
+}
+
+/// Prepare the selected renderer with an explicit EGL swap interval. Valid
+/// OpenGL values are -1 (adaptive), 0 (off), and 1 (on).
+pub fn prepare_with_swap_interval(
+    preference: BackendPreference,
+    present_mode: Option<&str>,
+    vsync: bool,
+    opengl_swap_interval: i32,
+) -> Result<Backend, BackendUnavailable> {
     if !has_surface() {
         return Err(BackendUnavailable::NoSurface);
     }
@@ -121,6 +134,7 @@ pub fn prepare(
     let selected = preference.select(vulkan_available)?;
     roblox_graphics_vulkan::set_enabled(selected == Backend::Vulkan);
     VSYNC.store(vsync, Ordering::Relaxed);
+    OPENGL_SWAP_INTERVAL.store(opengl_swap_interval.clamp(-1, 1), Ordering::Relaxed);
     roblox_graphics_vulkan::set_present_mode(present_mode);
     if selected == Backend::OpenGlEs && !host_egl_available() {
         return Err(BackendUnavailable::OpenGlEs);
@@ -140,7 +154,10 @@ extern "C" fn egl_swap_interval(display: *mut c_void, interval: c_int) -> c_int 
     function(
         display,
         if VSYNC.load(Ordering::Relaxed) {
-            interval.max(1)
+            // `interval` is the engine's request. The saved preference chooses
+            // the EGL swap-control mode independently of that request.
+            let _ = interval;
+            OPENGL_SWAP_INTERVAL.load(Ordering::Relaxed)
         } else {
             0
         },

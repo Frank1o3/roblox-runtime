@@ -480,6 +480,36 @@ void* roblox_jni_fallback_new_string(const uint16_t* chars, int length) {
     }
 }
 
+/// Promote a reference owned by the companion libjnivm VM and return its
+/// Java class name. This is used when the Rust JNI table receives an object
+/// created by runtime-owned C++ compatibility code.
+int roblox_jni_fallback_promote_reference(void* object, char* class_name,
+                                           size_t class_name_capacity,
+                                           void** global_reference) {
+    try {
+        if (!g_vm || !object || !class_name || class_name_capacity == 0 || !global_reference) {
+            return -1;
+        }
+        auto* env = roblox_runtime::process_env();
+        if (!env) return -1;
+        JNIEnv* jni = env->GetJNIEnv();
+        auto cls_ref = jni->GetObjectClass(static_cast<jobject>(object));
+        if (!cls_ref) return -2;
+        auto cls = jnivm::JNITypes<std::shared_ptr<jnivm::Class>>::JNICast(env, cls_ref);
+        if (!cls || cls->name.size() + 1 > class_name_capacity) return -3;
+        std::memcpy(class_name, cls->name.c_str(), cls->name.size() + 1);
+        *global_reference = jni->NewGlobalRef(static_cast<jobject>(object));
+        return *global_reference ? 0 : -4;
+    } catch (const std::exception& error) {
+        fprintf(stderr, "[jnivm:fallback] could not promote companion VM reference: %s\n",
+                error.what());
+        return -5;
+    } catch (...) {
+        fprintf(stderr, "[jnivm:fallback] could not promote companion VM reference\n");
+        return -5;
+    }
+}
+
 /// Invoke an already registered C++ hook. Object results are promoted to a
 /// global reference so the Rust VM can retain them as opaque fallback objects.
 int roblox_jni_fallback_invoke(const char* class_name, const char* name,

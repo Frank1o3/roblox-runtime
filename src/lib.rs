@@ -26,6 +26,12 @@ struct StartupBootstrap {
 
 static STARTUP_BOOTSTRAP: OnceLock<StartupBootstrap> = OnceLock::new();
 
+/// Configure whether the Rust JNI VM may dispatch unresolved members to the
+/// companion C++ compatibility VM.
+pub fn set_jnivm_cpp_fallback(enabled: bool) {
+    jnivm::set_cpp_fallback_enabled(enabled);
+}
+
 #[allow(unsafe_code)]
 extern "C" fn run_startup_bootstrap() {
     let Some(plan) = STARTUP_BOOTSTRAP.get() else {
@@ -115,6 +121,8 @@ pub struct RuntimeOptions {
     pub present_mode: Option<String>,
     /// Override GLES swap intervals to zero when VSync is disabled.
     pub vsync: bool,
+    /// EGL swap interval when OpenGL ES is selected: -1 adaptive, 0 off, 1 on.
+    pub opengl_swap_interval: i32,
     /// Resolve otherwise-unhandled libc symbols from glibc for diagnostics.
     /// This mirrors Cordial's `--host-libc` and is ABI-unsafe; keep it off for
     /// ordinary runtime execution until each required interface is ported.
@@ -128,6 +136,7 @@ impl Default for RuntimeOptions {
             graphics_backend: graphics::BackendPreference::default(),
             present_mode: None,
             vsync: true,
+            opengl_swap_interval: 1,
             host_libc: false,
         }
     }
@@ -223,10 +232,11 @@ impl RuntimeConfig {
     /// Check that the client surface and requested renderer are ready before
     /// engine constructors run. Install the client-owned surface first.
     pub fn prepare_graphics(&self) -> Result<graphics::Backend, graphics::BackendUnavailable> {
-        graphics::prepare(
+        graphics::prepare_with_swap_interval(
             self.options.graphics_backend,
             self.options.present_mode.as_deref(),
             self.options.vsync,
+            self.options.opengl_swap_interval,
         )
     }
 
