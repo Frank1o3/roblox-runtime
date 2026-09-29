@@ -262,6 +262,7 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
         "()V",
         invalid_bootstrap,
     )?;
+    install_instance_builtin(vm, game_activity, "finish", "()V", reporter_noop)?;
     install_instance_builtin(
         vm,
         game_activity,
@@ -298,6 +299,70 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
         "android/content/res/Configuration",
     ] {
         vm.register_class(class_name)
+            .map_err(|error| error.to_string())?;
+    }
+
+    let configuration = vm
+        .find_or_define_class("android/content/res/Configuration")
+        .map_err(|error| error.to_string())?;
+    install_instance_builtin(
+        vm,
+        configuration,
+        "getLocales",
+        "()Landroid/os/LocaleList;",
+        configuration_get_locales,
+    )?;
+
+    let locale_list = vm
+        .register_class("android/os/LocaleList")
+        .map_err(|error| error.to_string())?;
+    install_instance_builtin(vm, locale_list, "size", "()I", locale_list_size)?;
+    install_instance_builtin(vm, locale_list, "isEmpty", "()Z", locale_list_is_empty)?;
+    install_instance_builtin(
+        vm,
+        locale_list,
+        "get",
+        "(I)Ljava/util/Locale;",
+        locale_list_get,
+    )?;
+
+    let locale = vm
+        .register_class("java/util/Locale")
+        .map_err(|error| error.to_string())?;
+    for (method_name, handler) in [
+        ("getLanguage", locale_language as crate::MethodHandler),
+        ("getCountry", locale_country),
+        ("getScript", locale_empty_string),
+        ("getVariant", locale_empty_string),
+        ("toString", locale_to_string),
+    ] {
+        install_instance_builtin(
+            vm,
+            locale,
+            method_name,
+            "()Ljava/lang/String;",
+            handler,
+        )?;
+    }
+
+    let insets_type = vm
+        .register_class("androidx/core/view/WindowInsetsCompat$Type")
+        .map_err(|error| error.to_string())?;
+    for (method_name, handler) in [
+        ("captionBar", inset_caption_bar as crate::MethodHandler),
+        ("displayCutout", inset_display_cutout),
+        ("ime", inset_ime),
+        ("mandatorySystemGestures", inset_mandatory_gestures),
+        ("navigationBars", inset_navigation_bars),
+        ("statusBars", inset_status_bars),
+        ("systemBars", inset_system_bars),
+        ("systemGestures", inset_system_gestures),
+        ("tappableElement", inset_tappable_element),
+    ] {
+        let method = vm
+            .register_method(insets_type, method_name, "()I", true)
+            .map_err(|error| error.to_string())?;
+        vm.install_method_handler(method, handler)
             .map_err(|error| error.to_string())?;
     }
 
@@ -371,6 +436,38 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
     vm.register_field(display_metrics, "density", "F", false)
         .map_err(|error| error.to_string())?;
 
+    let text_state = vm
+        .register_class("com/google/androidgamesdk/gametextinput/State")
+        .map_err(|error| error.to_string())?;
+    for (name, descriptor) in [
+        ("text", "Ljava/lang/String;"),
+        ("selectionStart", "I"),
+        ("selectionEnd", "I"),
+        ("composingRegionStart", "I"),
+        ("composingRegionEnd", "I"),
+    ] {
+        vm.register_field(text_state, name, descriptor, false)
+            .map_err(|error| error.to_string())?;
+    }
+    let input_connection = vm
+        .register_class("com/google/androidgamesdk/gametextinput/InputConnection")
+        .map_err(|error| error.to_string())?;
+    install_instance_builtin(
+        vm,
+        input_connection,
+        "setState",
+        "(Lcom/google/androidgamesdk/gametextinput/State;)V",
+        reporter_noop,
+    )?;
+    install_instance_builtin(
+        vm,
+        input_connection,
+        "setSoftKeyboardActive",
+        "(ZI)V",
+        reporter_noop,
+    )?;
+    install_instance_builtin(vm, input_connection, "restartInput", "()V", reporter_noop)?;
+
     install_platform_methods(vm)?;
     install_fmod_methods(vm)?;
 
@@ -390,6 +487,72 @@ fn new_opaque_local(vm: &Vm, class_name: &str) -> JniValue {
         }
     }
 }
+
+fn configuration_get_locales(
+    vm: &Vm,
+    _receiver: Option<crate::ObjectId>,
+    _args: &[JniValue],
+) -> JniValue {
+    new_opaque_local(vm, "android/os/LocaleList")
+}
+
+fn locale_list_size(_vm: &Vm, _receiver: Option<crate::ObjectId>, _args: &[JniValue]) -> JniValue {
+    JniValue::Int(1)
+}
+
+fn locale_list_is_empty(
+    _vm: &Vm,
+    _receiver: Option<crate::ObjectId>,
+    _args: &[JniValue],
+) -> JniValue {
+    JniValue::Boolean(false)
+}
+
+fn locale_list_get(
+    vm: &Vm,
+    _receiver: Option<crate::ObjectId>,
+    _args: &[JniValue],
+) -> JniValue {
+    new_opaque_local(vm, "java/util/Locale")
+}
+
+fn locale_language(vm: &Vm, _receiver: Option<crate::ObjectId>, _args: &[JniValue]) -> JniValue {
+    java_string(vm, "en", "java/util/Locale")
+}
+
+fn locale_country(vm: &Vm, _receiver: Option<crate::ObjectId>, _args: &[JniValue]) -> JniValue {
+    java_string(vm, "US", "java/util/Locale")
+}
+
+fn locale_empty_string(
+    vm: &Vm,
+    _receiver: Option<crate::ObjectId>,
+    _args: &[JniValue],
+) -> JniValue {
+    java_string(vm, "", "java/util/Locale")
+}
+
+fn locale_to_string(vm: &Vm, _receiver: Option<crate::ObjectId>, _args: &[JniValue]) -> JniValue {
+    java_string(vm, "en_US", "java/util/Locale")
+}
+
+macro_rules! inset_mask_handler {
+    ($name:ident, $mask:expr) => {
+        fn $name(_vm: &Vm, _receiver: Option<crate::ObjectId>, _args: &[JniValue]) -> JniValue {
+            JniValue::Int($mask)
+        }
+    };
+}
+
+inset_mask_handler!(inset_caption_bar, 1);
+inset_mask_handler!(inset_display_cutout, 2);
+inset_mask_handler!(inset_ime, 4);
+inset_mask_handler!(inset_mandatory_gestures, 8);
+inset_mask_handler!(inset_navigation_bars, 16);
+inset_mask_handler!(inset_status_bars, 32);
+inset_mask_handler!(inset_system_bars, 64);
+inset_mask_handler!(inset_system_gestures, 128);
+inset_mask_handler!(inset_tappable_element, 256);
 
 fn invalid_get_resources(
     vm: &Vm,
