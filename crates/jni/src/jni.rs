@@ -9,6 +9,7 @@ pub mod jni {
 
     unsafe extern "C" {
         fn roblox_jni_create_vm() -> *mut c_void;
+        fn roblox_jni_init_compat_bridge() -> c_int;
         fn roblox_jni_env() -> *mut c_void;
         fn roblox_jni_dump_classes(path: *const c_char) -> c_int;
         fn roblox_jni_call_onload(f: *mut c_void, err: *mut c_char, err_len: usize) -> c_int;
@@ -48,6 +49,21 @@ pub mod jni {
         // SAFETY: the VM is process-global and owned by the shim.
         let vm = unsafe { roblox_jni_create_vm() };
         (!vm.is_null()).then_some(vm)
+    }
+
+    /// Initialize the C++ Java compatibility classes used by runtime-owned
+    /// direct calls into Roblox JNI exports. In experimental mode Roblox still
+    /// receives the Rust JavaVM; this companion VM only backs existing C++
+    /// bridge hooks until those hooks have Rust implementations.
+    pub fn init_compat_bridge() -> Result<(), String> {
+        // SAFETY: idempotent process-global initialization inside the native
+        // shim; the returned status contains any initialization failure.
+        match unsafe { roblox_jni_init_compat_bridge() } {
+            0 => Ok(()),
+            code => Err(format!(
+                "C++ Java compatibility bridge initialization failed ({code})"
+            )),
+        }
     }
 
     /// The calling thread's `JNIEnv*`.

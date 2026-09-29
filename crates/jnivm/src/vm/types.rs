@@ -108,7 +108,7 @@ pub enum JniValue {
 }
 
 impl JniValue {
-    fn default_for(ty: &Type) -> Self {
+    pub(crate) fn default_for(ty: &Type) -> Self {
         match ty {
             Type::Boolean => Self::Boolean(false),
             Type::Byte => Self::Byte(0),
@@ -161,4 +161,3 @@ pub struct Vm {
     attached: Mutex<HashSet<ThreadId>>,
     state: RwLock<State>,
 }
-

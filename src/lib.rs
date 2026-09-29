@@ -410,9 +410,6 @@ impl LoadedEngine {
         if !self.vm_initialized {
             return Err(JniError::VmNotInitialized);
         }
-        if jnivm::selected_from_environment() {
-            return Err(JniError::ExperimentalJniVmIncomplete);
-        }
         const SETTINGS_CLASS: &str = "com/roblox/engine/jni/NativeSettingsInterface";
         let files = self.files_dir.to_string_lossy().into_owned();
         let cache = self.cache_dir.to_string_lossy().into_owned();
@@ -625,7 +622,8 @@ fn create_java_vm() -> Result<(), JniError> {
     if jnivm::selected_from_environment() {
         jnivm::create_vm()
             .map(|_| ())
-            .map_err(JniError::ExperimentalJniVmUnavailable)
+            .map_err(JniError::ExperimentalJniVmUnavailable)?;
+        roblox_jni::jni::init_compat_bridge().map_err(JniError::ExperimentalJniVmUnavailable)
     } else {
         roblox_jni::jni::create_vm()
             .map(|_| ())
@@ -652,7 +650,6 @@ pub enum JniError {
     StartupNative(String),
     VmAlreadyExists,
     ExperimentalJniVmUnavailable(String),
-    ExperimentalJniVmIncomplete,
     JniNotInitialized,
     MissingOnLoad,
     MissingGameActivityInit,
@@ -685,10 +682,9 @@ impl std::fmt::Display for JniError {
             }
             Self::StartupNative(message) => write!(f, "startup directory setter failed: {message}"),
             Self::VmAlreadyExists => f.write_str("a JavaVM already exists in this process"),
-            Self::ExperimentalJniVmUnavailable(error) => write!(f, "create experimental Rust JavaVM: {error}"),
-            Self::ExperimentalJniVmIncomplete => f.write_str(
-                "USE_EXPERIMENTAL_JNIVM selected the Rust backend; JNI_OnLoad ran, but the Rust Java compatibility bridge for startup-directory setup is not implemented yet",
-            ),
+            Self::ExperimentalJniVmUnavailable(error) => {
+                write!(f, "create experimental Rust JavaVM: {error}")
+            }
             Self::JniNotInitialized => {
                 f.write_str("complete JNI_OnLoad before GameActivity initialization")
             }

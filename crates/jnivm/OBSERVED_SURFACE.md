@@ -88,24 +88,36 @@ com/roblox/engine/jni/NativeGLJavaInterface.saveImageToAlbum(Ljava/lang/String;)
 the unresolved operations are harmless in other flows; purchase, analytics,
 VR, media and alternate startup paths need separate observations.
 
-## Initial implementation priorities
+## Remaining observed compatibility work
 
-1. Match the current JavaVM invocation behavior, including per-thread env
-   attachment and the observed worker-thread calls.
-2. Implement JNI references, class/method/field lookup and dispatch for the
-   observed entries, using the existing descriptor parser in this crate.
-3. Cover strings, object and primitive arrays, and `ByteBuffer`; those types
-   occur in observed signatures and bootstrap callbacks.
-4. Re-run logging on startup, login, settings, audio, text input, and a game
-   session before treating the inventory as sufficient to select the Rust VM.
+The previous priorities for JavaVM attachment, member lookup, and string
+handling now have initial Rust implementations. The unresolved operations above
+still have no Rust handlers; placeholder method calls log the full member and
+return descriptor-correct defaults. `java/lang/Class.getClassLoader` is the
+first useful next hook because the recorded run followed it with class-loader
+lookups. `android/os/Build.MANUFACTURER` also needs a field value. The
+GameActivity and NativeGL callbacks need intentional behavior or a documented
+no-op based on fresh runtime observations.
+
+The available log is still the earlier `rusty-blox --host-libc` run described
+above. No newer runtime log was present in the workspace during the latest
+implementation pass.
 
 The runtime must keep using the C++ backend until these JNI semantics and the
 runtime's C++-registered Java compatibility classes have Rust equivalents.
 
 ## Rust crate status
 
-The initial Rust modules now include a method/field descriptor parser and a
-VM state model for per-thread attachment, class lookup/placeholder creation,
-method and field IDs, native registrations, and local/global object references.
-These are internal building blocks only: there is not yet a JNI C ABI function
-table, JavaVM invocation table, Java class behavior, or runtime backend switch.
+The Rust modules include JNI and JavaVM ABI tables, per-thread attachment,
+class/method/field lookup, native registration, local/global references,
+strings, and method dispatch. The `A` method-call entries decode arguments by
+descriptor. The `V` call entries still use descriptor-correct zero/null
+arguments because the platform `va_list` is not decoded. Java compatibility
+handlers are incomplete, and the Rust backend remains opt-in through
+`USE_EXPERIMENTAL_JNIVM=true`.
+
+When that backend is selected, Roblox receives the Rust JavaVM. The runtime also
+starts a separate C++ libjnivm VM for Cordial's existing compatibility classes,
+which runtime-owned direct calls use during startup and app-bridge setup. Those
+classes have not yet been ported to Rust, so this companion VM is part of the
+current experimental arrangement.

@@ -30,6 +30,25 @@ namespace {
 // The VM owns every class, object and environment it hands out, so it outlives
 // anything derived from it. One per process.
 std::unique_ptr<jnivm::VM> g_vm;
+const JNIInvokeInterface* g_real_iface = nullptr;
+JavaVM* g_real_vm = nullptr;
+
+/// Stand up libjnivm's compatibility classes independently of the JavaVM
+/// Roblox receives. The experimental Rust VM owns that JavaVM, while existing
+/// Cordial Java hooks still use libjnivm objects when the runtime invokes
+/// exported engine natives directly (GameActivity/app-bridge startup).
+bool initialize_compat_vm() {
+    if (g_vm) {
+        return true;
+    }
+    g_vm = std::make_unique<jnivm::VM>();
+    roblox_register_android_classes(g_vm->GetEnv().get());
+    roblox_runtime::register_game_activity_classes(g_vm->GetEnv().get());
+    roblox_runtime::register_init_params_classes(g_vm->GetEnv().get());
+    g_real_vm = g_vm->GetJavaVM();
+    g_real_iface = g_real_vm->functions;
+    return true;
+}
 
 /// Report an uncaught C++ exception with its stack instead of dying mute.
 ///
@@ -85,8 +104,6 @@ namespace {
 // GetEnv, called with which JavaVM, was not visible any other way.
 JNIInvokeInterface g_traced_iface;
 JavaVM g_traced_vm;
-const JNIInvokeInterface* g_real_iface = nullptr;
-JavaVM* g_real_vm = nullptr;
 bool g_trace_invoke = false;
 
 void note(const char* what, JavaVM* vm) {
@@ -128,13 +145,7 @@ void* roblox_jni_create_vm() {
         return nullptr;
     }
     std::set_terminate(report_terminate);
-    g_vm = std::make_unique<jnivm::VM>();
-    // Cordial's Java side, before Roblox can ask for any of it.
-    roblox_register_android_classes(g_vm->GetEnv().get());
-    roblox_runtime::register_game_activity_classes(g_vm->GetEnv().get());
-    roblox_runtime::register_init_params_classes(g_vm->GetEnv().get());
-    g_real_vm = g_vm->GetJavaVM();
-    g_real_iface = g_real_vm->functions;
+    initialize_compat_vm();
 
     // Copy the table wholesale — reserved0 has to survive, or libjnivm cannot
     // recover its own VM — then replace only the entry points.
@@ -155,6 +166,24 @@ void* roblox_jni_create_vm() {
             vm && vm->functions ? vm->functions->reserved0 : nullptr,
             (void*)g_vm.get());
     return vm;
+}
+
+/// Ensure the C++ Java compatibility bridge is available while the engine's
+/// JavaVM is provided by the experimental Rust implementation.
+int roblox_jni_init_compat_bridge() {
+    try {
+        if (!initialize_compat_vm()) {
+            return -1;
+        }
+        fprintf(stderr, "[jni] C++ Java compatibility bridge initialized\n");
+        return 0;
+    } catch (const std::exception& e) {
+        fprintf(stderr, "[jni] could not initialize C++ compatibility bridge: %s\n", e.what());
+        return -1;
+    } catch (...) {
+        fprintf(stderr, "[jni] could not initialize C++ compatibility bridge: non-standard exception\n");
+        return -1;
+    }
 }
 
 /// The current thread's `JNIEnv*`.
