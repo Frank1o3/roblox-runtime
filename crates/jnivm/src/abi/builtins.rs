@@ -454,6 +454,7 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
 
     install_platform_methods(vm)?;
     install_fmod_methods(vm)?;
+    install_flags_methods(vm)?;
 
     Ok(())
 }

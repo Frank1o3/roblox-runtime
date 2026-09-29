@@ -7,7 +7,7 @@
 
 #![allow(unsafe_code)]
 
-use crate::{ClassId, JniValue, MethodId, Vm};
+use crate::{ClassId, JniValue, MethodId, ObjectValue, Vm};
 use jni_sys as jni;
 use std::cell::Cell;
 use std::collections::HashMap;
@@ -32,6 +32,7 @@ fn vm() -> Option<&'static Vm> {
 }
 
 include!("abi/builtins.rs");
+include!("abi/flags.rs");
 include!("abi/platform.rs");
 include!("abi/native_helper.rs");
 include!("abi/arrays.rs");
@@ -212,6 +213,46 @@ pub fn new_string_ref(value: &str) -> Result<*mut c_void, String> {
         )
         .map_err(|error| error.to_string())?;
     Ok(object.0 as usize as *mut c_void)
+}
+
+/// Create GameActivity's Configuration in the selected Rust VM and populate
+/// the fields Android's Configuration class supplies to the engine.
+pub fn new_configuration(width: i32, height: i32) -> Result<*mut c_void, String> {
+    let vm = vm().ok_or("Rust JavaVM has not been created")?;
+    let object = new_opaque_object("android/content/res/Configuration")?;
+    let receiver = crate::ObjectId(object as usize as u64);
+    let class = vm
+        .find_or_define_class("android/content/res/Configuration")
+        .map_err(|error| error.to_string())?;
+    let orientation = if width >= height { 2 } else { 1 };
+    let values = [
+        ("colorMode", "I", JniValue::Int(1)),
+        ("densityDpi", "I", JniValue::Int(160)),
+        ("fontScale", "F", JniValue::Float(1.0)),
+        ("fontWeightAdjustment", "I", JniValue::Int(0)),
+        ("hardKeyboardHidden", "I", JniValue::Int(1)),
+        ("keyboard", "I", JniValue::Int(2)),
+        ("keyboardHidden", "I", JniValue::Int(1)),
+        ("mcc", "I", JniValue::Int(0)),
+        ("mnc", "I", JniValue::Int(0)),
+        ("navigation", "I", JniValue::Int(1)),
+        ("navigationHidden", "I", JniValue::Int(1)),
+        ("orientation", "I", JniValue::Int(orientation)),
+        ("screenHeightDp", "I", JniValue::Int(height)),
+        ("screenLayout", "I", JniValue::Int(0x13)),
+        ("screenWidthDp", "I", JniValue::Int(width)),
+        ("smallestScreenWidthDp", "I", JniValue::Int(width.min(height))),
+        ("touchscreen", "I", JniValue::Int(1)),
+        ("uiMode", "I", JniValue::Int(1)),
+    ];
+    for (name, descriptor, value) in values {
+        let field = vm
+            .resolve_field(class, name, descriptor, false)
+            .map_err(|error| error.to_string())?;
+        vm.set_field_value(field, Some(receiver), value)
+            .map_err(|error| error.to_string())?;
+    }
+    Ok(object)
 }
 
 /// Invoke a mapped engine's `JNI_OnLoad` with the experimental JavaVM.
