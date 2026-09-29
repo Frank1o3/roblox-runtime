@@ -489,6 +489,81 @@ impl Vm {
         Ok(id)
     }
 
+    /// Allocate a local Java object array. `initial` is the reference copied
+    /// into every element, matching JNI `NewObjectArray` semantics.
+    pub fn new_local_object_array(
+        &self,
+        env: &ThreadEnv,
+        length: usize,
+        initial: Option<ObjectId>,
+    ) -> Result<ObjectId, JniError> {
+        let class = self.find_or_define_class("java/lang/Object")?;
+        self.new_local_object(env, class, ObjectValue::ObjectArray(vec![initial; length]))
+    }
+
+    pub fn object_array_length(&self, env: &ThreadEnv, array: ObjectId) -> Result<usize, JniError> {
+        let ObjectValue::ObjectArray(elements) = self.object_value(env, array)? else {
+            return Err(JniError::UnknownReference);
+        };
+        Ok(elements.len())
+    }
+
+    pub fn object_array_element(
+        &self,
+        env: &ThreadEnv,
+        array: ObjectId,
+        index: usize,
+    ) -> Result<Option<ObjectId>, JniError> {
+        let ObjectValue::ObjectArray(elements) = self.object_value(env, array)? else {
+            return Err(JniError::UnknownReference);
+        };
+        elements
+            .get(index)
+            .copied()
+            .ok_or(JniError::UnknownReference)
+    }
+
+    pub fn set_object_array_element(
+        &self,
+        env: &ThreadEnv,
+        array: ObjectId,
+        index: usize,
+        value: Option<ObjectId>,
+    ) -> Result<(), JniError> {
+        self.check_env(env)?;
+        let mut state = self.state.write().unwrap_or_else(|p| p.into_inner());
+        if !state.objects.contains_key(&array)
+            || (!state.objects[&array].global
+                && !state
+                    .locals
+                    .get(&env.owner)
+                    .is_some_and(|locals| locals.contains(&array)))
+        {
+            return Err(JniError::UnknownReference);
+        }
+        if let Some(value) = value {
+            let object = state
+                .objects
+                .get(&value)
+                .ok_or(JniError::UnknownReference)?;
+            if !object.global
+                && !state
+                    .locals
+                    .get(&env.owner)
+                    .is_some_and(|locals| locals.contains(&value))
+            {
+                return Err(JniError::ReferenceNotLocal);
+            }
+        }
+        let ObjectValue::ObjectArray(elements) = &mut state.objects.get_mut(&array).unwrap().value
+        else {
+            return Err(JniError::UnknownReference);
+        };
+        let element = elements.get_mut(index).ok_or(JniError::UnknownReference)?;
+        *element = value;
+        Ok(())
+    }
+
     /// Promote a local reference to a VM-wide reference.
     pub fn new_global_ref(&self, env: &ThreadEnv, object: ObjectId) -> Result<ObjectId, JniError> {
         self.check_env(env)?;

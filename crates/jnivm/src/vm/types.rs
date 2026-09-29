@@ -89,6 +89,7 @@ pub enum ObjectValue {
     ByteArray(Vec<i8>),
     IntArray(Vec<i32>),
     LongArray(Vec<i64>),
+    ObjectArray(Vec<Option<ObjectId>>),
     Opaque,
 }
 

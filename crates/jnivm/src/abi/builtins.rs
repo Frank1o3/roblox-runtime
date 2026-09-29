@@ -1,10 +1,10 @@
 // Small Java-side behaviors used during the observed startup path.
-use std::time::Instant;
 use std::net::UdpSocket;
+use std::time::Instant;
 
 fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
     let class = vm
-        .find_or_define_class("java/lang/Class")
+        .register_class("java/lang/Class")
         .map_err(|error| error.to_string())?;
     install_instance_builtin(
         vm,
@@ -15,7 +15,7 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
     )?;
 
     let class_loader = vm
-        .find_or_define_class("java/lang/ClassLoader")
+        .register_class("java/lang/ClassLoader")
         .map_err(|error| error.to_string())?;
     for method_name in ["findClass", "loadClass"] {
         install_instance_builtin(
@@ -106,6 +106,16 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
     let media_codec = vm
         .register_class("com/roblox/engine/jni/video/MediaCodecInfoUtils")
         .map_err(|error| error.to_string())?;
+    let _video_codec = vm
+        .register_class("com/roblox/engine/jni/video/VideoCodecCapability")
+        .map_err(|error| error.to_string())?;
+    install_builtin(
+        vm,
+        media_codec,
+        "getVideoCodecs",
+        "()[Lcom/roblox/engine/jni/video/VideoCodecCapability;",
+        empty_video_codecs,
+    )?;
     install_builtin(
         vm,
         media_codec,
@@ -176,7 +186,7 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
     // startup path to obtain Resources and display density even before the
     // cross-VM object bridge is implemented.
     let invalid = vm
-        .find_or_define_class("Invalid")
+        .register_class("Invalid")
         .map_err(|error| error.to_string())?;
     install_instance_builtin(
         vm,
@@ -202,7 +212,7 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
     install_instance_builtin(vm, invalid, "bootstrapTheApp", "()V", invalid_bootstrap)?;
 
     let resources = vm
-        .find_or_define_class("android/content/res/Resources")
+        .register_class("android/content/res/Resources")
         .map_err(|error| error.to_string())?;
     install_instance_builtin(
         vm,
@@ -213,7 +223,7 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
     )?;
 
     let native_helper = vm
-        .find_or_define_class("com/roblox/client/startup/NativeHelper")
+        .register_class("com/roblox/client/startup/NativeHelper")
         .map_err(|error| error.to_string())?;
     install_instance_builtin(
         vm,
@@ -222,6 +232,38 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
         "()V",
         reporter_noop,
     )?;
+
+    // Register the Java classes and fields backed by values above so these
+    // intentional implementations do not surface as placeholder lookups.
+    let string_class = vm
+        .register_class("java/lang/String")
+        .map_err(|error| error.to_string())?;
+    let _ = string_class;
+    let java_object = vm
+        .register_class("java/lang/Object")
+        .map_err(|error| error.to_string())?;
+    let _ = java_object;
+    let device_static_params_class = vm
+        .register_class("com/roblox/engine/jni/model/DeviceStaticParams")
+        .map_err(|error| error.to_string())?;
+    for (name, descriptor) in [
+        ("osVersion", "Ljava/lang/String;"),
+        ("deviceName", "Ljava/lang/String;"),
+        ("appVersion", "Ljava/lang/String;"),
+        ("manufacturer", "Ljava/lang/String;"),
+        ("deviceSku", "Ljava/lang/String;"),
+        ("appBuildVariant", "Ljava/lang/String;"),
+        ("socModel", "Ljava/lang/String;"),
+        ("cpu64Bit", "Z"),
+    ] {
+        vm.register_field(device_static_params_class, name, descriptor, false)
+            .map_err(|error| error.to_string())?;
+    }
+    let display_metrics = vm
+        .register_class("android/util/DisplayMetrics")
+        .map_err(|error| error.to_string())?;
+    vm.register_field(display_metrics, "density", "F", false)
+        .map_err(|error| error.to_string())?;
 
     Ok(())
 }
@@ -341,6 +383,21 @@ fn no_hardware_codec(
 ) -> JniValue {
     // C++ reports false because this runtime has no Android MediaCodec.
     JniValue::Boolean(false)
+}
+
+fn empty_video_codecs(
+    vm: &Vm,
+    _receiver: Option<crate::ObjectId>,
+    _args: &[JniValue],
+) -> JniValue {
+    let env = vm.get_env().unwrap_or_else(|| vm.attach_current_thread());
+    match vm.new_local_object_array(&env, 0, None) {
+        Ok(array) => JniValue::Object(Some(array)),
+        Err(error) => {
+            eprintln!("[jnivm] MediaCodecInfoUtils returned no codec array: {error}");
+            JniValue::Object(None)
+        }
+    }
 }
 
 fn network_ipv4_address(

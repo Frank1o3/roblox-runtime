@@ -32,6 +32,7 @@ fn vm() -> Option<&'static Vm> {
 }
 
 include!("abi/builtins.rs");
+include!("abi/arrays.rs");
 
 fn env_table() -> *const jni::JNINativeInterface_ {
     *ENV_TABLE.get_or_init(|| {
@@ -105,6 +106,10 @@ fn env_table() -> *const jni::JNINativeInterface_ {
         slots.GetStringUTFChars = get_string_utf_chars;
         slots.ReleaseStringUTFChars = release_string_utf_chars;
         slots.GetJavaVM = get_java_vm;
+        slots.GetArrayLength = get_array_length;
+        slots.NewObjectArray = new_object_array;
+        slots.GetObjectArrayElement = get_object_array_element;
+        slots.SetObjectArrayElement = set_object_array_element;
         slots.CallObjectMethodV = call_object_v;
         slots.CallBooleanMethodV = call_boolean_v;
         slots.CallIntMethodV = call_int_v;
