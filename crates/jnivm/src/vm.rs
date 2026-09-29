@@ -611,17 +611,18 @@ impl Vm {
     pub fn new_global_ref(&self, env: &ThreadEnv, object: ObjectId) -> Result<ObjectId, JniError> {
         self.check_env(env)?;
         let mut state = self.state.write().unwrap_or_else(|p| p.into_inner());
-        if !state
-            .locals
-            .get(&env.owner)
-            .is_some_and(|locals| locals.contains(&object))
-        {
-            return Err(JniError::ReferenceNotLocal);
-        }
         let record = state
             .objects
             .get(&object)
             .ok_or(JniError::UnknownReference)?;
+        if !record.global
+            && !state
+                .locals
+                .get(&env.owner)
+                .is_some_and(|locals| locals.contains(&object))
+        {
+            return Err(JniError::ReferenceNotLocal);
+        }
         let (class, value) = (record.class, record.value.clone());
         let global = ObjectId(state.id());
         state.objects.insert(

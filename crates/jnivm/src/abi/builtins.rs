@@ -13,6 +13,17 @@ pub fn set_startup_bootstrap(callback: extern "C" fn()) -> Result<(), &'static s
 }
 
 fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
+    let system = vm
+        .register_class("java/lang/System")
+        .map_err(|error| error.to_string())?;
+    install_builtin(
+        vm,
+        system,
+        "identityHashCode",
+        "(Ljava/lang/Object;)I",
+        system_identity_hash_code,
+    )?;
+
     let class = vm
         .register_class("java/lang/Class")
         .map_err(|error| error.to_string())?;
@@ -500,8 +511,51 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
     install_platform_methods(vm)?;
     install_fmod_methods(vm)?;
     install_flags_methods(vm)?;
+    install_system_dialog_singleton(vm)?;
 
     Ok(())
+}
+
+fn system_identity_hash_code(
+    _vm: &Vm,
+    _receiver: Option<crate::ObjectId>,
+    args: &[JniValue],
+) -> JniValue {
+    match args.first() {
+        Some(JniValue::Object(Some(object))) => {
+            let bits = object.0;
+            JniValue::Int((bits ^ (bits >> 32)) as i32)
+        }
+        Some(JniValue::Object(None)) | None => JniValue::Int(0),
+        _ => JniValue::Int(0),
+    }
+}
+
+/// The APK's Kotlin `PlatformSystemDialogHandler` is an object singleton.
+/// Keep its observed `INSTANCE` field non-null; dialog behavior is not modeled
+/// here because the C++ compatibility runtime has no implementation for it.
+fn install_system_dialog_singleton(vm: &Vm) -> Result<(), String> {
+    const CLASS_NAME: &str = "com/roblox/protocols/systemdialog/PlatformSystemDialogHandler";
+    let class = vm
+        .register_class(CLASS_NAME)
+        .map_err(|error| error.to_string())?;
+    let field = vm
+        .register_field(
+            class,
+            "INSTANCE",
+            "Lcom/roblox/protocols/systemdialog/PlatformSystemDialogHandler;",
+            true,
+        )
+        .map_err(|error| error.to_string())?;
+    let env = vm.get_env().unwrap_or_else(|| vm.attach_current_thread());
+    let local_instance = vm
+        .new_local_object(&env, class, crate::ObjectValue::Opaque)
+        .map_err(|error| error.to_string())?;
+    let instance = vm
+        .new_global_ref(&env, local_instance)
+        .map_err(|error| error.to_string())?;
+    vm.set_field_value(field, None, JniValue::Object(Some(instance)))
+        .map_err(|error| error.to_string())
 }
 
 fn new_opaque_local(vm: &Vm, class_name: &str) -> JniValue {

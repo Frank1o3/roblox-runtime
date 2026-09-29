@@ -180,12 +180,20 @@ unsafe extern "system" fn get_object_field(
 }
 
 unsafe extern "system" fn get_static_object_field(
-    _env: *mut jni::JNIEnv,
+    raw_env: *mut jni::JNIEnv,
     _class: jni::jclass,
     field: jni::jfieldID,
 ) -> jni::jobject {
+    let Some(vm) = vm() else { return ptr::null_mut() };
+    let Some(env) = env_token(vm, raw_env) else { return ptr::null_mut() };
     match read_field(field, None) {
-        Some(JniValue::Object(Some(id))) => id.0 as usize as jni::jobject,
+        Some(JniValue::Object(Some(id))) => match vm.clone_local_ref(&env, id.0) {
+            Ok(reference) => reference.0 as usize as jni::jobject,
+            Err(error) => {
+                eprintln!("[jnivm] GetStaticObjectField could not create a local ref: {error}");
+                ptr::null_mut()
+            }
+        },
         Some(JniValue::Object(None)) | None => ptr::null_mut(),
         Some(_) => {
             eprintln!("[jnivm] JNI static object field getter type does not match its descriptor");

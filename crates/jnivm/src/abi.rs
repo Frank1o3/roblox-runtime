@@ -695,7 +695,9 @@ unsafe extern "system" fn new_global_ref(
     match vm.new_global_ref(&env, crate::ObjectId(object as usize as u64)) {
         Ok(reference) => reference.0 as usize as jni::jobject,
         Err(error) => {
-            eprintln!("[jnivm] NewGlobalRef failed: {error}");
+            let id = crate::ObjectId(object as usize as u64);
+            let class = vm.object_class_name(id.0).unwrap_or_else(|| "<unknown>".into());
+            eprintln!("[jnivm] NewGlobalRef failed for {class} ref {}: {error}", id.0);
             ptr::null_mut()
         }
     }

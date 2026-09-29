@@ -147,3 +147,17 @@ which runtime-owned direct calls still use during startup and app-bridge setup.
 Objects allocated by that companion VM are not interchangeable with Rust VM
 objects; the experimental GameActivity initialization path now avoids crossing
 that boundary for its input references.
+
+The latest startup run reached app initialization, then the APK requested the
+Kotlin singleton field
+`com/roblox/protocols/systemdialog/PlatformSystemDialogHandler.INSTANCE`.
+Neither C++ reference source contains this class, so the Rust VM now supplies a
+non-null opaque, VM-global singleton for the observed static field and returns
+a thread-local JNI reference when that field is read. The class's dialog
+methods remain unimplemented; their behavior must be driven by later observed
+calls or an authoritative implementation, not inferred from the field name.
+
+The C++ `SystemClass` in `native/local_storage.cpp` implements
+`java/lang/System.identityHashCode(Object)` by deriving a stable value from
+object identity. The Rust VM now handles the observed method from its stable
+object handles instead of passing these Rust-only objects to the C++ fallback.
