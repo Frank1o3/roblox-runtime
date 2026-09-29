@@ -716,7 +716,7 @@ unsafe extern "system" fn new_global_ref(
             return global.0 as usize as jni::jobject;
         }
     } else if vm.object_class_name(id.0).is_none() {
-        if let Some(global) = promote_companion_reference(vm, &env, object) {
+        if let Some(global) = promote_companion_reference(vm, &env, object as *mut c_void) {
             return global.0 as usize as jni::jobject;
         }
     }
