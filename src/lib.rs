@@ -374,6 +374,11 @@ impl LoadedEngine {
             })
             .map_err(|_| JniError::BootstrapAlreadyInstalled)?;
         roblox_jni::game_activity::set_bootstrap(Some(run_startup_bootstrap));
+        // This host does not have Android's framework Activity to guarantee
+        // that GameActivity.bootstrapTheApp is dispatched before the engine's
+        // flags verdict. Deliver synchronously now, after JNI_OnLoad and before
+        // initializeNativeCode; the installed hook is a duplicate-safe fallback.
+        run_startup_bootstrap();
         Ok(())
     }
 
