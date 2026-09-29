@@ -3,7 +3,7 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
     let class = vm
         .find_or_define_class("java/lang/Class")
         .map_err(|error| error.to_string())?;
-    install_builtin(
+    install_instance_builtin(
         vm,
         class,
         "getClassLoader",
@@ -15,7 +15,7 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
         .find_or_define_class("java/lang/ClassLoader")
         .map_err(|error| error.to_string())?;
     for method_name in ["findClass", "loadClass"] {
-        install_builtin(
+        install_instance_builtin(
             vm,
             class_loader,
             method_name,
@@ -52,6 +52,18 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
         platform_name_string,
     )?;
     install_builtin(vm, user, "getTheme", "()Ljava/lang/String;", theme_string)?;
+
+    let native_gl = vm
+        .register_class("com/roblox/engine/jni/NativeGLJavaInterface")
+        .map_err(|error| error.to_string())?;
+    install_builtin(
+        vm,
+        native_gl,
+        "getDeviceStaticParams",
+        "()Lcom/roblox/engine/jni/model/DeviceStaticParams;",
+        device_static_params,
+    )?;
+
     Ok(())
 }
 
@@ -97,6 +109,48 @@ fn class_loader_find_class(
     }
 }
 
+fn device_static_params(
+    vm: &Vm,
+    _receiver: Option<crate::ObjectId>,
+    _args: &[JniValue],
+) -> JniValue {
+    let env = vm.get_env().unwrap_or_else(|| vm.attach_current_thread());
+    let Ok(class) = vm.find_or_define_class("com/roblox/engine/jni/model/DeviceStaticParams") else {
+        return JniValue::Object(None);
+    };
+    let Ok(object) = vm.new_local_object(&env, class, crate::ObjectValue::Opaque) else {
+        return JniValue::Object(None);
+    };
+    let profile = std::env::var("RBX_RUNTIME_DEVICE_PROFILE")
+        .unwrap_or_else(|_| "pc-windows-11".to_owned());
+    let device_name = std::env::var("RBX_RUNTIME_DEVICE_NAME")
+        .unwrap_or_else(|_| "Roblox Runtime".to_owned());
+    let fields = [
+        ("osVersion", "33"),
+        ("deviceName", device_name.as_str()),
+        ("appVersion", ""),
+        ("manufacturer", "Roblox Runtime"),
+        ("deviceSku", profile.as_str()),
+        ("appBuildVariant", "release"),
+        ("socModel", "unknown"),
+    ];
+    for (name, value) in fields {
+        let Ok(field) = vm.resolve_field(class, name, "Ljava/lang/String;", false) else {
+            continue;
+        };
+        let JniValue::Object(Some(value)) = java_string(vm, value, "DeviceStaticParams") else {
+            continue;
+        };
+        if let Err(error) = vm.set_field_value(field, Some(object), JniValue::Object(Some(value))) {
+            eprintln!("[jnivm] DeviceStaticParams.{name} setup failed: {error}");
+        }
+    }
+    if let Ok(field) = vm.resolve_field(class, "cpu64Bit", "Z", false) {
+        let _ = vm.set_field_value(field, Some(object), JniValue::Boolean(true));
+    }
+    JniValue::Object(Some(object))
+}
+
 fn install_builtin(
     vm: &Vm,
     class: crate::ClassId,
@@ -106,6 +160,20 @@ fn install_builtin(
 ) -> Result<(), String> {
     let method = vm
         .register_method(class, name, descriptor, true)
+        .map_err(|error| error.to_string())?;
+    vm.install_method_handler(method, handler)
+        .map_err(|error| error.to_string())
+}
+
+fn install_instance_builtin(
+    vm: &Vm,
+    class: crate::ClassId,
+    name: &str,
+    descriptor: &str,
+    handler: crate::MethodHandler,
+) -> Result<(), String> {
+    let method = vm
+        .register_method(class, name, descriptor, false)
         .map_err(|error| error.to_string())?;
     vm.install_method_handler(method, handler)
         .map_err(|error| error.to_string())

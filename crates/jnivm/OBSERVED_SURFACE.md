@@ -99,9 +99,31 @@ lookups. `android/os/Build.MANUFACTURER` also needs a field value. The
 GameActivity and NativeGL callbacks need intentional behavior or a documented
 no-op based on fresh runtime observations.
 
-The available log is still the earlier `rusty-blox --host-libc` run described
-above. No newer runtime log was present in the workspace during the latest
-implementation pass.
+The earlier surface inventory above is from the C++ backend. Experimental
+startup was also run after the `jni-sys 0.4.1` upgrade with
+`USE_EXPERIMENTAL_JNIVM=1`. The Rust VM initialized, called `JNI_OnLoad`, ran
+the runtime's startup settings and native flag callbacks, and initialized
+GameActivity. Its log is `/tmp/roblox-runtime-experimental-jni-10.log` in the
+development environment. This run still crashed after `[stub]
+ZSTD_trace_decompress_begin`.
+
+The new run confirmed requests for `java/lang/Class.getClassLoader`,
+`java/lang/ClassLoader.loadClass`, and `findClass`; the Rust VM now implements
+these like `native/game_activity.cpp` does, normalizing dotted names and
+resolving them through the VM. The same trace reaches
+`NativeGLJavaInterface.getDeviceStaticParams`; Rust now returns a populated
+`DeviceStaticParams` object using the defaults in
+`native/android_classes.cpp` (with `RBX_RUNTIME_DEVICE_PROFILE` and
+`RBX_RUNTIME_DEVICE_NAME` available for the device strings).
+
+The remaining observed startup failure includes calls on an unknown/null
+object classified as `Invalid` (`getResources`, `getDisplayMetrics`,
+`getNativeHelper`, and `bootstrapTheApp`). The core's faulting instruction is
+an indirect virtual call inside `libroblox.so`; it is not a null JNI table
+slot. The C++ compatibility bridge reports initialized, but its registered
+Java objects remain in a separate libjnivm VM and cannot satisfy lookups made
+through the Rust VM. This object-model bridge is still the largest gap before
+the experimental backend can complete startup.
 
 The runtime must keep using the C++ backend until these JNI semantics and the
 runtime's C++-registered Java compatibility classes have Rust equivalents.
