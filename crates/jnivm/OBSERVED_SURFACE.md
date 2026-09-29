@@ -116,17 +116,20 @@ resolving them through the VM. The same trace reaches
 `native/android_classes.cpp` (with `RBX_RUNTIME_DEVICE_PROFILE` and
 `RBX_RUNTIME_DEVICE_NAME` available for the device strings).
 
-The remaining observed startup failure includes calls on an unknown/null
-object classified as `Invalid` (`getResources`, `getDisplayMetrics`,
-`getNativeHelper`, and `bootstrapTheApp`). The core's faulting instruction is
-an indirect virtual call inside `libroblox.so`; it is not a null JNI table
-slot. The C++ compatibility bridge reports initialized, but its registered
-Java objects remain in a separate libjnivm VM and cannot satisfy lookups made
-through the Rust VM. This object-model bridge is still the largest gap before
-the experimental backend can complete startup.
+The latest trace reached `GameActivity` initialization but stopped after three
+`GetObjectClass on untracked reference` warnings for the same non-null handle.
+The experimental path previously passed a `GameActivity` object allocated by
+the separate C++ compatibility VM into the engine while the engine used the
+Rust JNI table. The experimental path now allocates the Activity, path strings,
+asset manager, and configuration in the Rust VM and registers the startup
+handlers on `com/google/androidgamesdk/GameActivity`. The C++ backend keeps its
+existing initialization path.
 
-The runtime must keep using the C++ backend until these JNI semantics and the
-runtime's C++-registered Java compatibility classes have Rust equivalents.
+The separate C++ compatibility VM still serves other runtime-owned direct
+calls. Objects crossing from that VM into Rust JNI remain unsupported, so
+other `GetObjectClass on untracked reference` warnings may still identify
+bridge gaps. The latest trace has no fatal error or stack trace, and the
+`ZSTD_trace_decompress_begin` stub line alone does not establish a crash cause.
 
 ## Rust crate status
 
@@ -140,6 +143,7 @@ handlers are incomplete, and the Rust backend remains opt-in through
 
 When that backend is selected, Roblox receives the Rust JavaVM. The runtime also
 starts a separate C++ libjnivm VM for Cordial's existing compatibility classes,
-which runtime-owned direct calls use during startup and app-bridge setup. Those
-classes have not yet been ported to Rust, so this companion VM is part of the
-current experimental arrangement.
+which runtime-owned direct calls still use during startup and app-bridge setup.
+Objects allocated by that companion VM are not interchangeable with Rust VM
+objects; the experimental GameActivity initialization path now avoids crossing
+that boundary for its input references.

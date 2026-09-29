@@ -342,7 +342,65 @@ pub unsafe fn initialize(
     }
 }
 
+/// Call GameActivity initialization with all Java references allocated by the
+/// experimental Rust VM.
+///
+/// # Safety
+/// `native` must be the mapped `initializeNativeCode` export, and each handle
+/// must be a live reference belonging to `env`'s JavaVM for the duration of
+/// this call.
+pub unsafe fn initialize_with_vm_refs(
+    native: *mut c_void,
+    env: *mut c_void,
+    activity: *mut c_void,
+    internal: *mut c_void,
+    obb: *mut c_void,
+    external: *mut c_void,
+    assets: *mut c_void,
+    configuration: *mut c_void,
+) -> Result<i64, String> {
+    let mut err = vec![0u8; 512];
+    // SAFETY: the caller guarantees that the JNI environment, objects and
+    // mapped native all remain valid for this synchronous call.
+    let handle = unsafe {
+        roblox_game_activity_init_with_rust_refs(
+            native,
+            env,
+            activity,
+            internal,
+            obb,
+            external,
+            assets,
+            configuration,
+            err.as_mut_ptr() as *mut c_char,
+            err.len(),
+        )
+    };
+    if handle == 0 {
+        let error = take_err(err);
+        Err(if error.is_empty() {
+            "initializeNativeCode returned a null handle".into()
+        } else {
+            error
+        })
+    } else {
+        Ok(handle)
+    }
+}
+
 unsafe extern "C" {
+    fn roblox_game_activity_init_with_rust_refs(
+        native: *mut c_void,
+        env: *mut c_void,
+        activity: *mut c_void,
+        internal: *mut c_void,
+        obb: *mut c_void,
+        external: *mut c_void,
+        assets: *mut c_void,
+        configuration: *mut c_void,
+        err: *mut c_char,
+        err_len: usize,
+    ) -> i64;
     fn roblox_game_activity_touch(
         handle: i64,
         action: c_int,

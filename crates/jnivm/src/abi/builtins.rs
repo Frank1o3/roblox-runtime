@@ -227,6 +227,80 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
     )?;
     install_instance_builtin(vm, invalid, "bootstrapTheApp", "()V", invalid_bootstrap)?;
 
+    // GameActivity is the object the runtime supplies to
+    // initializeNativeCode. The experimental backend constructs it in this
+    // VM, so these same startup answers must also be available under its real
+    // class instead of relying on libjnivm's separate Invalid fallback.
+    let game_activity = vm
+        .register_class("com/google/androidgamesdk/GameActivity")
+        .map_err(|error| error.to_string())?;
+    install_instance_builtin(
+        vm,
+        game_activity,
+        "getResources",
+        "()Landroid/content/res/Resources;",
+        invalid_get_resources,
+    )?;
+    install_instance_builtin(
+        vm,
+        game_activity,
+        "getDisplayMetrics",
+        "()Landroid/util/DisplayMetrics;",
+        invalid_get_display_metrics,
+    )?;
+    install_instance_builtin(
+        vm,
+        game_activity,
+        "getNativeHelper",
+        "()Lcom/roblox/client/startup/NativeHelper;",
+        invalid_get_native_helper,
+    )?;
+    install_instance_builtin(
+        vm,
+        game_activity,
+        "bootstrapTheApp",
+        "()V",
+        invalid_bootstrap,
+    )?;
+    install_instance_builtin(
+        vm,
+        game_activity,
+        "setImeEditorInfoFields",
+        "(III)V",
+        reporter_noop,
+    )?;
+    install_instance_builtin(
+        vm,
+        game_activity,
+        "setWindowFlags",
+        "(II)V",
+        reporter_noop,
+    )?;
+    vm.register_class("androidx/core/graphics/Insets")
+        .map_err(|error| error.to_string())?;
+    install_instance_builtin(
+        vm,
+        game_activity,
+        "getWindowInsets",
+        "(I)Landroidx/core/graphics/Insets;",
+        zero_insets,
+    )?;
+    install_instance_builtin(
+        vm,
+        game_activity,
+        "getWaterfallInsets",
+        "()Landroidx/core/graphics/Insets;",
+        zero_insets,
+    )?;
+
+    for class_name in [
+        "android/content/res/AssetManager",
+        "android/content/res/Configuration",
+    ] {
+        vm.register_class(class_name)
+            .map_err(|error| error.to_string())?;
+    }
+
     let resources = vm
         .register_class("android/content/res/Resources")
         .map_err(|error| error.to_string())?;
@@ -362,6 +436,18 @@ fn invalid_bootstrap(
         eprintln!("[jnivm] Invalid.bootstrapTheApp has no Rust host bootstrap callback");
     }
     JniValue::Void
+}
+
+fn zero_insets(vm: &Vm, _receiver: Option<crate::ObjectId>, _args: &[JniValue]) -> JniValue {
+    let Ok(class) = vm.find_or_define_class("androidx/core/graphics/Insets") else {
+        return JniValue::Object(None);
+    };
+    vm.get_env()
+        .or_else(|| Some(vm.attach_current_thread()))
+        .and_then(|env| vm.new_local_object(&env, class, crate::ObjectValue::Opaque).ok())
+        .map_or(JniValue::Object(None), |object| {
+            JniValue::Object(Some(object))
+        })
 }
 
 fn process_timestamp(

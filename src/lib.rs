@@ -480,11 +480,6 @@ impl LoadedEngine {
                 .map_err(|_| JniError::BootstrapAlreadyInstalled)?;
             jnivm::set_game_loaded_callback(report_rust_game_loaded)
                 .map_err(|_| JniError::BootstrapAlreadyInstalled)?;
-            jnivm::set_fmod_aaudio_support(|| {
-                roblox_abi::bionic::aaudio_selected()
-                    && roblox_abi::bionic::audio_host_backend_available()
-            })
-            .map_err(|_| JniError::BootstrapAlreadyInstalled)?;
         }
         roblox_jni::game_activity::set_bootstrap(Some(run_startup_bootstrap));
         // This host does not have Android's framework Activity to guarantee
@@ -527,7 +522,7 @@ impl LoadedEngine {
         Ok(version)
     }
 
-    /// Call AGDK's `initializeNativeCode` through the ported JNI layer.
+    /// Call AGDK's `initializeNativeCode` through the selected JNI VM.
     /// A JavaVM must exist, and constructors must have run first.
     #[allow(unsafe_code)]
     pub fn initialize_game_activity(
@@ -545,12 +540,48 @@ impl LoadedEngine {
         let native = self
             .symbol("Java_com_google_androidgamesdk_GameActivity_initializeNativeCode")
             .ok_or(JniError::MissingGameActivityInit)?;
-        // SAFETY: the symbol belongs to this mapped engine and the process VM
-        // was checked above.
-        unsafe {
-            roblox_jni::game_activity::initialize(native, internal_path, obb_path, external_path)
+        if jnivm::selected_from_environment() {
+            let env = jnivm::current_env().ok_or(JniError::JniNotInitialized)?;
+            let activity = jnivm::new_opaque_object("com/google/androidgamesdk/GameActivity")
+                .map_err(JniError::ExperimentalJniVmUnavailable)?;
+            let internal = jnivm::new_string_ref(internal_path)
+                .map_err(JniError::ExperimentalJniVmUnavailable)?;
+            let obb =
+                jnivm::new_string_ref(obb_path).map_err(JniError::ExperimentalJniVmUnavailable)?;
+            let external = jnivm::new_string_ref(external_path)
+                .map_err(JniError::ExperimentalJniVmUnavailable)?;
+            let assets = jnivm::new_opaque_object("android/content/res/AssetManager")
+                .map_err(JniError::ExperimentalJniVmUnavailable)?;
+            let configuration = jnivm::new_opaque_object("android/content/res/Configuration")
+                .map_err(JniError::ExperimentalJniVmUnavailable)?;
+            // SAFETY: all JNI references and the native export belong to the
+            // mapped engine and selected Rust VM, and remain live during call.
+            unsafe {
+                roblox_jni::game_activity::initialize_with_vm_refs(
+                    native,
+                    env,
+                    activity,
+                    internal,
+                    obb,
+                    external,
+                    assets,
+                    configuration,
+                )
+            }
+            .map_err(JniError::GameActivity)
+        } else {
+            // SAFETY: the symbol belongs to this mapped engine and the process
+            // VM was checked above.
+            unsafe {
+                roblox_jni::game_activity::initialize(
+                    native,
+                    internal_path,
+                    obb_path,
+                    external_path,
+                )
+            }
+            .map_err(JniError::GameActivity)
         }
-        .map_err(JniError::GameActivity)
     }
 
     /// Deliver the initial client surface through GameActivity's native
@@ -635,6 +666,13 @@ extern "C" fn report_rust_game_loaded(place_id: i64) {
 
 fn create_java_vm() -> Result<(), JniError> {
     if jnivm::selected_from_environment() {
+        // FMOD can query its static Java capabilities during JNI_OnLoad, before
+        // the later startup-bootstrap installation point.
+        jnivm::set_fmod_aaudio_support(|| {
+            roblox_abi::bionic::aaudio_selected()
+                && roblox_abi::bionic::audio_host_backend_available()
+        })
+        .map_err(|_| JniError::BootstrapAlreadyInstalled)?;
         jnivm::create_vm()
             .map(|_| ())
             .map_err(JniError::ExperimentalJniVmUnavailable)?;

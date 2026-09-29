@@ -540,6 +540,7 @@ fn java_string_arg(vm: &Vm, args: &[JniValue], index: usize) -> Option<String> {
 }
 
 fn fmod_check_init(_vm: &Vm, _receiver: Option<crate::ObjectId>, _args: &[JniValue]) -> JniValue {
+    eprintln!("[jnivm] FMOD.checkInit -> true");
     JniValue::Boolean(true)
 }
 
@@ -548,6 +549,7 @@ fn fmod_supports_low_latency(
     _receiver: Option<crate::ObjectId>,
     _args: &[JniValue],
 ) -> JniValue {
+    eprintln!("[jnivm] FMOD.supportsLowLatency -> false");
     JniValue::Boolean(false)
 }
 
@@ -559,6 +561,7 @@ fn fmod_supports_aaudio(
     let supported = FMOD_AAUDIO_SUPPORTED
         .get()
         .is_some_and(|callback| callback());
+    eprintln!("[jnivm] FMOD.supportsAAudio -> {supported}");
     JniValue::Boolean(supported)
 }
 

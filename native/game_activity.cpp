@@ -930,6 +930,32 @@ long roblox_game_activity_init(void* fn, const char* internal_path, const char* 
     }
 }
 
+/// Experimental Rust-VM counterpart to roblox_game_activity_init. The caller
+/// supplies every reference from the JavaVM passed to JNI_OnLoad, avoiding a
+/// C++ libjnivm jobject crossing into Rust's independent object table.
+long roblox_game_activity_init_with_rust_refs(void* fn, JNIEnv* env, jobject activity,
+                                               jstring internal, jstring obb,
+                                               jstring external, jobject assets,
+                                               jobject configuration, char* err,
+                                               size_t err_len) {
+    using Init = jlong (*)(JNIEnv*, jobject, jstring, jstring, jstring, jobject, jbyteArray,
+                           jobject);
+    if (!fn || !env || !activity || !internal || !obb || !external || !assets || !configuration) {
+        snprintf(err, err_len, "Rust JNI GameActivity initialization received a null VM reference");
+        return 0;
+    }
+    try {
+        return reinterpret_cast<Init>(fn)(env, activity, internal, obb, external, assets,
+                                          nullptr, configuration);
+    } catch (const std::exception& e) {
+        snprintf(err, err_len, "%s", e.what());
+        return 0;
+    } catch (...) {
+        snprintf(err, err_len, "non-standard C++ exception");
+        return 0;
+    }
+}
+
 } // extern "C"
 
 extern "C" {

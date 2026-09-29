@@ -183,6 +183,37 @@ pub fn current_env() -> Option<*mut c_void> {
     Some(thread_env(vm) as *mut c_void)
 }
 
+/// Allocate an opaque Java object in the Rust VM for a native entry point
+/// which must be called with a VM-owned reference.
+pub fn new_opaque_object(class_name: &str) -> Result<*mut c_void, String> {
+    let vm = vm().ok_or("Rust JavaVM has not been created")?;
+    let class = vm
+        .find_or_define_class(class_name)
+        .map_err(|error| error.to_string())?;
+    let env = vm.get_env().unwrap_or_else(|| vm.attach_current_thread());
+    let object = vm
+        .new_local_object(&env, class, crate::ObjectValue::Opaque)
+        .map_err(|error| error.to_string())?;
+    Ok(object.0 as usize as *mut c_void)
+}
+
+/// Allocate a Java string in the Rust VM for a native entry point.
+pub fn new_string_ref(value: &str) -> Result<*mut c_void, String> {
+    let vm = vm().ok_or("Rust JavaVM has not been created")?;
+    let class = vm
+        .find_or_define_class("java/lang/String")
+        .map_err(|error| error.to_string())?;
+    let env = vm.get_env().unwrap_or_else(|| vm.attach_current_thread());
+    let object = vm
+        .new_local_object(
+            &env,
+            class,
+            crate::ObjectValue::String(value.encode_utf16().collect()),
+        )
+        .map_err(|error| error.to_string())?;
+    Ok(object.0 as usize as *mut c_void)
+}
+
 /// Invoke a mapped engine's `JNI_OnLoad` with the experimental JavaVM.
 ///
 /// # Safety
