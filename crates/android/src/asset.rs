@@ -63,17 +63,19 @@ impl Seek for ApkReader {
 
 struct Apk {
     path: PathBuf,
-    archive: OnceLock<Option<zip::ZipArchive<ApkReader>>>,
+    // Keep the central directory in place and serialize access to it. Cloning
+    // ZipArchive per asset request duplicates its entry index on cache misses.
+    archive: OnceLock<Option<Mutex<zip::ZipArchive<ApkReader>>>>,
 }
 
 impl Apk {
-    fn archive(&self) -> Option<zip::ZipArchive<ApkReader>> {
+    fn archive(&self) -> Option<&Mutex<zip::ZipArchive<ApkReader>>> {
         self.archive
             .get_or_init(|| {
                 let reader = ApkReader::open(&self.path).ok()?;
-                zip::ZipArchive::new(reader).ok()
+                Some(Mutex::new(zip::ZipArchive::new(reader).ok()?))
             })
-            .clone()
+            .as_ref()
     }
 }
 
@@ -89,7 +91,10 @@ impl Manager {
         }
 
         for apk in &self.apks {
-            let Some(mut archive) = apk.archive() else {
+            let Some(archive) = apk.archive() else {
+                continue;
+            };
+            let Ok(mut archive) = archive.lock() else {
                 continue;
             };
             let Ok(mut entry) = archive.by_name(&format!("assets/{name}")) else {

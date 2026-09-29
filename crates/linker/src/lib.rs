@@ -57,6 +57,21 @@ pub const RTLD_LAZY: c_int = 1;
 /// bionic symbols retain the returned address.
 pub fn host_symbol(library: &str, symbol: &str) -> Option<*mut c_void> {
     static LIBRARIES: OnceLock<Mutex<std::collections::BTreeMap<String, usize>>> = OnceLock::new();
+    static SYMBOLS: OnceLock<
+        Mutex<
+            std::collections::BTreeMap<String, std::collections::BTreeMap<String, Option<usize>>>,
+        >,
+    > = OnceLock::new();
+    let symbols = SYMBOLS.get_or_init(|| Mutex::new(std::collections::BTreeMap::new()));
+    if let Some(address) = symbols
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .get(library)
+        .and_then(|entries| entries.get(symbol))
+        .copied()
+    {
+        return address.map(|address| address as *mut c_void);
+    }
     let name = CString::new(library).ok()?;
     let symbol = CString::new(symbol).ok()?;
     let libraries = LIBRARIES.get_or_init(|| Mutex::new(std::collections::BTreeMap::new()));
@@ -70,35 +85,53 @@ pub fn host_symbol(library: &str, symbol: &str) -> Option<*mut c_void> {
         // relocations before any address from it is exposed.
         let handle = unsafe { host_ffi::dlopen(name.as_ptr(), RTLD_NOW | 0x100) };
         if handle.is_null() {
-            return None;
+            std::ptr::null_mut()
+        } else {
+            libraries.insert(library.to_owned(), handle as usize);
+            handle
         }
-        libraries.insert(library.to_owned(), handle as usize);
-        handle
     };
-    // SAFETY: the handle is a live host loader handle and the symbol name is
-    // NUL-terminated for this call.
-    let address = unsafe { host_ffi::dlsym(handle, symbol.as_ptr()) };
-    if address.is_null() {
-        return None;
-    }
-    let mut info = host_ffi::DlInfo::default();
-    // SAFETY: the symbol came from the host loader and `info` is writable.
-    if unsafe { host_ffi::dladdr(address, &mut info) } == 0 || info.filename.is_null() {
-        return None;
-    }
-    // A handle lookup searches dependencies too. Require the selected library
-    // itself to define the symbol.
-    // SAFETY: dladdr returned a live NUL-terminated filename.
-    let filename = unsafe { CStr::from_ptr(info.filename) }.to_string_lossy();
-    let basename = filename.rsplit('/').next().unwrap_or(&filename);
-    let stem = library
-        .split_once(".so")
-        .map_or(library, |(stem, _)| &library[..stem.len() + 3]);
-    // glibc exposes time-related libc calls from the vDSO. Cordial's host
-    // resolver accepts those as libc implementations; rejecting them here
-    // turns otherwise usable calls into generated stubs in the runtime.
-    let is_vdso_libc = library.starts_with("libc.") && basename.starts_with("linux-vdso");
-    (basename.starts_with(stem) || is_vdso_libc).then_some(address)
+    let result = if handle.is_null() {
+        None
+    } else {
+        // SAFETY: the handle is a live host loader handle and the symbol name is
+        // NUL-terminated for this call.
+        let address = unsafe { host_ffi::dlsym(handle, symbol.as_ptr()) };
+        if address.is_null() {
+            None
+        } else {
+            let mut info = host_ffi::DlInfo::default();
+            // SAFETY: the symbol came from the host loader and `info` is writable.
+            if unsafe { host_ffi::dladdr(address, &mut info) } == 0 || info.filename.is_null() {
+                None
+            } else {
+                // A handle lookup searches dependencies too. Require the selected library
+                // itself to define the symbol.
+                // SAFETY: dladdr returned a live NUL-terminated filename.
+                let filename = unsafe { CStr::from_ptr(info.filename) }.to_string_lossy();
+                let basename = filename.rsplit('/').next().unwrap_or(&filename);
+                let stem = library
+                    .split_once(".so")
+                    .map_or(library, |(stem, _)| &library[..stem.len() + 3]);
+                // glibc exposes time-related libc calls from the vDSO. Cordial's host
+                // resolver accepts those as libc implementations; rejecting them here
+                // turns otherwise usable calls into generated stubs in the runtime.
+                let is_vdso_libc =
+                    library.starts_with("libc.") && basename.starts_with("linux-vdso");
+                (basename.starts_with(stem) || is_vdso_libc).then_some(address)
+            }
+        }
+    };
+    symbols
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .entry(library.to_owned())
+        .or_default()
+        .insert(
+            symbol.to_string_lossy().into_owned(),
+            result.map(|address| address as usize),
+        );
+    result
 }
 
 mod host_ffi {
