@@ -136,10 +136,10 @@ bridge gaps. The latest trace has no fatal error or stack trace, and the
 The Rust modules include JNI and JavaVM ABI tables, per-thread attachment,
 class/method/field lookup, native registration, local/global references,
 strings, and method dispatch. The `A` method-call entries decode arguments by
-descriptor. The `V` call entries still use descriptor-correct zero/null
-arguments because the platform `va_list` is not decoded. Java compatibility
-handlers are incomplete, and the Rust backend remains opt-in through
-`USE_EXPERIMENTAL_JNIVM=true`.
+descriptor. The `V` call entries pass the platform `va_list` through a small
+native ABI decoder and convert its values to the same typed arguments before
+Rust dispatch. Java compatibility handlers are incomplete, and the Rust
+backend remains opt-in through `USE_EXPERIMENTAL_JNIVM=true`.
 
 When that backend is selected, Roblox receives the Rust JavaVM. The runtime also
 starts a separate C++ libjnivm VM for Cordial's existing compatibility classes,

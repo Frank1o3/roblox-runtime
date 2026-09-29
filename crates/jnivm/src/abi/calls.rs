@@ -2,6 +2,12 @@
 static CPP_FALLBACK_OBJECTS: OnceLock<Mutex<HashMap<u64, usize>>> = OnceLock::new();
 
 unsafe extern "C" {
+    fn roblox_jni_decode_va_list(
+        signature: *const std::ffi::c_char,
+        args: jni::va_list,
+        output: *mut jni::jvalue,
+        capacity: i32,
+    ) -> i32;
     fn roblox_jni_fallback_has_method(
         class_name: *const std::ffi::c_char,
         name: *const std::ffi::c_char,
@@ -107,7 +113,7 @@ unsafe extern "system" fn new_object_v(
     env: *mut jni::JNIEnv,
     class: jni::jclass,
     method: jni::jmethodID,
-    _args: jni::va_list,
+    args: jni::va_list,
 ) -> jni::jobject {
     let Some(vm) = vm() else {
         return ptr::null_mut();
@@ -119,7 +125,7 @@ unsafe extern "system" fn new_object_v(
         eprintln!("[jnivm] NewObjectV received an unknown class");
         return ptr::null_mut();
     }
-    invoke(method, None)
+    invoke(method, None, args)
         .and_then(object_result)
         .unwrap_or(ptr::null_mut())
 }
@@ -128,11 +134,12 @@ unsafe extern "system" fn call_object_v(
     _env: *mut jni::JNIEnv,
     object: jni::jobject,
     method: jni::jmethodID,
-    _args: jni::va_list,
+    args: jni::va_list,
 ) -> jni::jobject {
     invoke(
         method,
         (!object.is_null()).then_some(crate::ObjectId(object as usize as u64)),
+        args,
     )
     .and_then(|value| match value {
         JniValue::Object(Some(id)) => Some(id.0 as usize as jni::jobject),
@@ -145,9 +152,9 @@ unsafe extern "system" fn call_static_object_v(
     _env: *mut jni::JNIEnv,
     _class: jni::jclass,
     method: jni::jmethodID,
-    _args: jni::va_list,
+    args: jni::va_list,
 ) -> jni::jobject {
-    invoke(method, None)
+    invoke(method, None, args)
         .and_then(|value| match value {
             JniValue::Object(Some(id)) => Some(id.0 as usize as jni::jobject),
             _ => None,
@@ -159,11 +166,12 @@ unsafe extern "system" fn call_boolean_v(
     _env: *mut jni::JNIEnv,
     object: jni::jobject,
     method: jni::jmethodID,
-    _args: jni::va_list,
+    args: jni::va_list,
 ) -> jni::jboolean {
     invoke(
         method,
         (!object.is_null()).then_some(crate::ObjectId(object as usize as u64)),
+        args,
     )
     .and_then(|value| match value {
         JniValue::Boolean(value) => Some(value),
@@ -175,11 +183,12 @@ unsafe extern "system" fn call_int_v(
     _env: *mut jni::JNIEnv,
     object: jni::jobject,
     method: jni::jmethodID,
-    _args: jni::va_list,
+    args: jni::va_list,
 ) -> jni::jint {
     invoke(
         method,
         (!object.is_null()).then_some(crate::ObjectId(object as usize as u64)),
+        args,
     )
     .and_then(|value| match value {
         JniValue::Int(value) => Some(value),
@@ -191,11 +200,12 @@ unsafe extern "system" fn call_long_v(
     _env: *mut jni::JNIEnv,
     object: jni::jobject,
     method: jni::jmethodID,
-    _args: jni::va_list,
+    args: jni::va_list,
 ) -> jni::jlong {
     invoke(
         method,
         (!object.is_null()).then_some(crate::ObjectId(object as usize as u64)),
+        args,
     )
     .and_then(|value| match value {
         JniValue::Long(value) => Some(value),
@@ -207,20 +217,21 @@ unsafe extern "system" fn call_void_v(
     _env: *mut jni::JNIEnv,
     object: jni::jobject,
     method: jni::jmethodID,
-    _args: jni::va_list,
+    args: jni::va_list,
 ) {
     let _ = invoke(
         method,
         (!object.is_null()).then_some(crate::ObjectId(object as usize as u64)),
+        args,
     );
 }
 unsafe extern "system" fn call_static_boolean_v(
     _env: *mut jni::JNIEnv,
     _class: jni::jclass,
     method: jni::jmethodID,
-    _args: jni::va_list,
+    args: jni::va_list,
 ) -> jni::jboolean {
-    invoke(method, None)
+    invoke(method, None, args)
         .and_then(|value| match value {
             JniValue::Boolean(value) => Some(value),
             _ => None,
@@ -231,9 +242,9 @@ unsafe extern "system" fn call_static_int_v(
     _env: *mut jni::JNIEnv,
     _class: jni::jclass,
     method: jni::jmethodID,
-    _args: jni::va_list,
+    args: jni::va_list,
 ) -> jni::jint {
-    invoke(method, None)
+    invoke(method, None, args)
         .and_then(|value| match value {
             JniValue::Int(value) => Some(value),
             _ => None,
@@ -244,9 +255,9 @@ unsafe extern "system" fn call_static_long_v(
     _env: *mut jni::JNIEnv,
     _class: jni::jclass,
     method: jni::jmethodID,
-    _args: jni::va_list,
+    args: jni::va_list,
 ) -> jni::jlong {
-    invoke(method, None)
+    invoke(method, None, args)
         .and_then(|value| match value {
             JniValue::Long(value) => Some(value),
             _ => None,
@@ -257,9 +268,9 @@ unsafe extern "system" fn call_static_void_v(
     _env: *mut jni::JNIEnv,
     _class: jni::jclass,
     method: jni::jmethodID,
-    _args: jni::va_list,
+    args: jni::va_list,
 ) {
-    let _ = invoke(method, None);
+    let _ = invoke(method, None, args);
 }
 
 unsafe extern "system" fn call_object_a(
@@ -402,14 +413,40 @@ fn invoke_a(
     }
 }
 
-fn invoke(method: jni::jmethodID, receiver: Option<crate::ObjectId>) -> Option<JniValue> {
+fn invoke(
+    method: jni::jmethodID,
+    receiver: Option<crate::ObjectId>,
+    raw_args: jni::va_list,
+) -> Option<JniValue> {
     let Some(vm) = vm() else { return None };
     let method = MethodId(method as usize as u64);
-    let arguments = vm
-        .method_descriptor(method)?
+    let descriptor = vm.method_descriptor(method)?;
+    let (class_name, name, signature, _, _) = vm.method_info(method)?;
+    let signature_c = std::ffi::CString::new(signature.as_bytes()).ok()?;
+    let mut raw_arguments = vec![unsafe { std::mem::zeroed::<jni::jvalue>() }; descriptor.parameters.len()];
+    let capacity = i32::try_from(raw_arguments.len()).ok()?;
+    // The platform owns `va_list`'s representation. The native shim copies
+    // and decodes it with the target C ABI so handlers such as ClassLoader's
+    // `loadClass(String)` receive the class name instead of a default null.
+    let status = unsafe {
+        roblox_jni_decode_va_list(
+            signature_c.as_ptr(),
+            raw_args,
+            raw_arguments.as_mut_ptr(),
+            capacity,
+        )
+    };
+    if status != 0 {
+        eprintln!(
+            "[jnivm] could not decode Call*MethodV arguments for {class_name}.{name}{signature} (status {status}); call skipped"
+        );
+        return None;
+    }
+    let arguments = descriptor
         .parameters
         .iter()
-        .map(JniValue::default_for)
+        .zip(raw_arguments)
+        .map(|(ty, raw)| unsafe { from_raw_jvalue(ty, raw) })
         .collect::<Vec<_>>();
     match dispatch_method(vm, method, receiver, &arguments) {
         Ok(value) => Some(value),
@@ -417,6 +454,26 @@ fn invoke(method: jni::jmethodID, receiver: Option<crate::ObjectId>) -> Option<J
             eprintln!("[jnivm] call through unknown JNI method ID: {error}");
             None
         }
+    }
+}
+
+unsafe fn from_raw_jvalue(ty: &crate::Type, value: jni::jvalue) -> JniValue {
+    match ty {
+        crate::Type::Boolean => JniValue::Boolean(unsafe { value.z }),
+        crate::Type::Byte => JniValue::Byte(unsafe { value.b }),
+        crate::Type::Char => JniValue::Char(unsafe { value.c }),
+        crate::Type::Short => JniValue::Short(unsafe { value.s }),
+        crate::Type::Int => JniValue::Int(unsafe { value.i }),
+        crate::Type::Long => JniValue::Long(unsafe { value.j }),
+        crate::Type::Float => JniValue::Float(unsafe { value.f }),
+        crate::Type::Double => JniValue::Double(unsafe { value.d }),
+        crate::Type::Object(_) | crate::Type::Array(_) => {
+            let object = unsafe { value.l };
+            JniValue::Object(
+                (!object.is_null()).then_some(crate::ObjectId(object as usize as u64)),
+            )
+        }
+        crate::Type::Void => JniValue::Void,
     }
 }
 

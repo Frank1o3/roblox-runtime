@@ -721,10 +721,13 @@ fn class_loader_find_class(
         eprintln!("[jnivm] ClassLoader class lookup received a non-string name");
         return JniValue::Object(None);
     };
-    let mut name = String::from_utf16_lossy(&units);
-    name = name.replace('.', "/");
+    let requested = String::from_utf16_lossy(&units);
+    let name = requested.replace('.', "/");
     match vm.find_or_define_class(&name) {
-        Ok(class) => JniValue::Object(Some(crate::ObjectId(class.0))),
+        Ok(class) => {
+            eprintln!("[jnivm] ClassLoader resolved {requested} as {name}");
+            JniValue::Object(Some(crate::ObjectId(class.0)))
+        }
         Err(error) => {
             eprintln!("[jnivm] ClassLoader class lookup failed for {name}: {error}");
             JniValue::Object(None)

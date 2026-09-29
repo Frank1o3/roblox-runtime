@@ -20,6 +20,7 @@ namespace roblox_runtime { jnivm::ENV* process_env(); }
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
+#include <cstdarg>
 #include <exception>
 #include <execinfo.h>
 #include <unistd.h>
@@ -192,6 +193,89 @@ int roblox_jni_init_compat_bridge() {
 /// The current thread's `JNIEnv*`.
 void* roblox_jni_env() {
     return g_vm ? g_vm->GetJNIEnv() : nullptr;
+}
+
+/// Decode JNI's `Call*MethodV` arguments with the host C ABI. Rust can safely
+/// dispatch the resulting `jvalue`s, but `va_list` itself is target-specific
+/// and must be copied and traversed by native code.
+int roblox_jni_decode_va_list(const char* signature, va_list args,
+                              jvalue* output, int capacity) {
+    if (!signature || capacity < 0) return -1;
+    const char* cursor = std::strchr(signature, '(');
+    if (!cursor) return -1;
+    ++cursor;
+    if (*cursor == ')') return 0;
+    if (!args || !output) return -2;
+
+    va_list copied;
+    va_copy(copied, args);
+    int count = 0;
+    while (*cursor && *cursor != ')') {
+        if (count >= capacity) {
+            va_end(copied);
+            return -3;
+        }
+        jvalue value{};
+        const char kind = *cursor++;
+        switch (kind) {
+        case 'Z': case 'B': case 'C': case 'S': case 'I': {
+            // Narrow JNI primitives undergo C's default argument promotion.
+            const jint promoted = va_arg(copied, jint);
+            switch (kind) {
+            case 'Z': value.z = static_cast<jboolean>(promoted); break;
+            case 'B': value.b = static_cast<jbyte>(promoted); break;
+            case 'C': value.c = static_cast<jchar>(promoted); break;
+            case 'S': value.s = static_cast<jshort>(promoted); break;
+            default: value.i = promoted; break;
+            }
+            break;
+        }
+        case 'J':
+            value.j = va_arg(copied, jlong);
+            break;
+        case 'F':
+            // `float` is promoted to `double` in a C variadic call.
+            value.f = static_cast<jfloat>(va_arg(copied, double));
+            break;
+        case 'D':
+            value.d = va_arg(copied, jdouble);
+            break;
+        case 'L': {
+            const char* end = std::strchr(cursor, ';');
+            if (!end) {
+                va_end(copied);
+                return -1;
+            }
+            cursor = end + 1;
+            value.l = va_arg(copied, jobject);
+            break;
+        }
+        case '[':
+            while (*cursor == '[') ++cursor;
+            if (*cursor == 'L') {
+                const char* end = std::strchr(cursor, ';');
+                if (!end) {
+                    va_end(copied);
+                    return -1;
+                }
+                cursor = end + 1;
+            } else if (*cursor && std::strchr("ZBCSIJFD", *cursor)) {
+                ++cursor;
+            } else {
+                va_end(copied);
+                return -1;
+            }
+            value.l = va_arg(copied, jobject);
+            break;
+        default:
+            va_end(copied);
+            return -1;
+        }
+        output[count++] = value;
+    }
+    const bool complete = *cursor == ')';
+    va_end(copied);
+    return complete && count == capacity ? 0 : -1;
 }
 
 /// Does libjnivm have a real C++ hook for this exact Java method?
