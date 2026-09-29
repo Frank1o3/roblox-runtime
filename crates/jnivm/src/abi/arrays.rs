@@ -1,6 +1,122 @@
 // Object-array support used by Java methods that return arrays.
 use crate::ObjectId;
 
+unsafe extern "system" fn new_byte_array(
+    env: *mut jni::JNIEnv,
+    length: jni::jsize,
+) -> jni::jbyteArray {
+    let Some(vm) = vm() else { return ptr::null_mut() };
+    let Some(env) = env_token(vm, env) else { return ptr::null_mut() };
+    if length < 0 {
+        eprintln!("[jnivm] NewByteArray received a negative length");
+        return ptr::null_mut();
+    }
+    let Ok(class) = vm.find_or_define_class("java/lang/Object") else {
+        return ptr::null_mut();
+    };
+    match vm.new_local_object(
+        &env,
+        class,
+        crate::ObjectValue::ByteArray(vec![0; length as usize]),
+    ) {
+        Ok(array) => array.0 as usize as jni::jbyteArray,
+        Err(error) => {
+            eprintln!("[jnivm] NewByteArray failed: {error}");
+            ptr::null_mut()
+        }
+    }
+}
+
+unsafe extern "system" fn get_byte_array_elements(
+    env: *mut jni::JNIEnv,
+    array: jni::jbyteArray,
+    is_copy: *mut jni::jboolean,
+) -> *mut jni::jbyte {
+    let Some(vm) = vm() else { return ptr::null_mut() };
+    let Some(env) = env_token(vm, env) else { return ptr::null_mut() };
+    if array.is_null() {
+        return ptr::null_mut();
+    }
+    if !is_copy.is_null() {
+        unsafe { *is_copy = jni::JNI_FALSE };
+    }
+    match vm.byte_array_elements(&env, ObjectId(array as usize as u64)) {
+        Ok(elements) => elements,
+        Err(error) => {
+            eprintln!("[jnivm] GetByteArrayElements failed: {error}");
+            ptr::null_mut()
+        }
+    }
+}
+
+unsafe extern "system" fn release_byte_array_elements(
+    env: *mut jni::JNIEnv,
+    array: jni::jbyteArray,
+    elements: *mut jni::jbyte,
+    _mode: jni::jint,
+) {
+    let Some(vm) = vm() else { return };
+    let Some(env) = env_token(vm, env) else { return };
+    if array.is_null() || elements.is_null() {
+        return;
+    }
+    // libjnivm exposes the backing allocation directly and its release is a no-op.
+    if vm
+        .byte_array_elements(&env, ObjectId(array as usize as u64))
+        .is_err()
+    {
+        eprintln!("[jnivm] ReleaseByteArrayElements received an invalid array");
+    }
+}
+
+unsafe extern "system" fn get_byte_array_region(
+    env: *mut jni::JNIEnv,
+    array: jni::jbyteArray,
+    start: jni::jsize,
+    length: jni::jsize,
+    buffer: *mut jni::jbyte,
+) {
+    let Some(vm) = vm() else { return };
+    let Some(env) = env_token(vm, env) else { return };
+    if array.is_null() || start < 0 || length < 0 || (length > 0 && buffer.is_null()) {
+        return;
+    }
+    match vm.byte_array_region(&env, ObjectId(array as usize as u64), start as usize, length as usize) {
+        Ok(values) if !values.is_empty() => unsafe {
+            ptr::copy_nonoverlapping(values.as_ptr(), buffer, values.len())
+        },
+        Ok(_) => {},
+        Err(error) => eprintln!("[jnivm] GetByteArrayRegion failed: {error}"),
+    }
+}
+
+unsafe extern "system" fn set_byte_array_region(
+    env: *mut jni::JNIEnv,
+    array: jni::jbyteArray,
+    start: jni::jsize,
+    length: jni::jsize,
+    buffer: *const jni::jbyte,
+) {
+    let Some(vm) = vm() else { return };
+    let Some(env) = env_token(vm, env) else { return };
+    if array.is_null() || start < 0 || length < 0 || (length > 0 && buffer.is_null()) {
+        return;
+    }
+    let values = if length == 0 {
+        &[]
+    } else {
+        unsafe { std::slice::from_raw_parts(buffer, length as usize) }
+    };
+    if let Err(error) = vm.set_byte_array_region(
+        &env,
+        ObjectId(array as usize as u64),
+        start as usize,
+        values,
+    ) {
+        eprintln!("[jnivm] SetByteArrayRegion failed: {error}");
+    }
+}
+
 unsafe extern "system" fn new_object_array(
     env: *mut jni::JNIEnv,
     length: jni::jsize,

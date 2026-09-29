@@ -165,12 +165,30 @@ capacity, matching `native/init_params.cpp`.
 The next experimental run built from the nested submodule and passed that
 crash point. It logged `flags loaded (1339695 bytes)`, then reached the app
 ready callbacks for `PlatformAccountRouter`, `Startup`, `Landing`, and `Login`.
-This verifies progress through startup and the login screen, not that joining
-an experience works. The trace still contains a `NewGlobalRef` failure for an
-untracked object and placeholder system-theme methods. It also logs
-`ZSTD_trace_compress_begin`; the earlier `ZSTD_trace_decompress_begin` line
-preceded the direct-buffer call, and the core dump identified the null JNI slot
-as the actual crash site.
+That run later crashed on a second null table entry: core disassembly showed
+JNI offset `0x580`, `NewByteArray`. C++ libjnivm's `internal/array.cpp` creates
+zeroed storage, returns the backing array directly with `isCopy=false`, and
+does not copy or free it on release. Rust now implements that behavior and
+byte-array region access using stable per-object storage.
+
+A third run passed both null-table crashes, reached `Home` and `experience
+start`, and reported `game loaded: place 5269129530`. It then crashed in a
+string comparison: the engine read a missing `android/os/Build.MANUFACTURER`
+field as null, called `GetStringUTFChars`, and used the result without checking
+for null. C++ libjnivm explicitly returns an empty C string for a null Java
+string, so Rust now matches that behavior; `GetStringUTFLength` already
+returned zero for null. A fourth run continued past that point, reported the
+same place ID, captured the cursor, and remained running during observation.
+This is evidence that the Rust VM loaded an experience in this run.
+
+Remaining log gaps include the unknown-object `NewGlobalRef` warning, null
+defaults for unimplemented `android/os/Build` string fields, and unresolved
+`NativeQuoteInterface.requestResponse([B)[B`. They did not stop the observed
+run from reporting the loaded place. The system-theme methods also lack a C++
+handler and currently return JNI defaults; behavior beyond the observed path is
+not established. The `ZSTD_trace_decompress_begin` and
+`ZSTD_trace_compress_begin` stub lines appear in the same successful run and
+were not the source of the diagnosed crashes.
 
 The latest startup run reached app initialization, then the APK requested the
 Kotlin singleton field

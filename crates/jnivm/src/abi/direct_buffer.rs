@@ -44,7 +44,7 @@ unsafe extern "system" fn get_direct_buffer_address(
         return ptr::null_mut();
     };
     match vm.object_value(&env, crate::ObjectId(object as usize as u64)) {
-        Ok(crate::ObjectValue::DirectByteBuffer { address, .. }) => *address as *mut c_void,
+        Ok(crate::ObjectValue::DirectByteBuffer { address, .. }) => address as *mut c_void,
         _ => ptr::null_mut(),
     }
 }
@@ -63,7 +63,7 @@ unsafe extern "system" fn get_direct_buffer_capacity(
         return -1;
     };
     match vm.object_value(&env, crate::ObjectId(object as usize as u64)) {
-        Ok(crate::ObjectValue::DirectByteBuffer { capacity, .. }) => *capacity,
+        Ok(crate::ObjectValue::DirectByteBuffer { capacity, .. }) => capacity,
         _ => -1,
     }
 }

@@ -123,6 +123,11 @@ fn env_table() -> *const jni::JNINativeInterface_ {
         slots.NewObjectV = new_object_v;
         slots.NewObjectA = new_object_a;
         slots.GetArrayLength = get_array_length;
+        slots.NewByteArray = new_byte_array;
+        slots.GetByteArrayElements = get_byte_array_elements;
+        slots.ReleaseByteArrayElements = release_byte_array_elements;
+        slots.GetByteArrayRegion = get_byte_array_region;
+        slots.SetByteArrayRegion = set_byte_array_region;
         slots.NewDirectByteBuffer = new_direct_byte_buffer;
         slots.GetDirectBufferAddress = get_direct_buffer_address;
         slots.GetDirectBufferCapacity = get_direct_buffer_capacity;

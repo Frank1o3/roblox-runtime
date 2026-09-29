@@ -680,6 +680,82 @@ impl Vm {
         Ok(record.value.clone())
     }
 
+    /// Return the stable backing allocation for JNI's direct byte-array
+    /// element access. ByteArray values are created at their final length and
+    /// are never resized, so the pointer remains valid until the object ref is
+    /// deleted or its owning thread detaches.
+    pub fn byte_array_elements(
+        &self,
+        env: &ThreadEnv,
+        array: ObjectId,
+    ) -> Result<*mut i8, JniError> {
+        self.check_env(env)?;
+        let mut state = self.state.write().unwrap_or_else(|p| p.into_inner());
+        let is_global = state
+            .objects
+            .get(&array)
+            .ok_or(JniError::UnknownReference)?
+            .global;
+        if !is_global
+            && !state.locals.get(&env.owner).is_some_and(|locals| locals.contains(&array))
+        {
+            return Err(JniError::ReferenceNotLocal);
+        }
+        let record = state.objects.get_mut(&array).ok_or(JniError::UnknownReference)?;
+        match &mut record.value {
+            ObjectValue::ByteArray(values) => Ok(values.as_mut_ptr()),
+            _ => Err(JniError::UnknownReference),
+        }
+    }
+
+    pub fn byte_array_region(
+        &self,
+        env: &ThreadEnv,
+        array: ObjectId,
+        start: usize,
+        length: usize,
+    ) -> Result<Vec<i8>, JniError> {
+        let ObjectValue::ByteArray(values) = self.object_value(env, array)? else {
+            return Err(JniError::UnknownReference);
+        };
+        let end = start.checked_add(length).ok_or(JniError::UnknownReference)?;
+        values
+            .get(start..end)
+            .map(<[i8]>::to_vec)
+            .ok_or(JniError::UnknownReference)
+    }
+
+    pub fn set_byte_array_region(
+        &self,
+        env: &ThreadEnv,
+        array: ObjectId,
+        start: usize,
+        values: &[i8],
+    ) -> Result<(), JniError> {
+        self.check_env(env)?;
+        let mut state = self.state.write().unwrap_or_else(|p| p.into_inner());
+        let is_global = state
+            .objects
+            .get(&array)
+            .ok_or(JniError::UnknownReference)?
+            .global;
+        if !is_global
+            && !state.locals.get(&env.owner).is_some_and(|locals| locals.contains(&array))
+        {
+            return Err(JniError::ReferenceNotLocal);
+        }
+        let record = state.objects.get_mut(&array).ok_or(JniError::UnknownReference)?;
+        let ObjectValue::ByteArray(elements) = &mut record.value else {
+            return Err(JniError::UnknownReference);
+        };
+        let end = start.checked_add(values.len()).ok_or(JniError::UnknownReference)?;
+        let target = elements
+            .get_mut(start..end)
+            .ok_or(JniError::UnknownReference)?;
+        target.copy_from_slice(values);
+        Ok(())
+    }
+
     pub fn object_class_name(&self, object: u64) -> Option<String> {
         let state = self.state.read().unwrap_or_else(|p| p.into_inner());
         let record = state.objects.get(&ObjectId(object))?;
