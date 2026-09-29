@@ -268,6 +268,8 @@ impl RuntimeConfig {
                 .map_err(|error| LoadError::Linker(error.to_string()))?;
         }
         let library_path = self.native_lib_dir.join("libroblox.so");
+        let exported_symbols = roblox_linker::elf::exported_symbols(&library_path)
+            .map_err(|error| LoadError::Config(ConfigError::ElfInspection(error.to_string())))?;
         let library_name = library_path
             .to_str()
             .ok_or(LoadError::NonUtf8Path("libroblox.so"))?;
@@ -277,6 +279,7 @@ impl RuntimeConfig {
         let library = load_result.map_err(|error| LoadError::Linker(error.to_string()))?;
         Ok(LoadedEngine {
             library,
+            exported_symbols,
             constructors_pending: true,
             constructors_ready: false,
             vm_initialized: false,
@@ -292,6 +295,7 @@ impl RuntimeConfig {
 #[derive(Debug)]
 pub struct LoadedEngine {
     library: roblox_linker::Library,
+    exported_symbols: std::collections::BTreeMap<String, u64>,
     constructors_pending: bool,
     constructors_ready: bool,
     vm_initialized: bool,
@@ -314,7 +318,12 @@ impl LoadedEngine {
 
     /// Look up an exported engine function by name.
     pub fn symbol(&self, name: &str) -> Option<*mut std::ffi::c_void> {
-        self.library.symbol(name)
+        self.library.symbol(name).or_else(|| {
+            let value = *self.exported_symbols.get(name)?;
+            let address = self.library.base().checked_add(value)?;
+            eprintln!("[runtime] linker dlsym missed exported symbol {name}; using its ELF address");
+            Some(address as *mut std::ffi::c_void)
+        })
     }
 
     /// Run the engine's deferred ELF constructors once the caller has finished
