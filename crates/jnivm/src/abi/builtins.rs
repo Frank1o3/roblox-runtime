@@ -2,6 +2,16 @@
 use std::net::UdpSocket;
 use std::time::Instant;
 
+static STARTUP_BOOTSTRAP: OnceLock<extern "C" fn()> = OnceLock::new();
+
+/// Install the runtime-owned startup callback for the Rust VM's Java-side
+/// `GameActivity.bootstrapTheApp()` hook.
+pub fn set_startup_bootstrap(callback: extern "C" fn()) -> Result<(), &'static str> {
+    STARTUP_BOOTSTRAP
+        .set(callback)
+        .map_err(|_| "Rust JNI startup bootstrap is already installed")
+}
+
 fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
     let class = vm
         .register_class("java/lang/Class")
@@ -321,7 +331,11 @@ fn invalid_bootstrap(
     _receiver: Option<crate::ObjectId>,
     _args: &[JniValue],
 ) -> JniValue {
-    eprintln!("[jnivm] Invalid.bootstrapTheApp has no Rust host bootstrap callback");
+    if let Some(callback) = STARTUP_BOOTSTRAP.get() {
+        callback();
+    } else {
+        eprintln!("[jnivm] Invalid.bootstrapTheApp has no Rust host bootstrap callback");
+    }
     JniValue::Void
 }
 

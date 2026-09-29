@@ -475,6 +475,10 @@ impl LoadedEngine {
                 delivered: AtomicBool::new(false),
             })
             .map_err(|_| JniError::BootstrapAlreadyInstalled)?;
+        if jnivm::selected_from_environment() {
+            jnivm::set_startup_bootstrap(run_startup_bootstrap)
+                .map_err(|_| JniError::BootstrapAlreadyInstalled)?;
+        }
         roblox_jni::game_activity::set_bootstrap(Some(run_startup_bootstrap));
         // This host does not have Android's framework Activity to guarantee
         // that GameActivity.bootstrapTheApp is dispatched before the engine's

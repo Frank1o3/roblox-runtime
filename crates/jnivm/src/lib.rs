@@ -6,7 +6,7 @@ mod abi;
 mod descriptor;
 mod vm;
 
-pub use abi::{call_on_load, create_vm, current_env, vm_exists};
+pub use abi::{call_on_load, create_vm, current_env, set_startup_bootstrap, vm_exists};
 pub use descriptor::{
     DescriptorError, MethodDescriptor, Type, parse_field_descriptor, parse_method_descriptor,
 };

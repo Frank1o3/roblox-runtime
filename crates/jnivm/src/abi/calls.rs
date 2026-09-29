@@ -1,4 +1,78 @@
 // JNI instance and static method call adapters.
+unsafe extern "system" fn alloc_object(
+    env: *mut jni::JNIEnv,
+    class: jni::jclass,
+) -> jni::jobject {
+    let Some(vm) = vm() else {
+        return ptr::null_mut();
+    };
+    let Some(env) = env_token(vm, env) else {
+        return ptr::null_mut();
+    };
+    if class.is_null() {
+        return ptr::null_mut();
+    }
+    let class = ClassId(class as usize as u64);
+    if vm.class_name(class).is_none() {
+        eprintln!("[jnivm] AllocObject received an unknown class");
+        return ptr::null_mut();
+    }
+    match vm.new_local_object(&env, class, crate::ObjectValue::Opaque) {
+        Ok(object) => object.0 as usize as jni::jobject,
+        Err(error) => {
+            eprintln!("[jnivm] AllocObject failed: {error}");
+            ptr::null_mut()
+        }
+    }
+}
+
+unsafe extern "system" fn new_object_a(
+    env: *mut jni::JNIEnv,
+    class: jni::jclass,
+    method: jni::jmethodID,
+    args: *const jni::jvalue,
+) -> jni::jobject {
+    let Some(vm) = vm() else {
+        return ptr::null_mut();
+    };
+    if env_token(vm, env).is_none() || class.is_null() || method.is_null() {
+        return ptr::null_mut();
+    }
+    let class_id = ClassId(class as usize as u64);
+    let method_id = MethodId(method as usize as u64);
+    if vm.class_name(class_id).is_none()
+        || vm.method_descriptor(method_id).is_none()
+    {
+        eprintln!("[jnivm] NewObjectA received an unknown class or constructor");
+        return ptr::null_mut();
+    }
+    let Some(JniValue::Object(Some(object))) = invoke_a(method, None, args) else {
+        return ptr::null_mut();
+    };
+    object.0 as usize as jni::jobject
+}
+
+unsafe extern "system" fn new_object_v(
+    env: *mut jni::JNIEnv,
+    class: jni::jclass,
+    method: jni::jmethodID,
+    _args: jni::va_list,
+) -> jni::jobject {
+    let Some(vm) = vm() else {
+        return ptr::null_mut();
+    };
+    if env_token(vm, env).is_none() || class.is_null() || method.is_null() {
+        return ptr::null_mut();
+    }
+    if vm.class_name(ClassId(class as usize as u64)).is_none() {
+        eprintln!("[jnivm] NewObjectV received an unknown class");
+        return ptr::null_mut();
+    }
+    invoke(method, None)
+        .and_then(object_result)
+        .unwrap_or(ptr::null_mut())
+}
+
 unsafe extern "system" fn call_object_v(
     _env: *mut jni::JNIEnv,
     object: jni::jobject,

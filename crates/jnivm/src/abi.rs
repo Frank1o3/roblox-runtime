@@ -106,6 +106,9 @@ fn env_table() -> *const jni::JNINativeInterface_ {
         slots.GetStringUTFChars = get_string_utf_chars;
         slots.ReleaseStringUTFChars = release_string_utf_chars;
         slots.GetJavaVM = get_java_vm;
+        slots.AllocObject = alloc_object;
+        slots.NewObjectV = new_object_v;
+        slots.NewObjectA = new_object_a;
         slots.GetArrayLength = get_array_length;
         slots.NewObjectArray = new_object_array;
         slots.GetObjectArrayElement = get_object_array_element;
@@ -309,6 +312,24 @@ unsafe fn resolve_method(
     } else {
         ClassId(class as usize as u64)
     };
+    if !is_static && name == "<init>" {
+        let Some(close_paren) = signature.find(')') else {
+            eprintln!("[jnivm] constructor has an invalid method descriptor: {signature}");
+            return ptr::null_mut();
+        };
+        let Some(class_name) = vm.class_name(class) else {
+            eprintln!("[jnivm] constructor lookup used an unknown class ID");
+            return ptr::null_mut();
+        };
+        let factory_signature = format!("{}L{class_name};", &signature[..=close_paren]);
+        return match vm.resolve_method(class, &name, &factory_signature, true) {
+            Ok(method) => method.0 as usize as jni::jmethodID,
+            Err(error) => {
+                eprintln!("[jnivm] constructor factory lookup failed: {error}");
+                ptr::null_mut()
+            }
+        };
+    }
     match vm.resolve_method(class, &name, &signature, is_static) {
         Ok(method) => method.0 as usize as jni::jmethodID,
         Err(error) => {
