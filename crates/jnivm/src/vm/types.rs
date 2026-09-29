@@ -90,6 +90,9 @@ pub enum ObjectValue {
     IntArray(Vec<i32>),
     LongArray(Vec<i64>),
     ObjectArray(Vec<Option<ObjectId>>),
+    /// A `java/nio/ByteBuffer` wrapper over native memory, matching
+    /// libjnivm's `ByteBuffer { void* buffer; jlong capacity; }`.
+    DirectByteBuffer { address: usize, capacity: i64 },
     /// A global object reference owned by the companion C++ libjnivm VM.
     /// This is only used for values returned from the experimental fallback
     /// bridge; Rust code must not dereference the pointer directly.

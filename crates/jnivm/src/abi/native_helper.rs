@@ -18,12 +18,21 @@ fn native_helper_flags_failed(
 }
 
 fn native_helper_flags_loaded(
-    _vm: &Vm,
+    vm: &Vm,
     _receiver: Option<crate::ObjectId>,
-    _args: &[JniValue],
+    args: &[JniValue],
 ) -> JniValue {
-    // The experimental object model does not yet expose ByteBuffer capacity.
-    eprintln!("[roblox] flags loaded callback received");
+    let capacity = match args.first() {
+        Some(JniValue::Object(Some(buffer))) => match vm.object_value(
+            &vm.get_env().unwrap_or_else(|| vm.attach_current_thread()),
+            *buffer,
+        ) {
+            Ok(crate::ObjectValue::DirectByteBuffer { capacity, .. }) => *capacity,
+            _ => -1,
+        },
+        _ => -1,
+    };
+    eprintln!("[roblox] flags loaded ({capacity} bytes)");
     JniValue::Void
 }
 

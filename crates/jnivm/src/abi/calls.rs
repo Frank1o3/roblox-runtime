@@ -633,7 +633,8 @@ fn cpp_reference_for(vm: &Vm, object: crate::ObjectId, class_name: &str) -> Opti
         crate::ObjectValue::ByteArray(_)
         | crate::ObjectValue::IntArray(_)
         | crate::ObjectValue::LongArray(_)
-        | crate::ObjectValue::ObjectArray(_) => {
+        | crate::ObjectValue::ObjectArray(_)
+        | crate::ObjectValue::DirectByteBuffer { .. } => {
             eprintln!("[jnivm:fallback] cannot mirror array reference of class {class_name} into C++ libjnivm");
             0
         }

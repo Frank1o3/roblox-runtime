@@ -45,6 +45,7 @@ include!("abi/flags.rs");
 include!("abi/platform.rs");
 include!("abi/native_helper.rs");
 include!("abi/arrays.rs");
+include!("abi/direct_buffer.rs");
 
 fn env_table() -> *const jni::JNINativeInterface_ {
     *ENV_TABLE.get_or_init(|| {
@@ -122,6 +123,9 @@ fn env_table() -> *const jni::JNINativeInterface_ {
         slots.NewObjectV = new_object_v;
         slots.NewObjectA = new_object_a;
         slots.GetArrayLength = get_array_length;
+        slots.NewDirectByteBuffer = new_direct_byte_buffer;
+        slots.GetDirectBufferAddress = get_direct_buffer_address;
+        slots.GetDirectBufferCapacity = get_direct_buffer_capacity;
         slots.NewObjectArray = new_object_array;
         slots.GetObjectArrayElement = get_object_array_element;
         slots.SetObjectArrayElement = set_object_array_element;
