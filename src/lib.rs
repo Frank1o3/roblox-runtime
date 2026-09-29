@@ -320,8 +320,11 @@ impl LoadedEngine {
     pub fn symbol(&self, name: &str) -> Option<*mut std::ffi::c_void> {
         self.library.symbol(name).or_else(|| {
             let value = *self.exported_symbols.get(name)?;
+            let value = usize::try_from(value).ok()?;
             let address = self.library.base().checked_add(value)?;
-            eprintln!("[runtime] linker dlsym missed exported symbol {name}; using its ELF address");
+            eprintln!(
+                "[runtime] linker dlsym missed exported symbol {name}; using its ELF address"
+            );
             Some(address as *mut std::ffi::c_void)
         })
     }
@@ -621,8 +624,12 @@ impl std::fmt::Display for JniError {
             Self::PreConstructorSetupRequired => {
                 f.write_str("prepare the JavaVM and engine directories before running constructors")
             }
-            Self::VmNotInitialized => f.write_str("create the JavaVM before setting startup directories"),
-            Self::MissingStartupNative(name) => write!(f, "required startup native is not exported: {name}"),
+            Self::VmNotInitialized => {
+                f.write_str("create the JavaVM before setting startup directories")
+            }
+            Self::MissingStartupNative(name) => {
+                write!(f, "required startup native is not exported: {name}")
+            }
             Self::StartupNative(message) => write!(f, "startup directory setter failed: {message}"),
             Self::VmAlreadyExists => f.write_str("a JavaVM already exists in this process"),
             Self::JniNotInitialized => {

@@ -54,13 +54,19 @@ pub fn exported_symbols(path: &Path) -> io::Result<BTreeMap<String, u64>> {
     let mut f = File::open(path)?;
     let ehdr = read_at(&mut f, 0, EHDR_LEN, "the ELF header")?;
     if &ehdr[0..4] != b"\x7fELF" || ehdr[4] != 2 || ehdr[5] != 1 {
-        return Err(bad(format!("{} is not 64-bit little-endian ELF", path.display())));
+        return Err(bad(format!(
+            "{} is not 64-bit little-endian ELF",
+            path.display()
+        )));
     }
     let shoff = u64le(&ehdr, 0x28);
     let shentsize = u16le(&ehdr, 0x3a) as usize;
     let mut shnum = u16le(&ehdr, 0x3c) as u64;
     if shoff == 0 || shentsize != SHDR_LEN {
-        return Err(bad(format!("{} has no usable section table", path.display())));
+        return Err(bad(format!(
+            "{} has no usable section table",
+            path.display()
+        )));
     }
     if shnum == 0 {
         let section_zero = read_at(&mut f, shoff, SHDR_LEN, "section header 0")?;
@@ -69,23 +75,47 @@ pub fn exported_symbols(path: &Path) -> io::Result<BTreeMap<String, u64>> {
     let shdrs = read_at(
         &mut f,
         shoff,
-        (shnum as usize).checked_mul(SHDR_LEN).ok_or_else(|| bad("section table size overflows"))?,
+        (shnum as usize)
+            .checked_mul(SHDR_LEN)
+            .ok_or_else(|| bad("section table size overflows"))?,
         "the section header table",
     )?;
     let mut dynsym = None;
     let mut sections = Vec::with_capacity(shnum as usize);
     for i in 0..shnum as usize {
         let s = &shdrs[i * SHDR_LEN..(i + 1) * SHDR_LEN];
-        let section = (u32le(s, 0x04), u64le(s, 0x18), u64le(s, 0x20), u32le(s, 0x28), u64le(s, 0x38));
-        if section.0 == SHT_DYNSYM { dynsym = Some(section); }
+        let section = (
+            u32le(s, 0x04),
+            u64le(s, 0x18),
+            u64le(s, 0x20),
+            u32le(s, 0x28),
+            u64le(s, 0x38),
+        );
+        if section.0 == SHT_DYNSYM {
+            dynsym = Some(section);
+        }
         sections.push(section);
     }
-    let (kind, off, size, strings_idx, entsize) = dynsym.ok_or_else(|| bad("ELF has no dynamic symbol table"))?;
+    let (kind, off, size, strings_idx, entsize) =
+        dynsym.ok_or_else(|| bad("ELF has no dynamic symbol table"))?;
     let _ = kind;
-    let string_section = *sections.get(strings_idx as usize).ok_or_else(|| bad("dynamic symbol string table index is invalid"))?;
-    if string_section.0 != SHT_STRTAB { return Err(bad("dynamic symbol names do not link to a string table")); }
-    let strings = read_at(&mut f, string_section.1, string_section.2 as usize, "dynamic symbol strings")?;
-    let entry_size = if entsize == 0 { SYM_LEN as u64 } else { entsize };
+    let string_section = *sections
+        .get(strings_idx as usize)
+        .ok_or_else(|| bad("dynamic symbol string table index is invalid"))?;
+    if string_section.0 != SHT_STRTAB {
+        return Err(bad("dynamic symbol names do not link to a string table"));
+    }
+    let strings = read_at(
+        &mut f,
+        string_section.1,
+        string_section.2 as usize,
+        "dynamic symbol strings",
+    )?;
+    let entry_size = if entsize == 0 {
+        SYM_LEN as u64
+    } else {
+        entsize
+    };
     if entry_size != SYM_LEN as u64 || size % entry_size != 0 {
         return Err(bad("dynamic symbol table has an invalid entry size"));
     }
@@ -96,14 +126,22 @@ pub fn exported_symbols(path: &Path) -> io::Result<BTreeMap<String, u64>> {
         let binding = entry[4] >> 4;
         let visibility = entry[5] & 0x03;
         let section_index = u16le(entry, 6);
-        if name_offset == 0 || section_index == SHN_UNDEF || !matches!(binding, 1 | STB_WEAK)
-            || !matches!(visibility, 0 | 3) || name_offset >= strings.len() {
+        if name_offset == 0
+            || section_index == SHN_UNDEF
+            || !matches!(binding, 1 | STB_WEAK)
+            || !matches!(visibility, 0 | 3)
+            || name_offset >= strings.len()
+        {
             continue;
         }
         let tail = &strings[name_offset..];
-        let Some(end) = tail.iter().position(|b| *b == 0) else { continue; };
+        let Some(end) = tail.iter().position(|b| *b == 0) else {
+            continue;
+        };
         let name = String::from_utf8_lossy(&tail[..end]).into_owned();
-        if !name.is_empty() { exports.entry(name).or_insert_with(|| u64le(entry, 8)); }
+        if !name.is_empty() {
+            exports.entry(name).or_insert_with(|| u64le(entry, 8));
+        }
     }
     Ok(exports)
 }
