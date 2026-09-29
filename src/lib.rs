@@ -236,6 +236,7 @@ impl RuntimeConfig {
         }
 
         roblox_linker::init();
+        roblox_abi::bionic::announce_audio_backend();
         roblox_linker::set_library_path(
             self.native_lib_dir
                 .to_str()
@@ -252,6 +253,19 @@ impl RuntimeConfig {
                 roblox_linker::register(name, &symbols)
                     .map_err(|error| LoadError::Linker(error.to_string()))?;
             }
+        }
+        // FMOD reaches AAudio with dlopen("libaaudio.so"), so none of its
+        // exports appear in libroblox.so's DT_NEEDED import table. Register
+        // the virtual library explicitly whenever the FMOD Java bridge will
+        // advertise AAudio support; otherwise FMOD fails System::init with
+        // FMOD_ERR_OUTPUT_INIT before it can try the Java AudioDevice path.
+        if roblox_abi::bionic::aaudio_selected() {
+            let aaudio: Vec<_> = roblox_abi::bionic::aaudio_overrides()
+                .into_iter()
+                .map(|(name, address)| (name.to_owned(), address))
+                .collect();
+            roblox_linker::register("libaaudio.so", &aaudio)
+                .map_err(|error| LoadError::Linker(error.to_string()))?;
         }
         let library_path = self.native_lib_dir.join("libroblox.so");
         let library_name = library_path
