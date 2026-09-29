@@ -161,6 +161,46 @@ impl RuntimeConfig {
             .map_err(ConfigError::AssetExtraction)
     }
 
+    /// Give Roblox its private working directory and install the APK's
+    /// certificate bundle at the relative locations its HTTP stack uses.
+    pub fn prepare_engine_working_directory(
+        &self,
+        asset_root: &Path,
+    ) -> Result<PathBuf, ConfigError> {
+        let run_dir = self.data_dir.join("run");
+        let run_exe = run_dir.join("exe");
+        let files_exe = self.data_dir.join("files/exe");
+        for dir in [&run_exe, &files_exe] {
+            std::fs::create_dir_all(dir).map_err(|error| {
+                ConfigError::DirectorySetup(format!("{}: {error}", dir.display()))
+            })?;
+        }
+
+        let ca_bundle = asset_root.join("ssl/cacert.pem");
+        if !ca_bundle.is_file() {
+            return Err(ConfigError::DirectorySetup(format!(
+                "APK CA bundle is missing: {}",
+                ca_bundle.display()
+            )));
+        }
+        for destination in [run_exe.join("cacert.pem"), files_exe.join("cacert.pem")] {
+            std::fs::copy(&ca_bundle, &destination).map_err(|error| {
+                ConfigError::DirectorySetup(format!("{}: {error}", destination.display()))
+            })?;
+        }
+
+        std::fs::create_dir_all(&run_dir).map_err(|error| {
+            ConfigError::DirectorySetup(format!("{}: {error}", run_dir.display()))
+        })?;
+        let run_dir = std::fs::canonicalize(run_dir).map_err(|error| {
+            ConfigError::DirectorySetup(format!("canonicalize Roblox run directory: {error}"))
+        })?;
+        std::env::set_current_dir(&run_dir).map_err(|error| {
+            ConfigError::DirectorySetup(format!("enter {}: {error}", run_dir.display()))
+        })?;
+        Ok(run_dir)
+    }
+
     /// Check that the client surface and requested renderer are ready before
     /// engine constructors run. Install the client-owned surface first.
     pub fn prepare_graphics(&self) -> Result<graphics::Backend, graphics::BackendUnavailable> {
@@ -277,9 +317,9 @@ impl LoadedEngine {
         Ok(())
     }
 
-    /// Create the JavaVM, prepare the engine-owned storage directories, and
-    /// deliver the four directory setters which `RbxStorage` reads from ELF
-    /// constructors. This must run before [`Self::run_constructors`].
+    /// Create the JavaVM and prepare the engine-owned storage directories.
+    /// This must run before [`Self::run_constructors`]. Directory setters are
+    /// delivered later, after constructors and before native app startup.
     #[allow(unsafe_code)]
     pub fn prepare_before_constructors(&mut self) -> Result<(), JniError> {
         if !self.constructors_pending {
@@ -307,6 +347,20 @@ impl LoadedEngine {
             roblox_jni::jni::create_vm().ok_or(JniError::VmAlreadyExists)?;
             self.vm_initialized = true;
         }
+        self.constructors_ready = true;
+        Ok(())
+    }
+
+    /// Deliver Android storage paths in the startup window Cordial measured:
+    /// after ELF constructors, before GameActivity initializes native app code.
+    #[allow(unsafe_code)]
+    pub fn prepare_startup_directories(&self) -> Result<(), JniError> {
+        if self.constructors_pending {
+            return Err(JniError::ConstructorsDeferred);
+        }
+        if !self.vm_initialized {
+            return Err(JniError::VmNotInitialized);
+        }
         const SETTINGS_CLASS: &str = "com/roblox/engine/jni/NativeSettingsInterface";
         let files = self.files_dir.to_string_lossy().into_owned();
         let cache = self.cache_dir.to_string_lossy().into_owned();
@@ -332,15 +386,14 @@ impl LoadedEngine {
         for (name, args) in setters {
             let native = self
                 .symbol(name)
-                .ok_or(JniError::MissingPreConstructorNative(name))?;
-            // SAFETY: this export belongs to the mapped engine and the VM above
-            // is live. The JNI shim supplies its current JNIEnv.
+                .ok_or(JniError::MissingStartupNative(name))?;
+            // SAFETY: constructors have run, the VM is live, and this export
+            // belongs to the engine mapped for this RuntimeConfig.
             unsafe {
                 roblox_jni::game_activity::call_static_strings(native, SETTINGS_CLASS, &args)
             }
-            .map_err(|error| JniError::PreConstructorNative(format!("{name}: {error}")))?;
+            .map_err(|error| JniError::StartupNative(format!("{name}: {error}")))?;
         }
-        self.constructors_ready = true;
         Ok(())
     }
 
@@ -517,6 +570,8 @@ pub enum JniError {
     ConstructorsDeferred,
     ConstructorsAlreadyRun,
     PreConstructorSetupRequired,
+    VmNotInitialized,
+    MissingStartupNative(&'static str),
     VmAlreadyExists,
     JniNotInitialized,
     MissingOnLoad,
@@ -542,6 +597,8 @@ impl std::fmt::Display for JniError {
             Self::PreConstructorSetupRequired => {
                 f.write_str("prepare the JavaVM and engine directories before running constructors")
             }
+            Self::VmNotInitialized => f.write_str("create the JavaVM before setting startup directories"),
+            Self::MissingStartupNative(name) => write!(f, "required startup native is not exported: {name}"),
             Self::VmAlreadyExists => f.write_str("a JavaVM already exists in this process"),
             Self::JniNotInitialized => {
                 f.write_str("complete JNI_OnLoad before GameActivity initialization")
