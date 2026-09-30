@@ -14,7 +14,6 @@
 
 #![allow(unsafe_code)]
 
-use std::collections::HashMap;
 use std::ffi::{CStr, CString, c_char, c_int, c_void};
 use std::sync::{Mutex, OnceLock};
 
@@ -44,7 +43,6 @@ struct OpenWindowKeys {
 static EVENT: OnceLock<Mutex<Option<WebViewEvent>>> = OnceLock::new();
 static OPEN_WINDOW_KEYS: OnceLock<OpenWindowKeys> = OnceLock::new();
 type MessageSink = extern "C" fn(*const c_char);
-static RUST_SINKS: OnceLock<Mutex<HashMap<u64, MessageSink>>> = OnceLock::new();
 
 fn event_slot() -> &'static Mutex<Option<WebViewEvent>> {
     EVENT.get_or_init(|| Mutex::new(None))
@@ -158,13 +156,12 @@ pub fn arm(engine: &crate::LoadedEngine) {
             return;
         }
     };
-    let subscribe_result = if jnivm::selected_from_environment() {
-        eprintln!("[runtime-webview] using RustVM-owned MessageBus callback objects");
-        subscribe_raw_rust(subscribe, &open_bus_id, on_open_window)
-    } else {
-        eprintln!("[runtime-webview] using libjnivm MessageBus callback objects");
-        subscribe_raw(subscribe, &open_bus_id, on_open_window)
-    };
+    // `doSubscribeRaw` is handled by the C++ JNI compatibility bridge when
+    // the Rust VM is selected. A callback allocated in the Rust VM would be
+    // mirrored into a different C++ object there, so its Rust object ID would
+    // not match the receiver ID when the message bus invokes `run`. Keep the
+    // callback and sink together in the C++ helper in both VM modes.
+    let subscribe_result = subscribe_raw(subscribe, &open_bus_id, on_open_window);
     if let Err(error) = subscribe_result {
         eprintln!("[runtime-webview] could not subscribe to WebView.openWindow: {error}");
         return;
@@ -181,11 +178,7 @@ pub fn arm(engine: &crate::LoadedEngine) {
                 &close_id,
             )
         } {
-            Ok(id) if !id.is_empty() => match if jnivm::selected_from_environment() {
-                subscribe_raw_rust(subscribe, &id, on_close_window)
-            } else {
-                subscribe_raw(subscribe, &id, on_close_window)
-            } {
+            Ok(id) if !id.is_empty() => match subscribe_raw(subscribe, &id, on_close_window) {
                 Ok(()) => eprintln!("[runtime-webview] subscribed to {protocol}.{close_id} ({id})"),
                 Err(error) => eprintln!(
                     "[runtime-webview] could not subscribe to WebView.closeWindow: {error}"
@@ -209,80 +202,6 @@ unsafe extern "C" {
         error: *mut c_char,
         error_len: usize,
     ) -> c_int;
-}
-
-fn subscribe_raw_rust(
-    native: *mut c_void,
-    message_id: &str,
-    sink: MessageSink,
-) -> Result<(), String> {
-    const RAW_CALLBACK: &str = "com/roblox/universalapp/messagebus/RawCallback";
-    jnivm::register_method_handler(
-        RAW_CALLBACK,
-        "run",
-        "(Ljava/lang/String;)V",
-        raw_callback_run,
-    )?;
-    let env = jnivm::current_env().ok_or("Rust JavaVM is not available")?;
-    let class = jnivm::class_ref(MESSAGE_BUS)?;
-    let message_id_ref = jnivm::new_string_ref(message_id)?;
-    let callback = jnivm::new_opaque_object(RAW_CALLBACK)?;
-    let callback_id = callback as usize as u64;
-    RUST_SINKS
-        .get_or_init(|| Mutex::new(HashMap::new()))
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-        .insert(callback_id, sink);
-
-    type Subscribe = unsafe extern "system" fn(
-        *mut c_void,
-        *mut c_void,
-        *mut c_void,
-        *mut c_void,
-        u8,
-    ) -> *mut c_void;
-    // SAFETY: `native` is the loaded engine's static JNI doSubscribeRaw
-    // export. These class, String and callback references were all allocated
-    // by the active Rust VM and are passed with that VM's JNIEnv.
-    let subscribe: Subscribe = unsafe { std::mem::transmute(native) };
-    let connection = unsafe { subscribe(env, class, message_id_ref, callback, 0) };
-    if connection.is_null() {
-        Err("doSubscribeRaw returned null".into())
-    } else {
-        Ok(())
-    }
-}
-
-fn raw_callback_run(
-    _vm: &jnivm::Vm,
-    receiver: Option<jnivm::ObjectId>,
-    args: &[jnivm::JniValue],
-) -> jnivm::JniValue {
-    let Some(receiver) = receiver else {
-        eprintln!("[runtime-webview] MessageBus callback has no receiver");
-        return jnivm::JniValue::Void;
-    };
-    let Some(jnivm::JniValue::Object(Some(payload))) = args.first() else {
-        eprintln!("[runtime-webview] MessageBus callback has no payload");
-        return jnivm::JniValue::Void;
-    };
-    let Ok(payload) = jnivm::string_object(*payload) else {
-        eprintln!("[runtime-webview] MessageBus callback payload is not a Rust VM String");
-        return jnivm::JniValue::Void;
-    };
-    let Some(sink) = RUST_SINKS
-        .get()
-        .and_then(|sinks| sinks.lock().ok()?.get(&receiver.raw()).copied())
-    else {
-        eprintln!("[runtime-webview] MessageBus callback has no registered sink");
-        return jnivm::JniValue::Void;
-    };
-    let Ok(payload) = CString::new(payload) else {
-        eprintln!("[runtime-webview] MessageBus callback payload contains NUL");
-        return jnivm::JniValue::Void;
-    };
-    sink(payload.as_ptr());
-    jnivm::JniValue::Void
 }
 
 fn subscribe_raw(native: *mut c_void, message_id: &str, sink: MessageSink) -> Result<(), String> {
