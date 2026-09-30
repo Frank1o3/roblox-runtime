@@ -480,6 +480,22 @@ void* roblox_jni_fallback_new_string(const uint16_t* chars, int length) {
     }
 }
 
+/// Compare JNI handles by Java object identity; local and global handles for
+/// the same object need not have the same address.
+int roblox_jni_fallback_same_object(void* left, void* right) {
+    try {
+        if (!g_vm) return -1;
+        auto* env = roblox_runtime::process_env();
+        if (!env) return -1;
+        return env->GetJNIEnv()->IsSameObject(static_cast<jobject>(left),
+                                               static_cast<jobject>(right))
+                   ? 1
+                   : 0;
+    } catch (...) {
+        return -1;
+    }
+}
+
 /// Promote a reference owned by the companion libjnivm VM and return its
 /// Java class name. This is used when the Rust JNI table receives an object
 /// created by runtime-owned C++ compatibility code.

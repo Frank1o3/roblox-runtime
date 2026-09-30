@@ -30,6 +30,7 @@ unsafe extern "C" {
         global_reference: *mut *mut c_void,
     ) -> i32;
     fn roblox_jni_fallback_release_ref(object: *mut c_void);
+    fn roblox_jni_fallback_same_object(left: *mut c_void, right: *mut c_void) -> i32;
     fn roblox_jni_fallback_register_native(
         class_name: *const c_char,
         name: *const c_char,
@@ -221,6 +222,39 @@ pub fn new_opaque_object(class_name: &str) -> Result<*mut c_void, String> {
         .new_local_object(&env, class, crate::ObjectValue::Opaque)
         .map_err(|error| error.to_string())?;
     Ok(object.0 as usize as *mut c_void)
+}
+
+/// Return the companion C++ VM reference used when this Rust VM object is
+/// passed through JNI fallback. Callers that correlate a Rust object with a
+/// callback invoked through the fallback bridge can register both identities.
+pub fn cpp_fallback_reference(object: *mut c_void) -> Result<*mut c_void, String> {
+    if object.is_null() {
+        return Err("cannot mirror a null Rust VM object".into());
+    }
+    let vm = vm().ok_or("Rust JavaVM has not been created")?;
+    let id = crate::ObjectId(object as usize as u64);
+    let class_name = vm
+        .object_class_name(id.raw())
+        .ok_or("Rust VM object has no class")?;
+    let reference = cpp_reference_for(vm, id, &class_name)
+        .ok_or_else(|| format!("could not mirror Rust VM object of class {class_name}"))?;
+    Ok(reference as *mut c_void)
+}
+
+/// Compare two handles owned by the companion C++ JNI VM using Java object
+/// identity. This is needed when one object has both local and global JNI
+/// handles, whose pointer values are allowed to differ.
+pub fn cpp_fallback_same_object(left: *mut c_void, right: *mut c_void) -> Option<bool> {
+    if left.is_null() || right.is_null() {
+        return Some(left.is_null() && right.is_null());
+    }
+    // SAFETY: the bridge validates both handles through the companion VM's
+    // JNI IsSameObject implementation and returns -1 if it cannot compare.
+    match unsafe { roblox_jni_fallback_same_object(left, right) } {
+        0 => Some(false),
+        1 => Some(true),
+        _ => None,
+    }
 }
 
 /// Return a class reference from the Rust VM, creating the class placeholder
@@ -860,7 +894,54 @@ unsafe extern "system" fn is_same_object(
     left: jni::jobject,
     right: jni::jobject,
 ) -> jni::jboolean {
-    (left == right) as jni::jboolean
+    if left == right {
+        return jni::JNI_TRUE;
+    }
+    if left.is_null() || right.is_null() {
+        return jni::JNI_FALSE;
+    }
+    let Some(vm) = vm() else {
+        return jni::JNI_FALSE;
+    };
+    let left_raw = left as usize as u64;
+    let right_raw = right as usize as u64;
+    let left_is_class = vm.class_name(ClassId(left_raw)).is_some();
+    let right_is_class = vm.class_name(ClassId(right_raw)).is_some();
+    if left_is_class || right_is_class {
+        // Class handles are Rust VM IDs, not JNI object references accepted by
+        // the companion C++ VM.
+        return (left_is_class && right_is_class && left_raw == right_raw) as jni::jboolean;
+    }
+    let env = vm.get_env().unwrap_or_else(|| vm.attach_current_thread());
+    let left_id = crate::ObjectId(left_raw);
+    let right_id = crate::ObjectId(right_raw);
+    let left_value = vm.object_value(&env, left_id).ok();
+    let right_value = vm.object_value(&env, right_id).ok();
+
+    match (left_value, right_value) {
+        (Some(ObjectValue::CppObject(left_ref)), Some(ObjectValue::CppObject(right_ref))) => {
+            cpp_references_are_same(left_ref, right_ref)
+        }
+        (Some(_), Some(_)) => false,
+        // A reference unknown to Rust may be a local C++ JNI handle for an
+        // object whose global handle is stored as ObjectValue::CppObject.
+        (Some(ObjectValue::CppObject(reference)), None) => {
+            cpp_references_are_same(reference, right as usize)
+        }
+        (None, Some(ObjectValue::CppObject(reference))) => {
+            cpp_references_are_same(left as usize, reference)
+        }
+        // Unknown references are not automatically safe to pass to the
+        // companion VM. They can be stale handles or Rust class IDs.
+        (None, None) => false,
+        (Some(_), None) | (None, Some(_)) => false,
+    }
+    .then_some(jni::JNI_TRUE)
+    .unwrap_or(jni::JNI_FALSE)
+}
+
+fn cpp_references_are_same(left: usize, right: usize) -> bool {
+    cpp_fallback_same_object(left as *mut c_void, right as *mut c_void).unwrap_or(false)
 }
 
 unsafe extern "system" fn exception_check(_env: *mut jni::JNIEnv) -> jni::jboolean {
