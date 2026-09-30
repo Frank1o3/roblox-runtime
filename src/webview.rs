@@ -79,6 +79,7 @@ pub extern "C" fn roblox_runtime_webview_open(url: *const c_char, title: *const 
     *request_slot()
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(WebViewRequest { url, title });
+    eprintln!("[roblox] web view request queued for the host UI");
 }
 
 // Keep the C entry point in the final Rust library even when the host only

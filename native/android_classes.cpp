@@ -942,6 +942,7 @@ public:
             fprintf(stderr, "[roblox] web view request missing URL or title\n");
             return;
         }
+        fprintf(stderr, "[roblox] NativeGLJavaInterface.openNativeOverlay called\n");
         roblox_runtime_webview_open(url->c_str(), title->c_str());
     }
 
