@@ -83,6 +83,7 @@ pub fn install_surface(surface: HostSurface) {
 pub fn clear_surface() {
     roblox_graphics_vulkan::set_surface(None);
     roblox_android::native_window::clear();
+    crate::webview::clear_pending_request();
 }
 
 /// Update the installed client surface after its host window is resized.
