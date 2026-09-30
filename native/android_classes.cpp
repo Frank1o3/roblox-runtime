@@ -1028,15 +1028,13 @@ public:
     /// `NativeGLInterface.setWebviewUserAgent(String)`, which `libroblox.so`
     /// exports.
     ///
-    /// Deliberately unanswered. The truthful answer is the user agent of the web
-    /// view that will show the page, and there is no web view, so any string put
-    /// here would be a claim about a browser that does not exist — telling the
-    /// engine one thing and Roblox's servers another the moment one does. The
-    /// engine carries on with the agent `InitParams.userAgent` already gave it.
+    /// The host web view now exists, but its UI-thread user agent has not yet
+    /// been routed back through `setWebviewUserAgent`. Keep the engine's
+    /// existing `InitParams.userAgent` fallback until that handoff is wired.
     static void getWebViewUserAgent(ENV*, Class*) {
         fprintf(stderr,
-                "[roblox] web view user agent requested; unanswered, because "
-                "there is no web view to ask (see docs/analysis/webview-surface.md)\n");
+                "[roblox] web view user agent requested; host response is not "
+                "wired yet, using InitParams.userAgent fallback\n");
     }
 
     static void Register(ENV* env) {
