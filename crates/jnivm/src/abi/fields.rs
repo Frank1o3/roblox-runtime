@@ -45,7 +45,7 @@ fn read_game_text_input_state(
     field: crate::FieldId,
     receiver: Option<crate::ObjectId>,
 ) -> Option<JniValue> {
-    let Some(receiver) = receiver else { return None };
+    let Some(_receiver) = receiver else { return None };
     let (class_name, name, descriptor, is_static) = vm.field_info(field)?;
     if class_name != "com/google/androidgamesdk/gametextinput/State" || is_static {
         return None;
