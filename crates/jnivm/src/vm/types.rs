@@ -11,6 +11,13 @@ pub struct FieldId(pub(crate) u64);
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct ObjectId(pub(crate) u64);
 
+impl ObjectId {
+    /// The stable opaque JNI handle value used by this VM's function table.
+    pub fn raw(self) -> u64 {
+        self.0
+    }
+}
+
 /// An attached thread's environment token. The eventual JNI ABI adapter maps
 /// this token to the stable `JNIEnv*` table for that thread.
 #[derive(Clone, Debug, PartialEq, Eq)]

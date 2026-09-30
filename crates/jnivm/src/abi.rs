@@ -223,6 +223,47 @@ pub fn new_opaque_object(class_name: &str) -> Result<*mut c_void, String> {
     Ok(object.0 as usize as *mut c_void)
 }
 
+/// Return a class reference from the Rust VM, creating the class placeholder
+/// when the Android class is supplied by the loaded client.
+pub fn class_ref(class_name: &str) -> Result<*mut c_void, String> {
+    let vm = vm().ok_or("Rust JavaVM has not been created")?;
+    let class = vm
+        .find_or_define_class(class_name)
+        .map_err(|error| error.to_string())?;
+    Ok(class.0 as usize as *mut c_void)
+}
+
+/// Install a Rust implementation for an instance method on a client class.
+pub fn register_method_handler(
+    class_name: &str,
+    name: &str,
+    descriptor: &str,
+    handler: crate::MethodHandler,
+) -> Result<(), String> {
+    let vm = vm().ok_or("Rust JavaVM has not been created")?;
+    let class = vm
+        .find_or_define_class(class_name)
+        .map_err(|error| error.to_string())?;
+    let method = vm
+        .register_method(class, name, descriptor, false)
+        .map_err(|error| error.to_string())?;
+    vm.install_method_handler(method, handler)
+        .map_err(|error| error.to_string())
+}
+
+/// Read a Rust VM string object supplied to a Rust method handler.
+pub fn string_object(object: crate::ObjectId) -> Result<String, String> {
+    let vm = vm().ok_or("Rust JavaVM has not been created")?;
+    let env = vm.get_env().unwrap_or_else(|| vm.attach_current_thread());
+    match vm
+        .object_value(&env, object)
+        .map_err(|error| error.to_string())?
+    {
+        crate::ObjectValue::String(value) => Ok(String::from_utf16_lossy(&value)),
+        _ => Err("JNI object is not a String".into()),
+    }
+}
+
 /// Allocate a Java string in the Rust VM for a native entry point.
 pub fn new_string_ref(value: &str) -> Result<*mut c_void, String> {
     let vm = vm().ok_or("Rust JavaVM has not been created")?;
