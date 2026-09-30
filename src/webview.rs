@@ -84,4 +84,5 @@ pub extern "C" fn roblox_runtime_webview_open(url: *const c_char, title: *const 
 // Keep the C entry point in the final Rust library even when the host only
 // consumes requests through `take_request`.
 #[used]
-static WEBVIEW_OPEN_ENTRY: extern "C" fn(*const c_char, *const c_char) = roblox_runtime_webview_open;
+static WEBVIEW_OPEN_ENTRY: extern "C" fn(*const c_char, *const c_char) =
+    roblox_runtime_webview_open;

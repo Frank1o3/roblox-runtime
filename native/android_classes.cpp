@@ -933,18 +933,6 @@ public:
     // from this JNI callback would be unsafe because Roblox calls it from
     // engine-owned threads.
 
-    /// Urls on this boundary can carry a single-use authentication ticket in
-    /// their query string, and the session's own `.ROBLOSECURITY` travels the
-    /// adjacent cookie path. Diagnostics print scheme, host and path and stop
-    /// there; a truncation would still leak the front of a token.
-    static std::string url_without_query(const std::string& url) {
-        auto cut = url.find_first_of("?#");
-        if (cut == std::string::npos) return url;
-        std::string out = url.substr(0, cut);
-        out += (url[cut] == '?') ? "?<query elided>" : "#<fragment elided>";
-        return out;
-    }
-
     /// The engine asking the host to put a web page on screen: url, title.
     /// Corresponds to `BrowserService::openNativeOverlay` on the engine side,
     /// which logs the same two arguments as `openWebView_`.
