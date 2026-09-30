@@ -1,4 +1,10 @@
 // JNI field accessors share one typed store keyed by field ID and receiver.
+unsafe extern "C" {
+    fn roblox_ime_state_text(output: *mut std::ffi::c_char, capacity: i32) -> i32;
+    fn roblox_ime_state_selection(start: *mut i32, end: *mut i32);
+    fn roblox_ime_state_composition(start: *mut i32, end: *mut i32);
+}
+
 fn field_receiver(object: jni::jobject) -> Option<crate::ObjectId> {
     (!object.is_null()).then_some(crate::ObjectId(object as usize as u64))
 }
@@ -6,6 +12,9 @@ fn field_receiver(object: jni::jobject) -> Option<crate::ObjectId> {
 fn read_field(field: jni::jfieldID, receiver: Option<crate::ObjectId>) -> Option<JniValue> {
     let Some(vm) = vm() else { return None };
     let field = crate::FieldId(field as usize as u64);
+    if let Some(value) = read_game_text_input_state(vm, field, receiver) {
+        return Some(value);
+    }
     if vm.field_value_is_set(field, receiver) {
         return match vm.field_value(field, receiver) {
             Ok(value) => Some(value),
@@ -24,6 +33,66 @@ fn read_field(field: jni::jfieldID, receiver: Option<crate::ObjectId>) -> Option
         );
     }
     vm.field_value(field, receiver).ok()
+}
+
+/// `GameTextInput.State` is created by the companion VM, so its `jobject`
+/// cannot be read from the Rust VM's per-object field table. The companion
+/// `InputConnection.setState` hook already copies the complete state into the
+/// runtime's shared IME snapshot; expose that snapshot through Rust's JNI
+/// field table instead of making repeated, unsuccessful C++ field lookups.
+fn read_game_text_input_state(
+    vm: &Vm,
+    field: crate::FieldId,
+    receiver: Option<crate::ObjectId>,
+) -> Option<JniValue> {
+    let Some(receiver) = receiver else { return None };
+    let (class_name, name, descriptor, is_static) = vm.field_info(field)?;
+    if class_name != "com/google/androidgamesdk/gametextinput/State" || is_static {
+        return None;
+    }
+
+    let value = match name.as_str() {
+        "text" if descriptor == "Ljava/lang/String;" => {
+            let mut bytes = vec![0i8; 4096];
+            // SAFETY: `bytes` has the advertised writable capacity.
+            let length = unsafe { roblox_ime_state_text(bytes.as_mut_ptr(), bytes.len() as i32) };
+            if length < 0 {
+                return Some(JniValue::Object(None));
+            }
+            let raw = bytes[..(length as usize).min(bytes.len().saturating_sub(1))]
+                .iter()
+                .map(|byte| *byte as u8)
+                .collect::<Vec<_>>();
+            let text = String::from_utf8_lossy(&raw);
+            let env = vm.get_env().unwrap_or_else(|| vm.attach_current_thread());
+            let class = vm.find_or_define_class("java/lang/String").ok()?;
+            let object = vm
+                .new_local_object(
+                    &env,
+                    class,
+                    crate::ObjectValue::String(text.encode_utf16().collect()),
+                )
+                .ok()?;
+            JniValue::Object(Some(object))
+        }
+        "selectionStart" | "selectionEnd"
+            if descriptor == "I" =>
+        {
+            let (mut start, mut end) = (0, 0);
+            // SAFETY: both out-parameters are valid for this synchronous call.
+            unsafe { roblox_ime_state_selection(&mut start, &mut end) };
+            JniValue::Int(if name == "selectionStart" { start } else { end })
+        }
+        "composingRegionStart" | "composingRegionEnd" if descriptor == "I" => {
+            let (mut start, mut end) = (-1, -1);
+            // SAFETY: both out-parameters are valid for this synchronous call.
+            unsafe { roblox_ime_state_composition(&mut start, &mut end) };
+            JniValue::Int(if name == "composingRegionStart" { start } else { end })
+        }
+        _ => return None,
+    };
+
+    Some(value)
 }
 
 fn write_field(field: jni::jfieldID, receiver: Option<crate::ObjectId>, value: JniValue) {

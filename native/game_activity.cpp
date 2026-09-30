@@ -632,6 +632,11 @@ extern "C" void roblox_ime_state_selection(int* start, int* end) {
     if (start) *start = g_ime_selection_start;
     if (end) *end = g_ime_selection_end;
 }
+extern "C" void roblox_ime_state_composition(int* start, int* end) {
+    std::lock_guard<std::mutex> lock(g_ime_mutex);
+    if (start) *start = g_ime_composing_start;
+    if (end) *end = g_ime_composing_end;
+}
 
 /// `com.google.androidgamesdk.gametextinput.InputConnection`
 ///
