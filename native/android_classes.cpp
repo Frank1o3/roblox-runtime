@@ -28,6 +28,10 @@
 #include <vector>
 #include <memory>
 
+// The runtime owns the cross-thread request slot. The embedding UI consumes
+// it later on its own event-loop thread, where toolkit calls are safe.
+extern "C" void roblox_runtime_webview_open(const char* url, const char* title);
+
 // ------------------------------------------------------- focused text box
 //
 // Which text box the engine currently has focus in, learned from
@@ -924,12 +928,10 @@ public:
     // driving a `WebView` is Roblox's own Java code's job and Cordial stands in
     // for that code rather than running it.
     //
-    // All three report rather than return, because none of them can be answered
-    // honestly yet. `openNativeOverlay` used to be an empty body, which is the
-    // failure this section exists to correct: a request to show a web page
-    // vanished with no trace anywhere, so "Marketplace does nothing" looked
-    // identical to "Marketplace was never asked for". Those need to be
-    // distinguishable before anyone can work on either.
+    // `openNativeOverlay` hands the request to the runtime's bounded event slot.
+    // The UI host takes it from its own event-loop thread; invoking a toolkit
+    // from this JNI callback would be unsafe because Roblox calls it from
+    // engine-owned threads.
 
     /// Urls on this boundary can carry a single-use authentication ticket in
     /// their query string, and the session's own `.ROBLOSECURITY` travels the
@@ -943,15 +945,16 @@ public:
         return out;
     }
 
-    /// The engine asking the platform to put a web page on screen: url, title.
+    /// The engine asking the host to put a web page on screen: url, title.
     /// Corresponds to `BrowserService::openNativeOverlay` on the engine side,
     /// which logs the same two arguments as `openWebView_`.
     static void openNativeOverlay(ENV*, Class*, std::shared_ptr<String> url,
                                   std::shared_ptr<String> title) {
-        fprintf(stderr,
-                "[roblox] web view requested, and Cordial has none: %s (title: %s)\n",
-                url ? url_without_query(*url).c_str() : "(null)",
-                title ? title->c_str() : "");
+        if (!url || !title) {
+            fprintf(stderr, "[roblox] web view request missing URL or title\n");
+            return;
+        }
+        roblox_runtime_webview_open(url->c_str(), title->c_str());
     }
 
     /// `(String type, String data)` on both. The app bridge and the DataModel

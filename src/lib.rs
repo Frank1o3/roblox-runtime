@@ -13,6 +13,7 @@ pub use roblox_jni as jni;
 pub use roblox_linker::elf::{Binding as ImportBinding, Imports as EngineImports};
 pub mod graphics;
 pub mod session;
+pub mod webview;
 mod symbols;
 
 struct StartupBootstrap {
