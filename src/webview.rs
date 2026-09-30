@@ -159,8 +159,10 @@ pub fn arm(engine: &crate::LoadedEngine) {
         }
     };
     let subscribe_result = if jnivm::selected_from_environment() {
+        eprintln!("[runtime-webview] using RustVM-owned MessageBus callback objects");
         subscribe_raw_rust(subscribe, &open_bus_id, on_open_window)
     } else {
+        eprintln!("[runtime-webview] using libjnivm MessageBus callback objects");
         subscribe_raw(subscribe, &open_bus_id, on_open_window)
     };
     if let Err(error) = subscribe_result {
@@ -252,7 +254,7 @@ fn subscribe_raw_rust(
 }
 
 fn raw_callback_run(
-    vm: &jnivm::Vm,
+    _vm: &jnivm::Vm,
     receiver: Option<jnivm::ObjectId>,
     args: &[jnivm::JniValue],
 ) -> jnivm::JniValue {
@@ -280,7 +282,6 @@ fn raw_callback_run(
         return jnivm::JniValue::Void;
     };
     sink(payload.as_ptr());
-    let _ = vm;
     jnivm::JniValue::Void
 }
 
