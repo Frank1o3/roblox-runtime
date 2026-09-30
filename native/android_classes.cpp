@@ -1064,6 +1064,7 @@ public:
         c->Hook(env, "onDataModelNotificationCallback",
                 &NativeGLJavaInterface::onDataModelNotificationCallback);
         c->Hook(env, "getWebViewUserAgent", &NativeGLJavaInterface::getWebViewUserAgent);
+        fprintf(stderr, "[roblox] web view JNI bridge registered (openNativeOverlay)\n");
     }
 };
 
