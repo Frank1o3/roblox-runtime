@@ -1,0 +1,8 @@
+[package]
+    edition.workspace=true
+    license.workspace=true
+    name="extra"
+    version.workspace=true
+
+[dependencies]
+    opencv="0.101.0"
