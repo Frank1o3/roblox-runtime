@@ -142,10 +142,6 @@ pub fn prepare_with_swap_interval(
     Ok(selected)
 }
 
-pub fn internal_frame_readback_supported() -> bool {
-    roblox_graphics_vulkan::internal_frame_readback_supported()
-}
-
 /// Apply the user's VSync setting to the engine's EGL swap interval request.
 #[allow(unsafe_code)]
 extern "C" fn egl_swap_interval(display: *mut c_void, interval: c_int) -> c_int {

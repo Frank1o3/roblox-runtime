@@ -6,9 +6,7 @@ pub(crate) static INSTANCE: AtomicUsize = AtomicUsize::new(0);
 pub(crate) static PHYSICAL_DEVICE: AtomicUsize = AtomicUsize::new(0);
 static HOST_GET_DEVICE_PROC_ADDR: AtomicUsize = AtomicUsize::new(0);
 pub(crate) static HOST_CREATE_SWAPCHAIN: AtomicUsize = AtomicUsize::new(0);
-pub(crate) static HOST_DESTROY_SWAPCHAIN: AtomicUsize = AtomicUsize::new(0);
 pub(crate) static HOST_GET_SURFACE_CAPABILITIES: AtomicUsize = AtomicUsize::new(0);
-pub(crate) static HOST_QUEUE_PRESENT: AtomicUsize = AtomicUsize::new(0);
 static HOST_CREATE_DEVICE: AtomicUsize = AtomicUsize::new(0);
 
 fn raw(function: vk::PFN_vkVoidFunction) -> *mut c_void {
@@ -51,16 +49,6 @@ pub(crate) extern "system" fn get_instance_proc_addr(
             HOST_CREATE_SWAPCHAIN.store(raw(function) as usize, Ordering::Relaxed);
             Some(super::swapchain::create_swapchain as *const () as *mut c_void)
         }
-        b"vkDestroySwapchainKHR" => {
-            let function = super::loader::host_proc(instance, c"vkDestroySwapchainKHR");
-            HOST_DESTROY_SWAPCHAIN.store(raw(function) as usize, Ordering::Relaxed);
-            Some(super::swapchain::destroy_swapchain as *const () as *mut c_void)
-        }
-        b"vkQueuePresentKHR" => {
-            let function = super::loader::host_proc(instance, c"vkQueuePresentKHR");
-            HOST_QUEUE_PRESENT.store(raw(function) as usize, Ordering::Relaxed);
-            Some(super::swapchain::queue_present as *const () as *mut c_void)
-        }
         b"vkGetPhysicalDeviceSurfaceCapabilitiesKHR" => {
             let function =
                 super::loader::host_proc(instance, c"vkGetPhysicalDeviceSurfaceCapabilitiesKHR");
@@ -92,20 +80,6 @@ extern "system" fn get_device_proc_addr(
                 Ordering::Relaxed,
             );
             Some(unsafe { std::mem::transmute(super::swapchain::create_swapchain as *const ()) })
-        }
-        b"vkDestroySwapchainKHR" => {
-            HOST_DESTROY_SWAPCHAIN.store(
-                raw(unsafe { function(device, name) }) as usize,
-                Ordering::Relaxed,
-            );
-            Some(unsafe { std::mem::transmute(super::swapchain::destroy_swapchain as *const ()) })
-        }
-        b"vkQueuePresentKHR" => {
-            HOST_QUEUE_PRESENT.store(
-                raw(unsafe { function(device, name) }) as usize,
-                Ordering::Relaxed,
-            );
-            Some(unsafe { std::mem::transmute(super::swapchain::queue_present as *const ()) })
         }
         _ => unsafe { function(device, name) },
     }
