@@ -34,6 +34,22 @@ pub fn internal_frame_readback_supported() -> bool {
 pub use loader::{LIBRARY_NAMES, available_for_surface, loader_symbol};
 pub use platform::Surface;
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct FrameTapState {
+    pub enabled: bool,
+    pub last_present_index: u32,
+    pub width: u32,
+    pub height: u32,
+    pub format: i32,
+}
+
+/// Capture the latest known present-image metadata for the active swapchain.
+/// This keeps the checker lightweight while still exposing the state the
+/// detector will consume when a Vulkan readback path is available.
+pub fn frame_tap_state() -> Option<FrameTapState> {
+    swapchain::frame_tap_state()
+}
+
 /// Set the preferred present mode for this process (`auto`, `mailbox`,
 /// `immediate`, `fifo`, `fifo-relaxed`, or `off`).
 pub fn set_present_mode(mode: Option<&str>) {
