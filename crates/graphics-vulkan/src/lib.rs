@@ -40,12 +40,12 @@ pub struct FrameTapState {
     pub last_present_index: u32,
     pub width: u32,
     pub height: u32,
-    pub format: i32,
+    pub format: u32,
 }
 
-/// Capture the latest known present-image metadata for the active swapchain.
-/// This keeps the checker lightweight while still exposing the state the
-/// detector will consume when a Vulkan readback path is available.
+/// Capture the last known present-image metadata for the active swapchain.
+/// This is intentionally a lightweight state snapshot that can later feed the
+/// detector without forcing a blocking readback on the present thread.
 pub fn frame_tap_state() -> Option<FrameTapState> {
     swapchain::frame_tap_state()
 }
