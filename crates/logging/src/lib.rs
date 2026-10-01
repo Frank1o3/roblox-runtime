@@ -17,7 +17,7 @@ pub fn emit(message: String) {
     };
 
     if current_level() >= required || looks_like_error(&message) {
-        eprintln!("{message}");
+        std::eprintln!("{message}");
     }
 }
 
@@ -55,7 +55,7 @@ fn looks_like_error(message: &str) -> bool {
 
 /// Emit a startup or runtime failure independently of the selected verbosity.
 pub fn emit_error(message: String) {
-    eprintln!("{message}");
+    std::eprintln!("{message}");
 }
 
 #[macro_export]
