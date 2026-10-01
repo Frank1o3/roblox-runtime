@@ -10,7 +10,7 @@ Add the Rust detector from `crates/extra` to rusty-blox as an opt-in capability.
 - Vulkan swapchain eligibility and metadata-lifecycle groundwork is implemented: readiness remains false, metadata is recorded for successful create paths, and present snapshots are cleared on replacement/destruction.
 - Eligibility means only that Vulkan transfer-source prerequisites appear satisfied; it is not pixel readback support. No GPU copy/staging backend exists, so the detector and aiming remain inactive.
 - When Aimbot config is enabled, the app explicitly reports that internal pixel readback is not implemented. It does not start a detector, worker, or mouse-aiming path; normal input is unchanged.
-- Validation run on 2026-10-01: `cargo test -p roblox-graphics-vulkan` passed (4 tests), `cargo test -p extra` passed (6 tests), and standalone runtime `cargo check` passed. App `cargo check` and `cargo check --features aimbot` both fail before reaching app code because the configured nested runtime has `FrameTapState.format: u32` assigned `vk::Format::as_raw(): i32`. The nested runtime was intentionally not edited.
+- Validation run on 2026-10-01: `cargo test -p roblox-graphics-vulkan` passed (4 tests), `cargo test -p extra` passed (6 tests), standalone runtime `cargo check` passed, and both app `cargo check` and `cargo check --features aimbot` passed against the configured nested runtime. An earlier app-check attempt observed the `FrameTapState.format` `u32`/`i32` mismatch; later checks passed. The nested runtime was not edited for this task.
 
 ## Tasks
 
@@ -55,7 +55,7 @@ Add the Rust detector from `crates/extra` to rusty-blox as an opt-in capability.
 - [x] Run standalone runtime `cargo check` (passed on 2026-10-01).
 - [ ] User verifies default/false builds omit the feature and true builds include it, including rebuilding after toggling the env.
 - [ ] User verifies config location, defaults, round-trip, and malformed-config handling.
-- [x] Verify config-enabled app messaging is explicitly inactive; app feature-off/on checks were attempted on 2026-10-01 and both are blocked by the nested runtime format type mismatch described above.
+- [x] Verify config-enabled app messaging is explicitly inactive; app feature-off/on `cargo check` commands passed on 2026-10-01 against the configured nested runtime.
 - [ ] User runs detector tests and checks that config-disabled behavior leaves ordinary input unchanged.
 - [ ] On supported Vulkan, verify readback ordering, synchronization/layout restoration, and no present-thread waits; profile GPU/CPU overhead.
 - [ ] On unsupported transfer usage/formats, protected content, resize/recreation, minimized window, and Vulkan/EGL fallback, verify graceful aimbot unavailability and normal app startup.
