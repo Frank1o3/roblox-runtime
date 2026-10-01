@@ -30,7 +30,9 @@ fn frame_tap_state_store() -> &'static Mutex<Option<super::FrameTapState>> {
 }
 
 pub(super) fn frame_tap_state() -> Option<super::FrameTapState> {
-    *frame_tap_state_store().lock().unwrap_or_else(|error| error.into_inner())
+    *frame_tap_state_store()
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
 }
 
 fn record_frame_tap_state(
@@ -49,7 +51,8 @@ fn record_frame_tap_state(
 }
 
 fn device_supports_transfer_source(physical: vk::PhysicalDevice, format: vk::Format) -> bool {
-    let instance = vk::Instance::from_raw(super::dispatch::INSTANCE.load(Ordering::Relaxed) as u64 as _);
+    let instance =
+        vk::Instance::from_raw(super::dispatch::INSTANCE.load(Ordering::Relaxed) as u64 as _);
     if instance.is_null() || physical.is_null() {
         return false;
     }
@@ -75,10 +78,8 @@ fn surface_supports_transfer_source(
     if instance.is_null() || physical.is_null() {
         return None;
     }
-    let function = super::loader::host_proc(
-        instance,
-        c"vkGetPhysicalDeviceSurfaceCapabilitiesKHR",
-    )?;
+    let function =
+        super::loader::host_proc(instance, c"vkGetPhysicalDeviceSurfaceCapabilitiesKHR")?;
     let function: vk::PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR =
         unsafe { std::mem::transmute(function) };
     let mut capabilities = vk::SurfaceCapabilitiesKHR::default();
@@ -97,9 +98,14 @@ pub(super) fn transfer_source_eligibility(
     image_usage: vk::ImageUsageFlags,
     extent: vk::Extent2D,
 ) -> super::TransferSourceEligibility {
-    use super::{TransferSourceEligibility as Eligibility, TransferSourceIneligibilityReason as Reason};
+    use super::{
+        TransferSourceEligibility as Eligibility, TransferSourceIneligibilityReason as Reason,
+    };
 
-    if !matches!(format, vk::Format::B8G8R8A8_SRGB | vk::Format::B8G8R8A8_UNORM) {
+    if !matches!(
+        format,
+        vk::Format::B8G8R8A8_SRGB | vk::Format::B8G8R8A8_UNORM
+    ) {
         return Eligibility::Ineligible(Reason::UnsupportedFormat);
     }
     if !format_transfer_source_supported {
@@ -123,8 +129,8 @@ fn evaluate_transfer_source_eligibility(
     physical: vk::PhysicalDevice,
     info: &vk::SwapchainCreateInfoKHR<'_>,
 ) -> super::TransferSourceEligibility {
-    let format_transfer_source_supported = !physical.is_null()
-        && device_supports_transfer_source(physical, info.image_format);
+    let format_transfer_source_supported =
+        !physical.is_null() && device_supports_transfer_source(physical, info.image_format);
     let surface_transfer_source_supported =
         surface_supports_transfer_source(physical, info.surface);
     transfer_source_eligibility(
@@ -154,7 +160,10 @@ fn insert_swapchain_metadata(
     metadata_by_handle.insert(handle, metadata);
 }
 
-fn remove_swapchain_metadata(metadata_by_handle: &mut HashMap<u64, SwapchainMetadata>, handle: u64) {
+fn remove_swapchain_metadata(
+    metadata_by_handle: &mut HashMap<u64, SwapchainMetadata>,
+    handle: u64,
+) {
     metadata_by_handle.remove(&handle);
 }
 
@@ -296,8 +305,10 @@ pub(crate) extern "system" fn create_swapchain(
                 format: effective_info.image_format,
                 extent: effective_info.image_extent,
                 last_present_index: 0,
-                transfer_source_eligibility:
-                    evaluate_transfer_source_eligibility(physical, effective_info),
+                transfer_source_eligibility: evaluate_transfer_source_eligibility(
+                    physical,
+                    effective_info,
+                ),
             };
             {
                 let mut metadata_by_handle = swapchain_metadata()
@@ -381,7 +392,8 @@ pub(crate) extern "system" fn queue_present(
                     }
                     let swapchain = unsafe { *info.p_swapchains.add(index) };
                     let image_index = unsafe { *info.p_image_indices.add(index) };
-                    if let Some(metadata) = metadata_by_handle.get_mut(&(swapchain.as_raw() as u64)) {
+                    if let Some(metadata) = metadata_by_handle.get_mut(&(swapchain.as_raw() as u64))
+                    {
                         metadata.last_present_index = image_index;
                         last_snapshot = Some(record_frame_tap_state(
                             metadata,
@@ -428,21 +440,20 @@ pub(crate) extern "system" fn destroy_swapchain(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{TransferSourceEligibility as Eligibility, TransferSourceIneligibilityReason as Reason};
+    use crate::{
+        TransferSourceEligibility as Eligibility, TransferSourceIneligibilityReason as Reason,
+    };
 
     fn eligible(usage: vk::ImageUsageFlags, extent: vk::Extent2D) -> Eligibility {
-        transfer_source_eligibility(
-            vk::Format::B8G8R8A8_UNORM,
-            true,
-            Some(true),
-            usage,
-            extent,
-        )
+        transfer_source_eligibility(vk::Format::B8G8R8A8_UNORM, true, Some(true), usage, extent)
     }
 
     #[test]
     fn eligibility_requires_every_transfer_source_prerequisite() {
-        let extent = vk::Extent2D { width: 640, height: 480 };
+        let extent = vk::Extent2D {
+            width: 640,
+            height: 480,
+        };
         assert_eq!(
             eligible(vk::ImageUsageFlags::TRANSFER_SRC, extent),
             Eligibility::Eligible
@@ -494,7 +505,10 @@ mod tests {
         assert_eq!(
             eligible(
                 vk::ImageUsageFlags::TRANSFER_SRC,
-                vk::Extent2D { width: 0, height: 480 },
+                vk::Extent2D {
+                    width: 0,
+                    height: 480
+                },
             ),
             Eligibility::Ineligible(Reason::ZeroExtent)
         );
@@ -526,6 +540,8 @@ mod tests {
     fn successful_and_suboptimal_presents_are_accepted() {
         assert!(is_accepted_present_result(vk::Result::SUCCESS));
         assert!(is_accepted_present_result(vk::Result::SUBOPTIMAL_KHR));
-        assert!(!is_accepted_present_result(vk::Result::ERROR_OUT_OF_DATE_KHR));
+        assert!(!is_accepted_present_result(
+            vk::Result::ERROR_OUT_OF_DATE_KHR
+        ));
     }
 }
