@@ -7,9 +7,10 @@ Add the Rust detector from `crates/extra` to rusty-blox as an opt-in capability.
 ## Implementation status
 
 - Build opt-in, minimal JSON config model/loading, CPU frame validation/masking, contour selection, and Kalman-based movement suggestions are implemented.
-- `cargo check` succeeded for the extra crate tests and the app with the feature omitted and enabled; tests were not executed.
-- The Vulkan frame tap and app-side detector/input loop are not implemented. Enabling `enabled` in `aimbot.json` currently logs that no internal frame source is available; it does not move the mouse or affect Roblox input.
-- The detector tests are present for the user to run.
+- Vulkan swapchain eligibility and metadata-lifecycle groundwork is implemented: readiness remains false, metadata is recorded for successful create paths, and present snapshots are cleared on replacement/destruction.
+- Eligibility means only that Vulkan transfer-source prerequisites appear satisfied; it is not pixel readback support. No GPU copy/staging backend exists, so the detector and aiming remain inactive.
+- When Aimbot config is enabled, the app explicitly reports that internal pixel readback is not implemented. It does not start a detector, worker, or mouse-aiming path; normal input is unchanged.
+- Validation run on 2026-10-01: `cargo test -p roblox-graphics-vulkan` passed (4 tests), `cargo test -p extra` passed (6 tests), and standalone runtime `cargo check` passed. App `cargo check` and `cargo check --features aimbot` both fail before reaching app code because the configured nested runtime has `FrameTapState.format: u32` assigned `vk::Format::as_raw(): i32`. The nested runtime was intentionally not edited.
 
 ## Tasks
 
@@ -29,18 +30,20 @@ Add the Rust detector from `crates/extra` to rusty-blox as an opt-in capability.
 - [x] Keep Vulkan and JNI out of the detector crate; return data-only detections.
 - [x] Add tests for config defaults/round-trip, frame validation, masking, contour area/distance, tracking reset/loss, and Kalman state.
 
-### 3. Vulkan internal frame tap
+### 3. Vulkan eligibility and metadata groundwork
 
-- [ ] Add the tap behind the opt-in in `crates/graphics-vulkan`.
-- [ ] Track per-device and per-swapchain image metadata/lifetimes and the image index passed to present.
-- [ ] Check supported transfer-source usage and pixel formats before enabling capture.
-- [ ] Use asynchronous GPU staging/readback with correct semaphore consumption, layout transitions, non-coherent memory invalidation, and recreation/shutdown handling.
-- [ ] Keep the present hook non-blocking; use a small staging ring and drop stale frames under backpressure.
-- [ ] If capture is unsupported or setup fails, report why and disable the aimbot without failing Roblox startup. Do not silently substitute desktop capture.
+- [x] Keep operational internal frame-readback readiness false until an implementation can deliver pixels; format probing alone cannot enable it.
+- [x] Expose typed eligibility status/reasons distinct from operational readback support.
+- [x] Record effective swapchain metadata after every successful create path; eligibility requires format support, surface transfer-source support, effective `TRANSFER_SRC` image usage, and nonzero extent.
+- [x] Track accepted success/suboptimal present indices and intercept swapchain destruction to remove metadata/clear stale snapshots.
+- [ ] Implement GPU staging/readback, synchronization, layout transitions, non-coherent memory handling, and recreation/shutdown behavior.
+- [ ] Keep any future readback non-blocking with a bounded staging ring and stale-frame dropping.
+- [ ] Report future backend failures without failing Roblox startup; do not substitute desktop capture.
 
 ### 4. App and input orchestration
 
 - [x] Load `aimbot.json` in rusty-blox and pass it only when the aimbot Cargo feature is compiled.
+- [x] Report config-enabled/readback-unimplemented status without claiming detector availability.
 - [ ] Start the detector only when both build feature and config allow it.
 - [ ] Route only the latest detector result to the winit event loop; perform any mouse forwarding through the existing app/runtime input bridge on the appropriate thread.
 - [ ] Use existing physical-key/event state rather than installing a second input hook.
@@ -48,8 +51,11 @@ Add the Rust detector from `crates/extra` to rusty-blox as an opt-in capability.
 
 ### 5. Validation
 
+- [x] Run `cargo test -p roblox-graphics-vulkan` and `cargo test -p extra` in the standalone runtime (4 and 6 tests passed respectively on 2026-10-01).
+- [x] Run standalone runtime `cargo check` (passed on 2026-10-01).
 - [ ] User verifies default/false builds omit the feature and true builds include it, including rebuilding after toggling the env.
 - [ ] User verifies config location, defaults, round-trip, and malformed-config handling.
+- [x] Verify config-enabled app messaging is explicitly inactive; app feature-off/on checks were attempted on 2026-10-01 and both are blocked by the nested runtime format type mismatch described above.
 - [ ] User runs detector tests and checks that config-disabled behavior leaves ordinary input unchanged.
 - [ ] On supported Vulkan, verify readback ordering, synchronization/layout restoration, and no present-thread waits; profile GPU/CPU overhead.
 - [ ] On unsupported transfer usage/formats, protected content, resize/recreation, minimized window, and Vulkan/EGL fallback, verify graceful aimbot unavailability and normal app startup.
@@ -57,7 +63,7 @@ Add the Rust detector from `crates/extra` to rusty-blox as an opt-in capability.
 ## Constraints and notes
 
 - `Cargo` resolves optional dependencies before executing `build.rs`; a build script cannot activate an optional dependency by reading an env var. The launcher script therefore maps the env var to a Cargo feature.
-- The Rusty Blox app uses its nested `roblox-runtime` Git submodule. Runtime changes must be committed there and the parent gitlink advanced for the app to consume them.
+- The Rusty Blox app resolves its configured nested `roblox-runtime` checkout. App checks validate that dependency, not the standalone runtime edited for the groundwork in this phase. This phase intentionally leaves the nested checkout untouched; its current `FrameTapState.format` type mismatch blocks app compilation until separately corrected.
 - There is no existing internal frame readback in the runtime. The proprietary engine currently owns command submission and swapchain use; a Vulkan tap is a high-risk, driver-dependent change.
 - The Aimbot project's PipeWire/X11 capture is desktop/composited capture, not the internal Roblox render target, and is intentionally not treated as equivalent.
-- Functional tests are left for the user to run; compile checks may be used during implementation.
+- A Vulkan transfer-source eligibility result is preliminary metadata only; it does not mean pixels can be captured. Aiming stays inactive until actual readback and app orchestration are implemented and validated.

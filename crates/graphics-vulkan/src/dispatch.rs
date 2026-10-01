@@ -6,6 +6,7 @@ pub(crate) static INSTANCE: AtomicUsize = AtomicUsize::new(0);
 pub(crate) static PHYSICAL_DEVICE: AtomicUsize = AtomicUsize::new(0);
 static HOST_GET_DEVICE_PROC_ADDR: AtomicUsize = AtomicUsize::new(0);
 pub(crate) static HOST_CREATE_SWAPCHAIN: AtomicUsize = AtomicUsize::new(0);
+pub(crate) static HOST_DESTROY_SWAPCHAIN: AtomicUsize = AtomicUsize::new(0);
 pub(crate) static HOST_GET_SURFACE_CAPABILITIES: AtomicUsize = AtomicUsize::new(0);
 pub(crate) static HOST_QUEUE_PRESENT: AtomicUsize = AtomicUsize::new(0);
 static HOST_CREATE_DEVICE: AtomicUsize = AtomicUsize::new(0);
@@ -50,6 +51,11 @@ pub(crate) extern "system" fn get_instance_proc_addr(
             HOST_CREATE_SWAPCHAIN.store(raw(function) as usize, Ordering::Relaxed);
             Some(super::swapchain::create_swapchain as *const () as *mut c_void)
         }
+        b"vkDestroySwapchainKHR" => {
+            let function = super::loader::host_proc(instance, c"vkDestroySwapchainKHR");
+            HOST_DESTROY_SWAPCHAIN.store(raw(function) as usize, Ordering::Relaxed);
+            Some(super::swapchain::destroy_swapchain as *const () as *mut c_void)
+        }
         b"vkQueuePresentKHR" => {
             let function = super::loader::host_proc(instance, c"vkQueuePresentKHR");
             HOST_QUEUE_PRESENT.store(raw(function) as usize, Ordering::Relaxed);
@@ -86,6 +92,13 @@ extern "system" fn get_device_proc_addr(
                 Ordering::Relaxed,
             );
             Some(unsafe { std::mem::transmute(super::swapchain::create_swapchain as *const ()) })
+        }
+        b"vkDestroySwapchainKHR" => {
+            HOST_DESTROY_SWAPCHAIN.store(
+                raw(unsafe { function(device, name) }) as usize,
+                Ordering::Relaxed,
+            );
+            Some(unsafe { std::mem::transmute(super::swapchain::destroy_swapchain as *const ()) })
         }
         b"vkQueuePresentKHR" => {
             HOST_QUEUE_PRESENT.store(
@@ -124,18 +137,3 @@ extern "system" fn create_device(
     result
 }
 
-extern "system" fn queue_present(
-    queue: vk::Queue,
-    info: *const vk::PresentInfoKHR<'_>,
-) -> vk::Result {
-    let address = HOST_QUEUE_PRESENT.load(Ordering::Relaxed);
-    if address == 0 {
-        return vk::Result::ERROR_INITIALIZATION_FAILED;
-    }
-    type Function =
-        unsafe extern "system" fn(vk::Queue, *const vk::PresentInfoKHR<'_>) -> vk::Result;
-    // SAFETY: the pointer was resolved from the host loader as vkQueuePresentKHR.
-    let function: Function = unsafe { std::mem::transmute(address) };
-    // SAFETY: the arguments are forwarded under Vulkan's contract.
-    unsafe { function(queue, info) }
-}

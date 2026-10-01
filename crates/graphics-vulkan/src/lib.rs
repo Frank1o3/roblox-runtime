@@ -23,10 +23,10 @@ pub(crate) fn enabled() -> bool {
     ENABLED.load(Ordering::Relaxed)
 }
 
-pub fn set_internal_frame_readback_supported(enabled: bool) {
-    INTERNAL_FRAME_READBACK_SUPPORTED.store(enabled, Ordering::Relaxed);
-}
-
+/// Whether this runtime can currently deliver captured swapchain pixels.
+///
+/// This remains false until an operational readback backend is implemented;
+/// Vulkan format and swapchain eligibility probes do not make it true.
 pub fn internal_frame_readback_supported() -> bool {
     INTERNAL_FRAME_READBACK_SUPPORTED.load(Ordering::Relaxed)
 }
@@ -35,17 +35,46 @@ pub use loader::{LIBRARY_NAMES, available_for_surface, loader_symbol};
 pub use platform::Surface;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum TransferSourceIneligibilityReason {
+    #[default]
+    NotEvaluated,
+    UnsupportedFormat,
+    FormatTransferSourceUnsupported,
+    SurfaceCapabilitiesUnavailable,
+    SurfaceTransferSourceUnsupported,
+    SwapchainTransferSourceUsageMissing,
+    ZeroExtent,
+}
+
+/// Preliminary permission to copy from the swapchain image.
+///
+/// `Eligible` only means the Vulkan prerequisites are present; it does not
+/// indicate that this runtime implements or performs pixel readback.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum TransferSourceEligibility {
+    #[default]
+    NotEvaluated,
+    Eligible,
+    Ineligible(TransferSourceIneligibilityReason),
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct FrameTapState {
-    pub enabled: bool,
+    /// Raw swapchain handle whose last accepted presentation is described.
+    pub swapchain: u64,
+    /// Preliminary capability only; this is not operational pixel readback.
+    pub transfer_source_eligibility: TransferSourceEligibility,
     pub last_present_index: u32,
     pub width: u32,
     pub height: u32,
-    pub format: u32,
+    /// Raw Vulkan `VkFormat` value (`int32_t` in Vulkan).
+    pub format: i32,
 }
 
-/// Capture the last known present-image metadata for the active swapchain.
-/// This is intentionally a lightweight state snapshot that can later feed the
-/// detector without forcing a blocking readback on the present thread.
+/// Return metadata for the last accepted present, if known.
+///
+/// This snapshot contains no pixels and must not be treated as a capture
+/// backend or a signal that detector/aiming functionality is available.
 pub fn frame_tap_state() -> Option<FrameTapState> {
     swapchain::frame_tap_state()
 }
@@ -75,15 +104,22 @@ pub fn library_symbols() -> Vec<(String, *mut c_void)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ash::vk;
 
     #[test]
-    fn internal_frame_readback_support_defaults_to_disabled() {
-        set_internal_frame_readback_supported(false);
+    fn internal_frame_readback_is_unavailable_even_when_swapchain_is_eligible() {
         assert!(!internal_frame_readback_supported());
-
-        set_internal_frame_readback_supported(true);
-        assert!(internal_frame_readback_supported());
-
-        set_internal_frame_readback_supported(false);
+        let eligibility = swapchain::transfer_source_eligibility(
+            vk::Format::B8G8R8A8_UNORM,
+            true,
+            Some(true),
+            vk::ImageUsageFlags::TRANSFER_SRC,
+            vk::Extent2D {
+                width: 1280,
+                height: 720,
+            },
+        );
+        assert_eq!(eligibility, TransferSourceEligibility::Eligible);
+        assert!(!internal_frame_readback_supported());
     }
 }

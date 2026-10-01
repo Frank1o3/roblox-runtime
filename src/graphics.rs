@@ -133,7 +133,6 @@ pub fn prepare_with_swap_interval(
     let vulkan_available = roblox_graphics_vulkan::available_for_surface();
     let selected = preference.select(vulkan_available)?;
     roblox_graphics_vulkan::set_enabled(selected == Backend::Vulkan);
-    roblox_graphics_vulkan::set_internal_frame_readback_supported(false);
     VSYNC.store(vsync, Ordering::Relaxed);
     OPENGL_SWAP_INTERVAL.store(opengl_swap_interval.clamp(-1, 1), Ordering::Relaxed);
     roblox_graphics_vulkan::set_present_mode(present_mode);
