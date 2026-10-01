@@ -200,7 +200,9 @@ impl FrameDetector {
         reference: Point2f,
         dt_seconds: f32,
     ) -> AimResult {
-        let predicted = self.kalman.predict(candidate.center.x, candidate.center.y, dt_seconds);
+        let predicted = self
+            .kalman
+            .predict(candidate.center.x, candidate.center.y, dt_seconds);
         let velocity = self.kalman.velocity();
         let predicted = Point2f::new(
             predicted.x + self.config.offset_x,
@@ -270,7 +272,9 @@ fn validate_frame(frame: &CpuFrame<'_>) -> Result<(), FrameError> {
         .checked_mul(frame.format.channels())
         .ok_or(FrameError::Invalid("frame row size overflow"))?;
     if frame.stride < row_bytes {
-        return Err(FrameError::Invalid("frame stride is shorter than a pixel row"));
+        return Err(FrameError::Invalid(
+            "frame stride is shorter than a pixel row",
+        ));
     }
     let required = frame
         .stride
@@ -311,9 +315,9 @@ fn build_mask_validated(
                 }
                 ColorSpace::Hsv => {
                     let hsv = bgr_to_hsv(bgr);
-                    let hue_delta = hsv[0].abs_diff(color.hsv[0]).min(
-                        180u8.saturating_sub(hsv[0].abs_diff(color.hsv[0])),
-                    );
+                    let hue_delta = hsv[0]
+                        .abs_diff(color.hsv[0])
+                        .min(180u8.saturating_sub(hsv[0].abs_diff(color.hsv[0])));
                     f32::from(hue_delta) <= tolerance_h
                         && f32::from(hsv[1].abs_diff(color.hsv[1])) <= tolerance_s
                         && f32::from(hsv[2].abs_diff(color.hsv[2])) <= tolerance_v

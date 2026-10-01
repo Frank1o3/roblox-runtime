@@ -4,23 +4,30 @@
 
 Add the Rust detector from `crates/extra` to rusty-blox as an opt-in capability. The aimbot is compiled only when requested through `USE_AIMBOT=true ./dev.sh`, and remains inactive unless the sibling app config `aimbot.json` enables it. The detector receives internal rendered frames only if the Vulkan frame-tap can safely provide them; unsupported readback must leave normal Roblox startup unaffected.
 
+## Implementation status
+
+- Build opt-in, minimal JSON config model/loading, CPU frame validation/masking, contour selection, and Kalman-based movement suggestions are implemented.
+- `cargo check` succeeded for the extra crate tests and the app with the feature omitted and enabled; tests were not executed.
+- The Vulkan frame tap and app-side detector/input loop are not implemented. Enabling `enabled` in `aimbot.json` currently logs that no internal frame source is available; it does not move the mouse or affect Roblox input.
+- The detector tests are present for the user to run.
+
 ## Tasks
 
 ### 1. Build and configuration boundary
 
-- [ ] Add an `aimbot` feature and optional `extra` dependency to rusty-blox.
-- [ ] Make `dev.sh` map `USE_AIMBOT=true` to Cargo's `--features aimbot`; keep default/false builds free of OpenCV and restore the existing JNI tracing defaults.
-- [ ] Add typed detector/runtime settings and store `aimbot.json` beside `settings.json` and `fast-flags.json`.
-- [ ] Keep only used detector, tracking, and aim parameters. Exclude window/capture source, portal/PipeWire settings, capture FPS/ROI, and unused `lead`; do not add triggerbot/autofire in the initial integration.
-- [ ] Document that changing the build-time opt-in requires a rebuild; runtime config is a separate enable gate.
+- [x] Add an `aimbot` feature and optional `extra` dependency to rusty-blox.
+- [x] Make `dev.sh` map `USE_AIMBOT=true` to Cargo's `--features aimbot`; keep default/false builds free of OpenCV and restore the existing JNI tracing defaults.
+- [x] Add typed detector/runtime settings and store `aimbot.json` beside `settings.json` and `fast-flags.json`.
+- [x] Keep only used detector, tracking, and aim parameters. Exclude window/capture source, portal/PipeWire settings, capture FPS/ROI, and unused `lead`; do not add triggerbot/autofire in the initial integration.
+- [x] Document that changing the build-time opt-in requires a rebuild; runtime config is a separate enable gate.
 
 ### 2. CPU frame detector
 
-- [ ] Extend `crates/extra` to accept owned/borrowed CPU frames with explicit dimensions, stride, and pixel format.
-- [ ] Validate buffer size/stride and supported formats; produce a color mask using configured color space/tolerance.
-- [ ] Extract and score contours, select the best valid candidate, and update the Kalman/tracking estimate.
-- [ ] Keep Vulkan and JNI out of the detector crate; return data-only detections.
-- [ ] Add tests for config defaults/round-trip, frame validation, masking, contour area/distance, tracking reset/loss, and Kalman state.
+- [x] Extend `crates/extra` to accept borrowed CPU frames with explicit dimensions, stride, and pixel format.
+- [x] Validate buffer size/stride and supported formats; produce a color mask using configured color space/tolerance.
+- [x] Extract and score contours, select the best valid candidate, and update the Kalman/tracking estimate.
+- [x] Keep Vulkan and JNI out of the detector crate; return data-only detections.
+- [x] Add tests for config defaults/round-trip, frame validation, masking, contour area/distance, tracking reset/loss, and Kalman state.
 
 ### 3. Vulkan internal frame tap
 
@@ -33,7 +40,7 @@ Add the Rust detector from `crates/extra` to rusty-blox as an opt-in capability.
 
 ### 4. App and input orchestration
 
-- [ ] Load `aimbot.json` in rusty-blox and pass it only when the aimbot Cargo feature is compiled.
+- [x] Load `aimbot.json` in rusty-blox and pass it only when the aimbot Cargo feature is compiled.
 - [ ] Start the detector only when both build feature and config allow it.
 - [ ] Route only the latest detector result to the winit event loop; perform any mouse forwarding through the existing app/runtime input bridge on the appropriate thread.
 - [ ] Use existing physical-key/event state rather than installing a second input hook.

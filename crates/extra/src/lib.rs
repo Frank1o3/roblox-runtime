@@ -132,20 +132,22 @@ mod tests {
 
         let blank = vec![0; 16 * 16 * 3];
         for _ in 0..config.lost_frames_thresh {
-            assert!(detector
-                .process(
-                    CpuFrame {
-                        pixels: &blank,
-                        width: 16,
-                        height: 16,
-                        stride: 16 * 3,
-                        format: PixelFormat::Bgr8,
-                    },
-                    Point2f::new(8.0, 8.0),
-                    1.0 / 60.0,
-                )
-                .unwrap()
-                .is_none());
+            assert!(
+                detector
+                    .process(
+                        CpuFrame {
+                            pixels: &blank,
+                            width: 16,
+                            height: 16,
+                            stride: 16 * 3,
+                            format: PixelFormat::Bgr8,
+                        },
+                        Point2f::new(8.0, 8.0),
+                        1.0 / 60.0,
+                    )
+                    .unwrap()
+                    .is_none()
+            );
         }
     }
 }

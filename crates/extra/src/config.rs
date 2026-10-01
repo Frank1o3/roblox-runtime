@@ -64,9 +64,15 @@ impl AimbotConfig {
     /// reported instead of silently turning into an unrestricted threshold.
     pub fn validate(&self) -> Result<(), ConfigError> {
         if self.colors.is_empty() {
-            return Err(ConfigError("colors must contain at least one RGB hex color"));
+            return Err(ConfigError(
+                "colors must contain at least one RGB hex color",
+            ));
         }
-        if self.colors.iter().any(|color| parse_hex_color(color).is_none()) {
+        if self
+            .colors
+            .iter()
+            .any(|color| parse_hex_color(color).is_none())
+        {
             return Err(ConfigError("colors must use #RRGGBB or RRGGBB format"));
         }
         if [
@@ -87,7 +93,9 @@ impl AimbotConfig {
             return Err(ConfigError("all numeric detector settings must be finite"));
         }
         if self.min_area < 1 || self.max_area < self.min_area {
-            return Err(ConfigError("area limits must satisfy 1 <= min_area <= max_area"));
+            return Err(ConfigError(
+                "area limits must satisfy 1 <= min_area <= max_area",
+            ));
         }
         if self.fov <= 0.0 {
             return Err(ConfigError("fov must be greater than zero"));

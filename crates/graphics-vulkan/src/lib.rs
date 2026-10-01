@@ -13,6 +13,7 @@ mod surface;
 mod swapchain;
 
 static ENABLED: AtomicBool = AtomicBool::new(false);
+static INTERNAL_FRAME_READBACK_SUPPORTED: AtomicBool = AtomicBool::new(false);
 
 pub fn set_enabled(enabled: bool) {
     ENABLED.store(enabled, Ordering::Relaxed);
@@ -20,6 +21,14 @@ pub fn set_enabled(enabled: bool) {
 
 pub(crate) fn enabled() -> bool {
     ENABLED.load(Ordering::Relaxed)
+}
+
+pub fn set_internal_frame_readback_supported(enabled: bool) {
+    INTERNAL_FRAME_READBACK_SUPPORTED.store(enabled, Ordering::Relaxed);
+}
+
+pub fn internal_frame_readback_supported() -> bool {
+    INTERNAL_FRAME_READBACK_SUPPORTED.load(Ordering::Relaxed)
 }
 
 pub use loader::{LIBRARY_NAMES, available_for_surface, loader_symbol};
@@ -45,4 +54,20 @@ pub fn library_symbols() -> Vec<(String, *mut c_void)> {
         "vkGetInstanceProcAddr".to_owned(),
         loader_symbol().unwrap_or(std::ptr::null_mut()),
     )]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn internal_frame_readback_support_defaults_to_disabled() {
+        set_internal_frame_readback_supported(false);
+        assert!(!internal_frame_readback_supported());
+
+        set_internal_frame_readback_supported(true);
+        assert!(internal_frame_readback_supported());
+
+        set_internal_frame_readback_supported(false);
+    }
 }

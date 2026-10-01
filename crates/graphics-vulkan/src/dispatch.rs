@@ -7,7 +7,7 @@ pub(crate) static PHYSICAL_DEVICE: AtomicUsize = AtomicUsize::new(0);
 static HOST_GET_DEVICE_PROC_ADDR: AtomicUsize = AtomicUsize::new(0);
 pub(crate) static HOST_CREATE_SWAPCHAIN: AtomicUsize = AtomicUsize::new(0);
 pub(crate) static HOST_GET_SURFACE_CAPABILITIES: AtomicUsize = AtomicUsize::new(0);
-static HOST_QUEUE_PRESENT: AtomicUsize = AtomicUsize::new(0);
+pub(crate) static HOST_QUEUE_PRESENT: AtomicUsize = AtomicUsize::new(0);
 static HOST_CREATE_DEVICE: AtomicUsize = AtomicUsize::new(0);
 
 fn raw(function: vk::PFN_vkVoidFunction) -> *mut c_void {
@@ -53,7 +53,7 @@ pub(crate) extern "system" fn get_instance_proc_addr(
         b"vkQueuePresentKHR" => {
             let function = super::loader::host_proc(instance, c"vkQueuePresentKHR");
             HOST_QUEUE_PRESENT.store(raw(function) as usize, Ordering::Relaxed);
-            Some(queue_present as *const () as *mut c_void)
+            Some(super::swapchain::queue_present as *const () as *mut c_void)
         }
         b"vkGetPhysicalDeviceSurfaceCapabilitiesKHR" => {
             let function =
@@ -92,7 +92,7 @@ extern "system" fn get_device_proc_addr(
                 raw(unsafe { function(device, name) }) as usize,
                 Ordering::Relaxed,
             );
-            Some(unsafe { std::mem::transmute(queue_present as *const ()) })
+            Some(unsafe { std::mem::transmute(super::swapchain::queue_present as *const ()) })
         }
         _ => unsafe { function(device, name) },
     }
