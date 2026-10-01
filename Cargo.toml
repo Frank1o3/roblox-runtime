@@ -1,6 +1,6 @@
 [workspace]
     default-members=["."]
-    members=[".", "crates/abi", "crates/android", "crates/graphics-vulkan", "crates/jni", "crates/jnivm", "crates/linker"]
+    members=[".", "crates/abi", "crates/android", "crates/graphics-vulkan", "crates/jni", "crates/jnivm", "crates/linker", "crates/logging"]
     resolver="3"
 
     [workspace.package]
@@ -17,6 +17,7 @@
 
 [dependencies]
     jnivm={path="crates/jnivm"}
+    roblox-logging={path="crates/logging"}
     roblox-abi={path="crates/abi"}
     roblox-android={path="crates/android"}
     roblox-graphics-vulkan={path="crates/graphics-vulkan"}

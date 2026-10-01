@@ -31,7 +31,19 @@ bool quiet() {
     return on;
 }
 
+int selected_level() {
+    const char* value = std::getenv("RUSTY_BLOX_LOG_LEVEL");
+    if (!value || value[0] < '1' || value[0] > '4' || value[1] != '\0') {
+        return 1;
+    }
+    return value[0] - '0';
+}
+
 }  // namespace
+
+extern "C" int roblox_runtime_log_level() {
+    return selected_level();
+}
 
 namespace Log {
 
@@ -47,7 +59,7 @@ void debug(const char* tag, const char* format, ...) {
         return;
     }
 
-    if (!quiet()) {
+    if (!quiet() && selected_level() >= 3) {
         printf("[%s]: %s\n", tag ? tag : "JNIVM", line);
     }
 

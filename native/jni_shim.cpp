@@ -19,6 +19,8 @@ namespace roblox_runtime { jnivm::ENV* process_env(); }
 
 #include <cstddef>
 #include <cstdio>
+
+extern "C" int roblox_runtime_log_level();
 #include <cstdlib>
 #include <cstdarg>
 #include <exception>
@@ -160,7 +162,8 @@ void* roblox_jni_create_vm() {
     g_traced_iface.DetachCurrentThread = traced_detach;
     g_traced_iface.GetEnv = traced_get_env;
     g_traced_vm.functions = &g_traced_iface;
-    g_trace_invoke = getenv("RBX_RUNTIME_JNI_TRACE") != nullptr;
+    g_trace_invoke = getenv("RBX_RUNTIME_JNI_TRACE") != nullptr
+        && roblox_runtime_log_level() >= 4;
 
     JavaVM* vm = &g_traced_vm;
     // libjnivm recovers its VM from JavaVM::functions->reserved0. If that is not

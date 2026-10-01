@@ -83,6 +83,15 @@ char priority_letter(int prio) {
 /// what `RBX_RUNTIME_LOG_LEVEL` is for.
 int minimum_priority() {
     static const int level = [] {
+        const char* runtime_level = getenv("RUSTY_BLOX_LOG_LEVEL");
+        if (runtime_level && runtime_level[0] >= '1' && runtime_level[0] <= '4'
+            && runtime_level[1] == '\0') {
+            switch (runtime_level[0]) {
+                case '1': return (int)ANDROID_LOG_INFO;
+                case '2': return (int)ANDROID_LOG_DEBUG;
+                default: return (int)ANDROID_LOG_VERBOSE;
+            }
+        }
         const char* v = getenv("RBX_RUNTIME_LOG_LEVEL");
         if (!v) return (int)ANDROID_LOG_DEBUG;
         switch (v[0]) {

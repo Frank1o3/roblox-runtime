@@ -118,6 +118,7 @@ name = "jnivm"
 version = "0.1.2"
 dependencies = [
  "jni-sys",
+ "roblox-logging",
 ]
 
 [[package]]
@@ -165,6 +166,7 @@ name = "roblox-abi"
 version = "0.1.2"
 dependencies = [
  "roblox-linker",
+ "roblox-logging",
 ]
 
 [[package]]
@@ -172,6 +174,7 @@ name = "roblox-android"
 version = "0.1.2"
 dependencies = [
  "roblox-linker",
+ "roblox-logging",
  "serde_json",
  "zip",
 ]
@@ -198,6 +201,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "roblox-logging"
+version = "0.1.2"
+
+[[package]]
 name = "roblox-runtime"
 version = "0.1.2"
 dependencies = [
@@ -207,6 +214,7 @@ dependencies = [
  "roblox-graphics-vulkan",
  "roblox-jni",
  "roblox-linker",
+ "roblox-logging",
  "serde_json",
 ]
 

@@ -3,6 +3,15 @@
 //! Client-owned files and configuration enter through [`RuntimeConfig`]. This
 //! crate deliberately does not discover or download an APK.
 
+macro_rules! eprintln {
+    () => {{
+        roblox_logging::emit(String::new());
+    }};
+    ($($arg:tt)*) => {{
+        roblox_logging::emit(format!($($arg)*));
+    }};
+}
+
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};

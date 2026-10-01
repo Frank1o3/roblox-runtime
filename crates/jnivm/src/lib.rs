@@ -2,6 +2,15 @@
 //! Roblox runtime. The implementation is being built against the observed
 //! surface in [`OBSERVED_SURFACE.md`](../OBSERVED_SURFACE.md).
 
+macro_rules! eprintln {
+    () => {{
+        roblox_logging::emit(String::new());
+    }};
+    ($($arg:tt)*) => {{
+        roblox_logging::emit(format!($($arg)*));
+    }};
+}
+
 mod abi;
 mod descriptor;
 mod vm;

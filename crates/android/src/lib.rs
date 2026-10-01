@@ -2,6 +2,15 @@
 
 #![allow(unsafe_code)]
 
+macro_rules! eprintln {
+    () => {{
+        roblox_logging::emit(String::new());
+    }};
+    ($($arg:tt)*) => {{
+        roblox_logging::emit(format!($($arg)*));
+    }};
+}
+
 use std::ffi::c_void;
 use std::sync::atomic::{AtomicBool, Ordering};
 
