@@ -19,9 +19,29 @@ struct SwapchainMetadata {
 }
 
 static SWAPCHAIN_METADATA: OnceLock<Mutex<HashMap<u64, SwapchainMetadata>>> = OnceLock::new();
+static LAST_FRAME_TAP_STATE: OnceLock<Mutex<Option<super::FrameTapState>>> = OnceLock::new();
 
 fn swapchain_metadata() -> &'static Mutex<HashMap<u64, SwapchainMetadata>> {
     SWAPCHAIN_METADATA.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn frame_tap_state_store() -> &'static Mutex<Option<super::FrameTapState>> {
+    LAST_FRAME_TAP_STATE.get_or_init(|| Mutex::new(None))
+}
+
+pub(super) fn frame_tap_state() -> Option<super::FrameTapState> {
+    *frame_tap_state_store().lock().unwrap_or_else(|error| error.into_inner())
+}
+
+fn record_frame_tap_state(metadata: &SwapchainMetadata, present_index: u32) {
+    let state = super::FrameTapState {
+        enabled: metadata.transfer_source_supported && super::internal_frame_readback_supported(),
+        last_present_index: present_index,
+        width: metadata.extent.width,
+        height: metadata.extent.height,
+        format: metadata.format.as_raw(),
+    };
+    *frame_tap_state_store().lock().unwrap_or_else(|error| error.into_inner()) = Some(state);
 }
 
 fn device_supports_transfer_source(physical: vk::PhysicalDevice, format: vk::Format) -> bool {
