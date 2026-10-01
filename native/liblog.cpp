@@ -87,8 +87,9 @@ int minimum_priority() {
         if (runtime_level && runtime_level[0] >= '1' && runtime_level[0] <= '4'
             && runtime_level[1] == '\0') {
             switch (runtime_level[0]) {
-                case '1': return (int)ANDROID_LOG_INFO;
-                case '2': return (int)ANDROID_LOG_DEBUG;
+                case '1': return (int)ANDROID_LOG_WARN;
+                case '2': return (int)ANDROID_LOG_INFO;
+                case '3': return (int)ANDROID_LOG_DEBUG;
                 default: return (int)ANDROID_LOG_VERBOSE;
             }
         }
