@@ -2,6 +2,10 @@
 
 static GAME_LOADED_CALLBACK: OnceLock<extern "C" fn(i64)> = OnceLock::new();
 
+unsafe extern "C" {
+    fn roblox_textbox_property_changed();
+}
+
 pub fn set_game_loaded_callback(callback: extern "C" fn(i64)) -> Result<(), &'static str> {
     GAME_LOADED_CALLBACK
         .set(callback)
@@ -67,6 +71,31 @@ fn native_helper_game_loaded(
     if let Some(callback) = GAME_LOADED_CALLBACK.get() {
         callback(place_id);
     }
+    JniValue::Void
+}
+
+/// The engine sends text updates through this callback while a Roblox text
+/// box is focused. Match the C++ bridge for now: pushing this into the host
+/// editor needs echo suppression and caret/selection preservation, so treating
+/// it as an ordinary user edit would be incorrect.
+fn native_helper_lua_text_box_changed(
+    _vm: &Vm,
+    _receiver: Option<crate::ObjectId>,
+    _args: &[JniValue],
+) -> JniValue {
+    JniValue::Void
+}
+
+/// Property changes can resize or restyle the focused box. Mark its cached
+/// geometry dirty so the host window refreshes it on its own UI thread.
+fn native_helper_lua_text_box_property_changed(
+    _vm: &Vm,
+    _receiver: Option<crate::ObjectId>,
+    _args: &[JniValue],
+) -> JniValue {
+    // SAFETY: this callback only increments the runtime's atomic textbox
+    // property generation; it is safe from the engine's worker threads.
+    unsafe { roblox_textbox_property_changed() };
     JniValue::Void
 }
 

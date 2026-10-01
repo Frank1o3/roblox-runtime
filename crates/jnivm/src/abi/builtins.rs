@@ -443,6 +443,8 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
         ("gameActivity_onAppReady", "(Ljava/lang/String;)V", native_helper_app_ready),
         ("gameActivity_onExperienceStart", "()V", native_helper_experience_start),
         ("gameActivity_onGameLoaded", "(J)V", native_helper_game_loaded),
+        ("gameActivity_onLuaTextBoxChanged", "(Ljava/lang/String;)V", native_helper_lua_text_box_changed),
+        ("gameActivity_onLuaTextBoxPropertyChanged", "()V", native_helper_lua_text_box_property_changed),
         ("gameActivity_onDidLogInReceived", "(Ljava/lang/String;)V", native_helper_logged_in),
         ("gameActivity_onScreenOrientationChanged", "(IZ)V", native_helper_orientation_changed),
         ("gameActivity_onEngineInitialized", "()V", native_helper_engine_initialized),
