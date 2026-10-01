@@ -16,6 +16,12 @@ impl ObjectId {
     pub fn raw(self) -> u64 {
         self.0
     }
+
+    /// Reconstruct a handle previously returned by this VM's JNI function
+    /// table.
+    pub fn from_raw(raw: u64) -> Self {
+        Self(raw)
+    }
 }
 
 /// An attached thread's environment token. The eventual JNI ABI adapter maps
@@ -147,6 +153,7 @@ pub type MethodHandler = fn(&Vm, Option<ObjectId>, &[JniValue]) -> JniValue;
 struct ObjectRecord {
     class: ClassId,
     value: ObjectValue,
+    identity: u64,
     global: bool,
 }
 

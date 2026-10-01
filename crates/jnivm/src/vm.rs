@@ -525,6 +525,7 @@ impl Vm {
             ObjectRecord {
                 class,
                 value,
+                identity: id.raw(),
                 global: false,
             },
         );
@@ -623,17 +624,31 @@ impl Vm {
         {
             return Err(JniError::ReferenceNotLocal);
         }
-        let (class, value) = (record.class, record.value.clone());
+        let (class, value, identity) = (record.class, record.value.clone(), record.identity);
         let global = ObjectId(state.id());
         state.objects.insert(
             global,
             ObjectRecord {
                 class,
                 value,
+                identity,
                 global: true,
             },
         );
         Ok(global)
+    }
+
+    /// Compare JNI references by the Java object they name. Local and global
+    /// handles can have different values while retaining the same identity.
+    pub fn same_object(&self, left: ObjectId, right: ObjectId) -> bool {
+        if left == right {
+            return true;
+        }
+        let state = self.state.read().unwrap_or_else(|p| p.into_inner());
+        match (state.objects.get(&left), state.objects.get(&right)) {
+            (Some(left), Some(right)) => left.identity == right.identity,
+            _ => false,
+        }
     }
 
     pub fn delete_local_ref(&self, env: &ThreadEnv, object: ObjectId) -> Result<(), JniError> {
@@ -782,16 +797,33 @@ impl Vm {
     }
 
     pub fn clone_local_ref(&self, env: &ThreadEnv, object: u64) -> Result<ObjectId, JniError> {
-        let value = self.object_value(env, ObjectId(object))?;
-        let class = {
-            let state = self.state.read().unwrap_or_else(|p| p.into_inner());
-            state
-                .objects
-                .get(&ObjectId(object))
-                .ok_or(JniError::UnknownReference)?
-                .class
-        };
-        self.new_local_object(env, class, value)
+        self.check_env(env)?;
+        let mut state = self.state.write().unwrap_or_else(|p| p.into_inner());
+        let source = state
+            .objects
+            .get(&ObjectId(object))
+            .ok_or(JniError::UnknownReference)?;
+        if !source.global
+            && !state
+                .locals
+                .get(&env.owner)
+                .is_some_and(|locals| locals.contains(&ObjectId(object)))
+        {
+            return Err(JniError::ReferenceNotLocal);
+        }
+        let (class, value, identity) = (source.class, source.value.clone(), source.identity);
+        let local = ObjectId(state.id());
+        state.objects.insert(
+            local,
+            ObjectRecord {
+                class,
+                value,
+                identity,
+                global: false,
+            },
+        );
+        state.locals.entry(env.owner).or_default().insert(local);
+        Ok(local)
     }
 
     fn check_env(&self, env: &ThreadEnv) -> Result<(), JniError> {

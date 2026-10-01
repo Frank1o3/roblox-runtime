@@ -5,6 +5,8 @@ use std::time::Instant;
 static STARTUP_BOOTSTRAP: OnceLock<extern "C" fn()> = OnceLock::new();
 static TEXT_BOX_INFO: OnceLock<Mutex<HashMap<crate::ObjectId, NativeTextBoxInfo>>> =
     OnceLock::new();
+static MESSAGEBUS_CONNECTION_HANDLES: OnceLock<Mutex<HashMap<crate::ObjectId, i64>>> =
+    OnceLock::new();
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -568,7 +570,62 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
             .map_err(|error| error.to_string())?;
     }
 
+    // Cordial's message-bus bridge implements this factory in C++ and keeps
+    // the returned native pointer with the Connection object. Keep that
+    // constructor in the selected Rust VM too; otherwise each webview
+    // subscription crosses into the companion VM just to create its wrapper.
+    let connection = vm
+        .find_or_define_class("com/roblox/universalapp/messagebus/Connection")
+        .map_err(|error| error.to_string())?;
+    install_builtin(
+        vm,
+        connection,
+        "<init>",
+        "(J)Lcom/roblox/universalapp/messagebus/Connection;",
+        messagebus_connection_init,
+    )?;
+    // Cordial registers the factory with a Class receiver, while the engine
+    // lookup observed in rusty-blox does not expose whether it asks for the
+    // static or instance method table. Support both JNI lookup forms.
+    install_instance_builtin(
+        vm,
+        connection,
+        "<init>",
+        "(J)Lcom/roblox/universalapp/messagebus/Connection;",
+        messagebus_connection_init,
+    )?;
+
     Ok(())
+}
+
+fn messagebus_connection_init(
+    vm: &Vm,
+    _receiver: Option<crate::ObjectId>,
+    args: &[JniValue],
+) -> JniValue {
+    let Some(JniValue::Long(native_handle)) = args.first() else {
+        eprintln!("[jnivm] MessageBus Connection factory received no native handle");
+        return JniValue::Object(None);
+    };
+    let Ok(class) = vm.find_or_define_class("com/roblox/universalapp/messagebus/Connection")
+    else {
+        return JniValue::Object(None);
+    };
+    let env = vm.get_env().unwrap_or_else(|| vm.attach_current_thread());
+    match vm.new_local_object(&env, class, crate::ObjectValue::Opaque) {
+        Ok(connection) => {
+            MESSAGEBUS_CONNECTION_HANDLES
+                .get_or_init(|| Mutex::new(HashMap::new()))
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .insert(connection, *native_handle);
+            JniValue::Object(Some(connection))
+        }
+        Err(error) => {
+            eprintln!("[jnivm] could not create MessageBus Connection: {error}");
+            JniValue::Object(None)
+        }
+    }
 }
 
 fn system_identity_hash_code(

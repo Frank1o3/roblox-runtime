@@ -912,6 +912,12 @@ unsafe extern "system" fn is_same_object(
         // the companion C++ VM.
         return (left_is_class && right_is_class && left_raw == right_raw) as jni::jboolean;
     }
+    if vm.same_object(
+        crate::ObjectId::from_raw(left_raw),
+        crate::ObjectId::from_raw(right_raw),
+    ) {
+        return jni::JNI_TRUE;
+    }
     let env = vm.get_env().unwrap_or_else(|| vm.attach_current_thread());
     let left_id = crate::ObjectId(left_raw);
     let right_id = crate::ObjectId(right_raw);

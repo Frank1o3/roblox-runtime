@@ -286,11 +286,15 @@ fn raw_callback_run(
         return jnivm::JniValue::Void;
     };
     let direct_sink = RUST_SINKS.get().and_then(|sinks| {
-        sinks
+        let sinks = sinks
             .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .get(&receiver.raw())
-            .copied()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        sinks.get(&receiver.raw()).copied().or_else(|| {
+            sinks.iter().find_map(|(candidate, sink)| {
+                vm.same_object(receiver, jnivm::ObjectId::from_raw(*candidate))
+                    .then_some(*sink)
+            })
+        })
     });
     let receiver_reference = match vm.object_value(
         &vm.get_env().unwrap_or_else(|| vm.attach_current_thread()),
@@ -311,12 +315,9 @@ fn raw_callback_run(
             .unwrap_or_else(|poisoned| poisoned.into_inner())
             .clone();
         mirrors.into_iter().find_map(|(mirror, sink)| {
-            jnivm::cpp_fallback_same_object(
-                receiver_reference,
-                mirror as usize as *mut c_void,
-            )
-            .filter(|same| *same)
-            .map(|_| sink)
+            jnivm::cpp_fallback_same_object(receiver_reference, mirror as usize as *mut c_void)
+                .filter(|same| *same)
+                .map(|_| sink)
         })
     });
     let Some(sink) = sink else {
