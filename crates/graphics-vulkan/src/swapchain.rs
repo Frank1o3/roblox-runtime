@@ -1,10 +1,51 @@
 use ash::vk::{self, Handle};
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicI32, Ordering};
+use std::sync::{Mutex, OnceLock};
 
 const MODE_OFF: i32 = -1;
 const MODE_UNCAPPED: i32 = -2;
 const MODE_AUTO: i32 = 1;
 static PRESENT_MODE: AtomicI32 = AtomicI32::new(MODE_AUTO);
+
+#[allow(dead_code)]
+#[derive(Clone, Copy, Default)]
+struct SwapchainMetadata {
+    image_count: u32,
+    format: vk::Format,
+    extent: vk::Extent2D,
+    last_present_index: u32,
+    transfer_source_supported: bool,
+}
+
+static SWAPCHAIN_METADATA: OnceLock<Mutex<HashMap<u64, SwapchainMetadata>>> = OnceLock::new();
+
+fn swapchain_metadata() -> &'static Mutex<HashMap<u64, SwapchainMetadata>> {
+    SWAPCHAIN_METADATA.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn device_supports_transfer_source(physical: vk::PhysicalDevice, format: vk::Format) -> bool {
+    let instance = vk::Instance::from_raw(super::dispatch::INSTANCE.load(Ordering::Relaxed) as u64 as _);
+    if instance.is_null() || physical.is_null() {
+        return false;
+    }
+    let function = super::loader::host_proc(instance, c"vkGetPhysicalDeviceFormatProperties");
+    let Some(function) = function else {
+        return false;
+    };
+    let function: vk::PFN_vkGetPhysicalDeviceFormatProperties =
+        unsafe { std::mem::transmute(function) };
+    let mut properties = vk::FormatProperties::default();
+    unsafe { function(physical, format, &mut properties) };
+    properties
+        .optimal_tiling_features
+        .contains(vk::FormatFeatureFlags::TRANSFER_SRC)
+}
+
+fn supports_internal_frame_readback(physical: vk::PhysicalDevice, format: vk::Format) -> bool {
+    matches!(format, vk::Format::B8G8R8A8_SRGB | vk::Format::B8G8R8A8_UNORM)
+        && device_supports_transfer_source(physical, format)
+}
 
 pub(super) fn set_present_mode(mode: Option<&str>) {
     let selected = match mode.map(str::trim).map(str::to_ascii_lowercase).as_deref() {
@@ -133,8 +174,25 @@ pub(crate) extern "system" fn create_swapchain(
         min_image_count: image_count,
         ..*info
     };
-    // SAFETY: the copy differs only in present mode and a supported image count.
-    unsafe { function(device, &patched, allocator, output) }
+    let physical = vk::PhysicalDevice::from_raw(
+        super::dispatch::PHYSICAL_DEVICE.load(Ordering::Relaxed) as u64 as _,
+    );
+    let readback_supported =
+        !physical.is_null() && supports_internal_frame_readback(physical, patched.image_format);
+    super::set_internal_frame_readback_supported(readback_supported);
+    let result = unsafe { function(device, &patched, allocator, output) };
+    if result == vk::Result::SUCCESS && !output.is_null() {
+        let handle = unsafe { (*output).as_raw() } as u64;
+        let metadata = SwapchainMetadata {
+            image_count: patched.min_image_count,
+            format: patched.image_format,
+            extent: patched.image_extent,
+            last_present_index: 0,
+            transfer_source_supported: readback_supported,
+        };
+        swapchain_metadata().lock().unwrap_or_else(|error| error.into_inner()).insert(handle, metadata);
+    }
+    result
 }
 
 pub(crate) extern "system" fn get_surface_capabilities(
@@ -159,6 +217,34 @@ pub(crate) extern "system" fn get_surface_capabilities(
             let caps = unsafe { &mut *output };
             if caps.current_extent.width == u32::MAX {
                 caps.current_extent = vk::Extent2D { width, height };
+            }
+        }
+    }
+    result
+}
+
+#[allow(dead_code)]
+pub(crate) extern "system" fn queue_present(
+    queue: vk::Queue,
+    info: *const vk::PresentInfoKHR<'_>,
+) -> vk::Result {
+    let address = super::dispatch::HOST_QUEUE_PRESENT.load(Ordering::Relaxed);
+    if address == 0 {
+        return vk::Result::ERROR_INITIALIZATION_FAILED;
+    }
+    type Function =
+        unsafe extern "system" fn(vk::Queue, *const vk::PresentInfoKHR<'_>) -> vk::Result;
+    let function: Function = unsafe { std::mem::transmute(address) };
+    let result = unsafe { function(queue, info) };
+    if result == vk::Result::SUCCESS && !info.is_null() {
+        let info = unsafe { &*info };
+        let mut state = swapchain_metadata().lock().unwrap_or_else(|error| error.into_inner());
+        for index in 0..info.swapchain_count as usize {
+            let swapchain = unsafe { *info.p_swapchains.add(index) };
+            let image_index = unsafe { *info.p_image_indices.add(index) };
+            if let Some(metadata) = state.get_mut(&(swapchain.as_raw() as u64)) {
+                metadata.last_present_index = image_index;
+                record_frame_tap_state(metadata, image_index);
             }
         }
     }
