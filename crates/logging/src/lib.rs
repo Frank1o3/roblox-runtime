@@ -42,7 +42,6 @@ fn looks_like_error(message: &str) -> bool {
         "rejected",
         "blocked",
         "not found",
-        "missing",
         "not implemented",
         "abort()",
         "stack protector",
