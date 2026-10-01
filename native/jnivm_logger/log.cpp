@@ -39,6 +39,13 @@ int selected_level() {
     return value[0] - '0';
 }
 
+bool is_error(const char* line) {
+    return std::strstr(line, " failed") != nullptr
+        || std::strstr(line, "could not") != nullptr
+        || std::strstr(line, "error") != nullptr
+        || std::strstr(line, "Error") != nullptr;
+}
+
 }  // namespace
 
 extern "C" int roblox_runtime_log_level() {
@@ -59,7 +66,7 @@ void debug(const char* tag, const char* format, ...) {
         return;
     }
 
-    if (!quiet() && selected_level() >= 3) {
+    if (!quiet() && (selected_level() >= 3 || is_error(line))) {
         printf("[%s]: %s\n", tag ? tag : "JNIVM", line);
     }
 

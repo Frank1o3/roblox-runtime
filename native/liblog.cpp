@@ -93,7 +93,7 @@ int minimum_priority() {
             }
         }
         const char* v = getenv("RBX_RUNTIME_LOG_LEVEL");
-        if (!v) return (int)ANDROID_LOG_DEBUG;
+        if (!v) return (int)ANDROID_LOG_INFO;
         switch (v[0]) {
             case 'v': case 'V': return (int)ANDROID_LOG_VERBOSE;
             case 'd': case 'D': return (int)ANDROID_LOG_DEBUG;
