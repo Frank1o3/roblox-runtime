@@ -10,7 +10,7 @@ pub enum DetectionType {
     Hsv,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(default)]
 pub struct DetectionConfig {
     /// Width and height of the centered square region analyzed, in pixels.
@@ -25,8 +25,20 @@ pub struct DetectionConfig {
     pub max_area: f64,
     pub offset_x: f64,
     pub offset_y: f64,
+    /// EMA decay for movement smoothing; 0 is responsive and 1 retains motion.
+    pub smoothness: f64,
+    /// Movement gain at the centre of the FOV.
+    pub min_strength: f64,
+    /// Movement gain at the edge of the FOV.
+    pub max_strength: f64,
     /// Fraction of the last frame's movement added to the reported point.
     pub lead: f64,
+    /// Whether triggerbot starts enabled (F3 continues to toggle it at runtime).
+    pub triggerbot: bool,
+    /// Maximum distance from frame centre at which triggerbot may click.
+    pub trigger_dist: f64,
+    /// Minimum interval between trigger clicks, in milliseconds.
+    pub trigger_delay: u64,
     /// Hex RGB colors such as `#ffffb2`. Multiple colors are ORed together.
     pub colors: Vec<String>,
     #[serde(alias = "color_space")]
@@ -45,7 +57,13 @@ impl Default for DetectionConfig {
             max_area: 9999.0,
             offset_x: 0.0,
             offset_y: 0.0,
+            smoothness: 0.1,
+            min_strength: 0.033,
+            max_strength: 0.8,
             lead: 0.0,
+            triggerbot: false,
+            trigger_dist: 10.0,
+            trigger_delay: 250,
             colors: vec!["#ffffb2".into(), "#ffffb4".into(), "#ffffb6".into()],
             detection_type: DetectionType::Bgr,
         }
@@ -75,7 +93,10 @@ impl DetectionConfig {
     pub fn save(&self, path: impl AsRef<Path>) -> Result<(), DetectionConfigError> {
         self.validate()?;
         let path = path.as_ref();
-        if let Some(parent) = path.parent().filter(|parent| !parent.as_os_str().is_empty()) {
+        if let Some(parent) = path
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+        {
             std::fs::create_dir_all(parent)?;
         }
         let temporary = path.with_extension("json.tmp");
@@ -109,6 +130,10 @@ impl DetectionConfig {
             ("offset_x", self.offset_x),
             ("offset_y", self.offset_y),
             ("lead", self.lead),
+            ("smoothness", self.smoothness),
+            ("min_strength", self.min_strength),
+            ("max_strength", self.max_strength),
+            ("trigger_dist", self.trigger_dist),
         ] {
             if !value.is_finite() {
                 return Err(DetectionConfigError::InvalidField(name));
@@ -123,9 +148,14 @@ impl DetectionConfig {
             || self.tolerance_v < 0.0
             || self.tolerance_v > 255.0
             || self.lead < 0.0
+            || !(0.0..=1.0).contains(&self.smoothness)
+            || self.min_strength < 0.0
+            || self.max_strength < 0.0
+            || self.max_strength < self.min_strength
+            || self.trigger_dist < 0.0
         {
             return Err(DetectionConfigError::Invalid(
-                "tolerances must be in range and lead must be non-negative",
+                "tolerances and movement settings are out of range",
             ));
         }
         if self.colors.is_empty() {

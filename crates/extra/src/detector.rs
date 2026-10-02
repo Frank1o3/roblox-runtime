@@ -30,11 +30,13 @@ pub struct Detection {
 #[derive(Default)]
 pub struct Detector {
     previous_center: Option<Point>,
+    smoothed_movement: Option<Point>,
 }
 
 impl Detector {
     pub fn reset(&mut self) {
         self.previous_center = None;
+        self.smoothed_movement = None;
     }
 
     /// Detect the best matching color blob in a CV_8UC3 BGR frame.
@@ -222,20 +224,39 @@ impl Detector {
             let dx = center.x - reference.x;
             let dy = center.y - reference.y;
             let score = (dx * dx + dy * dy) as f64 + 1.0 / (area + 1.0);
+            let predicted = Point {
+                x: center.x
+                    + self
+                        .previous_center
+                        .map_or(0.0, |previous| (center.x - previous.x) * config.lead as f32)
+                    + config.offset_x as f32,
+                y: center.y
+                    + self
+                        .previous_center
+                        .map_or(0.0, |previous| (center.y - previous.y) * config.lead as f32)
+                    + config.offset_y as f32,
+            };
+            let raw_dx = predicted.x - frame_center.x;
+            let raw_dy = predicted.y - frame_center.y;
+            let distance = (raw_dx * raw_dx + raw_dy * raw_dy).sqrt();
+            let strength = config.min_strength as f32
+                + (distance / config.fov as f32).min(1.0)
+                    * (config.max_strength - config.min_strength) as f32;
+            let movement = Point {
+                x: raw_dx * strength,
+                y: raw_dy * strength,
+            };
+            let alpha = config.smoothness as f32;
+            let movement = self.smoothed_movement.map_or(movement, |previous| Point {
+                x: alpha * previous.x + (1.0 - alpha) * movement.x,
+                y: alpha * previous.y + (1.0 - alpha) * movement.y,
+            });
             let detection = Detection {
                 bounds,
                 center,
                 adjusted_center: Point {
-                    x: center.x
-                        + self
-                            .previous_center
-                            .map_or(0.0, |previous| (center.x - previous.x) * config.lead as f32)
-                        + config.offset_x as f32,
-                    y: center.y
-                        + self
-                            .previous_center
-                            .map_or(0.0, |previous| (center.y - previous.y) * config.lead as f32)
-                        + config.offset_y as f32,
+                    x: frame_center.x + movement.x,
+                    y: frame_center.y + movement.y,
                 },
                 area,
             };
@@ -253,6 +274,10 @@ impl Detector {
         };
 
         self.previous_center = Some(detection.center);
+        self.smoothed_movement = Some(Point {
+            x: detection.adjusted_center.x - frame_center.x,
+            y: detection.adjusted_center.y - frame_center.y,
+        });
         Ok(Some(detection))
     }
 }
