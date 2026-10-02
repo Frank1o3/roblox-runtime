@@ -4,8 +4,8 @@
 //! Base APKs are searched before split APKs, matching the order supplied by
 //! the embedding client.
 
-use std::collections::HashMap;
-use std::ffi::{CStr, c_char, c_int, c_void};
+use std::collections::{HashMap, VecDeque};
+use std::ffi::{c_char, c_int, c_void, CStr};
 use std::fs::{self, File};
 use std::io::{Read, Seek, SeekFrom};
 use std::os::unix::fs::FileExt;
@@ -13,7 +13,38 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 
 struct Asset {
-    bytes: &'static [u8],
+    bytes: Arc<Vec<u8>>,
+}
+
+const MAX_ASSET_CACHE_BYTES: usize = 32 * 1024 * 1024;
+const MAX_CACHED_ASSET_COUNT: usize = 1024;
+
+#[derive(Default)]
+struct AssetCache {
+    entries: HashMap<String, Arc<Vec<u8>>>,
+    insertion_order: VecDeque<String>,
+    bytes: usize,
+}
+
+impl AssetCache {
+    fn insert(&mut self, name: String, bytes: Arc<Vec<u8>>) {
+        if bytes.len() > MAX_ASSET_CACHE_BYTES || self.entries.contains_key(&name) {
+            return;
+        }
+        while self.entries.len() >= MAX_CACHED_ASSET_COUNT
+            || self.bytes.saturating_add(bytes.len()) > MAX_ASSET_CACHE_BYTES
+        {
+            let Some(oldest) = self.insertion_order.pop_front() else {
+                break;
+            };
+            if let Some(evicted) = self.entries.remove(&oldest) {
+                self.bytes = self.bytes.saturating_sub(evicted.len());
+            }
+        }
+        self.bytes += bytes.len();
+        self.insertion_order.push_back(name.clone());
+        self.entries.insert(name, bytes);
+    }
 }
 
 #[derive(Clone)]
@@ -81,15 +112,16 @@ impl Apk {
 
 struct Manager {
     apks: Vec<Apk>,
-    cache: Mutex<HashMap<String, &'static [u8]>>,
+    cache: Mutex<AssetCache>,
 }
 
 impl Manager {
-    fn read(&self, name: &str) -> Option<&'static [u8]> {
-        if let Some(bytes) = self.cache.lock().ok()?.get(name).copied() {
+    fn read(&self, name: &str) -> Option<Arc<Vec<u8>>> {
+        if let Some(bytes) = self.cache.lock().ok()?.entries.get(name).cloned() {
             return Some(bytes);
         }
 
+        let entry_name = format!("assets/{name}");
         for apk in &self.apks {
             let Some(archive) = apk.archive() else {
                 continue;
@@ -97,16 +129,21 @@ impl Manager {
             let Ok(mut archive) = archive.lock() else {
                 continue;
             };
-            let Ok(mut entry) = archive.by_name(&format!("assets/{name}")) else {
+            let Ok(mut entry) = archive.by_name(&entry_name) else {
                 continue;
             };
-            let mut bytes = Vec::with_capacity(entry.size() as usize);
+            let size = usize::try_from(entry.size()).ok()?;
+            let mut bytes = Vec::new();
+            bytes.try_reserve_exact(size).ok()?;
             if entry.read_to_end(&mut bytes).is_err() {
                 continue;
             }
-            let bytes: &'static [u8] = Vec::leak(bytes);
+            let bytes = Arc::new(bytes);
             if let Ok(mut cache) = self.cache.lock() {
-                cache.insert(name.to_owned(), bytes);
+                if let Some(existing) = cache.entries.get(name) {
+                    return Some(existing.clone());
+                }
+                cache.insert(name.to_owned(), bytes.clone());
             }
             return Some(bytes);
         }
@@ -132,13 +169,14 @@ pub fn set_apks(paths: &[PathBuf]) -> Result<(), String> {
     MANAGER
         .set(Manager {
             apks,
-            cache: Mutex::new(HashMap::new()),
+            cache: Mutex::new(AssetCache::default()),
         })
         .map_err(|_| "APK assets are already configured".into())
 }
 
-/// Read one `assets/` entry, retaining its buffer for the process lifetime.
-pub fn read_asset(name: &str) -> Option<&'static [u8]> {
+/// Read one `assets/` entry. Cached bytes are bounded; open handles keep their
+/// own shared reference alive until Android closes them.
+pub fn read_asset(name: &str) -> Option<Arc<Vec<u8>>> {
     MANAGER.get()?.read(name)
 }
 
@@ -390,7 +428,7 @@ pub fn overrides() -> Vec<(&'static str, *mut c_void)> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Apk, Manager, extract_to};
+    use super::{extract_to, Apk, Manager};
     use std::fs::{self, File};
     use std::io::Write;
     use std::path::Path;
