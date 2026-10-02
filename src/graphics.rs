@@ -135,7 +135,7 @@ pub fn prepare_with_swap_interval(
     roblox_graphics_vulkan::set_enabled(selected == Backend::Vulkan);
     VSYNC.store(vsync, Ordering::Relaxed);
     OPENGL_SWAP_INTERVAL.store(opengl_swap_interval.clamp(-1, 1), Ordering::Relaxed);
-    roblox_graphics_vulkan::set_present_mode(present_mode);
+    roblox_graphics_vulkan::set_present_mode(present_mode, vsync);
     if selected == Backend::OpenGlEs && !host_egl_available() {
         return Err(BackendUnavailable::OpenGlEs);
     }

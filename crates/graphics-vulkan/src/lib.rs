@@ -26,9 +26,10 @@ pub use loader::{LIBRARY_NAMES, available_for_surface, loader_symbol};
 pub use platform::Surface;
 
 /// Set the preferred present mode for this process (`auto`, `mailbox`,
-/// `immediate`, `fifo`, `fifo-relaxed`, or `off`).
-pub fn set_present_mode(mode: Option<&str>) {
-    swapchain::set_present_mode(mode);
+/// `immediate`, `fifo`, `fifo-relaxed`, or `off`). Disabling VSync requests
+/// immediate presentation. Unsupported modes are left to the engine's mode.
+pub fn set_present_mode(mode: Option<&str>, vsync: bool) {
+    swapchain::set_present_mode(mode, vsync);
 }
 
 pub fn set_surface(surface: Option<Surface>) {

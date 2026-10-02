@@ -129,7 +129,7 @@ pub struct RuntimeOptions {
     pub graphics_backend: graphics::BackendPreference,
     /// Requested Vulkan presentation mode (`fifo`, `fifo-relaxed`, `mailbox`, `immediate`, `auto`).
     pub present_mode: Option<String>,
-    /// Override GLES swap intervals to zero when VSync is disabled.
+    /// Disable synchronized presentation (Vulkan immediate mode or EGL interval 0).
     pub vsync: bool,
     /// EGL swap interval when OpenGL ES is selected: -1 adaptive, 0 off, 1 on.
     pub opengl_swap_interval: i32,

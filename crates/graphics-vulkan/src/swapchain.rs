@@ -1,20 +1,28 @@
 use ash::vk::{self, Handle};
 use std::sync::atomic::{AtomicI32, Ordering};
 
-const MODE_OFF: i32 = -1;
 const MODE_UNCAPPED: i32 = -2;
-const MODE_AUTO: i32 = 1;
+const MODE_ENGINE: i32 = -3;
+const MODE_AUTO: i32 = -4;
 static PRESENT_MODE: AtomicI32 = AtomicI32::new(MODE_AUTO);
 
-pub(super) fn set_present_mode(mode: Option<&str>) {
-    let selected = match mode.map(str::trim).map(str::to_ascii_lowercase).as_deref() {
-        None | Some("") | Some("auto") | Some("mailbox") => MODE_AUTO,
-        Some("uncapped") => MODE_UNCAPPED,
-        Some("off") | Some("engine") => MODE_OFF,
-        Some("immediate") => vk::PresentModeKHR::IMMEDIATE.as_raw(),
-        Some("fifo") => vk::PresentModeKHR::FIFO.as_raw(),
-        Some("fifo-relaxed") | Some("fifo_relaxed") => vk::PresentModeKHR::FIFO_RELAXED.as_raw(),
-        Some(_) => MODE_AUTO,
+pub(super) fn set_present_mode(mode: Option<&str>, vsync: bool) {
+    let selected = if !vsync {
+        vk::PresentModeKHR::IMMEDIATE.as_raw()
+    } else {
+        match mode.map(str::trim).map(str::to_ascii_lowercase).as_deref() {
+            None | Some("") | Some("auto") => MODE_AUTO,
+            Some("uncapped") => MODE_UNCAPPED,
+            Some("off") => vk::PresentModeKHR::IMMEDIATE.as_raw(),
+            Some("engine") => MODE_ENGINE,
+            Some("mailbox") => vk::PresentModeKHR::MAILBOX.as_raw(),
+            Some("immediate") => vk::PresentModeKHR::IMMEDIATE.as_raw(),
+            Some("fifo") => vk::PresentModeKHR::FIFO.as_raw(),
+            Some("fifo-relaxed") | Some("fifo_relaxed") => {
+                vk::PresentModeKHR::FIFO_RELAXED.as_raw()
+            }
+            Some(_) => MODE_AUTO,
+        }
     };
     PRESENT_MODE.store(selected, Ordering::Relaxed);
 }
@@ -92,14 +100,14 @@ pub(crate) extern "system" fn create_swapchain(
         return unsafe { function(device, create_info, allocator, output) };
     };
     let setting = PRESENT_MODE.load(Ordering::Relaxed);
-    let rewritten = if setting == MODE_OFF {
-        None
-    } else {
-        supported_modes(info.surface).and_then(|modes| {
+    let rewritten = (setting != MODE_ENGINE)
+        .then(|| supported_modes(info.surface))
+        .flatten()
+        .and_then(|modes| {
             let preferences = if setting == MODE_AUTO {
                 vec![vk::PresentModeKHR::MAILBOX]
             } else if setting == MODE_UNCAPPED {
-                vec![vk::PresentModeKHR::MAILBOX, vk::PresentModeKHR::IMMEDIATE]
+                vec![vk::PresentModeKHR::IMMEDIATE]
             } else {
                 vec![vk::PresentModeKHR::from_raw(setting)]
             };
@@ -125,8 +133,7 @@ pub(crate) extern "system" fn create_swapchain(
                         ..*info
                     }
                 })
-        })
-    };
+        });
     let effective_info = rewritten.as_ref().unwrap_or(info);
     // SAFETY: `effective_info` is either the caller's structure or a shallow
     // copy with only the present mode/image count adjusted; chained pointers

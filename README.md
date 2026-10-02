@@ -98,7 +98,14 @@ Vulkan presentation can be configured with:
     off
 
 The `present_mode` option is supplied by the embedding application through
-`RuntimeOptions`.
+`RuntimeOptions`. With VSync enabled, `mailbox`, `immediate`, `fifo`, and
+`fifo-relaxed` request those Vulkan modes directly; `fifo-relaxed` is adaptive
+VSync. With VSync disabled, Vulkan requests immediate presentation, and `off`
+does the same. A requested mode is used when the host surface supports it;
+otherwise the engine's requested mode is retained. For OpenGL ES, disabling
+`vsync` forces swap interval `0`; with it enabled, `opengl_swap_interval` selects
+`1` on, `0` off, or `-1` adaptive where the EGL driver supports adaptive swap
+control.
 
 ## Public integration surface
 
