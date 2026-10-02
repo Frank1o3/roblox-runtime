@@ -28,7 +28,7 @@ fn native_helper_flags_loaded(
 ) -> JniValue {
     let capacity = match args.first() {
         Some(JniValue::Object(Some(buffer))) => match vm.object_value(
-            &vm.get_env().unwrap_or_else(|| vm.attach_current_thread()),
+            &attached_thread_env(vm),
             *buffer,
         ) {
             Ok(crate::ObjectValue::DirectByteBuffer { capacity, .. }) => capacity,
@@ -234,7 +234,7 @@ fn native_helper_string(vm: &Vm, args: &[JniValue], index: usize) -> String {
     let Some(JniValue::Object(Some(object))) = args.get(index) else {
         return String::new();
     };
-    let env = vm.get_env().unwrap_or_else(|| vm.attach_current_thread());
+    let env = attached_thread_env(vm);
     match vm.object_value(&env, *object) {
         Ok(crate::ObjectValue::String(units)) => String::from_utf16_lossy(&units),
         _ => String::new(),

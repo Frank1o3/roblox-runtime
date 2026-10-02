@@ -41,7 +41,24 @@ unsafe extern "C" {
 
 thread_local! {
     /// Points to a boxed `JNIEnv` table pointer, the layout expected by JNI.
-    static THREAD_ENV: Cell<usize> = const { Cell::new(0) };
+    static THREAD_ENV: ThreadEnvHandle = const { ThreadEnvHandle(Cell::new(0)) };
+}
+
+struct ThreadEnvHandle(Cell<usize>);
+
+impl Drop for ThreadEnvHandle {
+    fn drop(&mut self) {
+        let raw = self.0.replace(0);
+        if raw == 0 {
+            return;
+        }
+        // SAFETY: `thread_env` stores a boxed JNI table pointer in this
+        // thread-local slot, and this destructor runs once on its owning thread.
+        unsafe { drop(Box::from_raw(raw as *mut jni::JNIEnv)) };
+        if let Some(vm) = vm() {
+            let _ = vm.detach_current_thread();
+        }
+    }
 }
 
 fn vm() -> Option<&'static Vm> {
@@ -189,8 +206,7 @@ pub fn create_vm() -> Result<*mut c_void, String> {
     install_builtin_methods(vm().expect("VM was just initialized"))?;
     let _ = env_table();
     let _ = vm_table();
-    vm().expect("VM was just initialized")
-        .attach_current_thread();
+    let _ = thread_env(vm().expect("VM was just initialized"));
     let handle = Box::new(vm_table() as jni::JavaVM);
     let raw = Box::into_raw(handle) as usize;
     VM_HANDLE
@@ -217,7 +233,7 @@ pub fn new_opaque_object(class_name: &str) -> Result<*mut c_void, String> {
     let class = vm
         .find_or_define_class(class_name)
         .map_err(|error| error.to_string())?;
-    let env = vm.get_env().unwrap_or_else(|| vm.attach_current_thread());
+    let env = attached_thread_env(vm);
     let object = vm
         .new_local_object(&env, class, crate::ObjectValue::Opaque)
         .map_err(|error| error.to_string())?;
@@ -288,7 +304,7 @@ pub fn register_method_handler(
 /// Read a Rust VM string object supplied to a Rust method handler.
 pub fn string_object(object: crate::ObjectId) -> Result<String, String> {
     let vm = vm().ok_or("Rust JavaVM has not been created")?;
-    let env = vm.get_env().unwrap_or_else(|| vm.attach_current_thread());
+    let env = attached_thread_env(vm);
     match vm
         .object_value(&env, object)
         .map_err(|error| error.to_string())?
@@ -304,7 +320,7 @@ pub fn new_string_ref(value: &str) -> Result<*mut c_void, String> {
     let class = vm
         .find_or_define_class("java/lang/String")
         .map_err(|error| error.to_string())?;
-    let env = vm.get_env().unwrap_or_else(|| vm.attach_current_thread());
+    let env = attached_thread_env(vm);
     let object = vm
         .new_local_object(
             &env,
@@ -363,7 +379,7 @@ pub fn new_configuration(width: i32, height: i32) -> Result<*mut c_void, String>
 /// runtime entry points that call engine JNI exports directly.
 pub fn new_string_array_ref(values: &[String]) -> Result<*mut c_void, String> {
     let vm = vm().ok_or("Rust JavaVM has not been created")?;
-    let env = vm.get_env().unwrap_or_else(|| vm.attach_current_thread());
+    let env = attached_thread_env(vm);
     let string_class = vm
         .find_or_define_class("java/lang/String")
         .map_err(|e| e.to_string())?;
@@ -491,16 +507,24 @@ pub unsafe fn call_on_load(function: *mut c_void) -> Result<i32, String> {
 
 fn thread_env(vm: &Vm) -> *mut jni::JNIEnv {
     THREAD_ENV.with(|slot| {
-        let existing = slot.get();
+        let existing = slot.0.get();
         if existing != 0 {
             return existing as *mut jni::JNIEnv;
         }
         vm.attach_current_thread();
         let handle = Box::new(env_table() as jni::JNIEnv);
         let handle = Box::into_raw(handle);
-        slot.set(handle as usize);
+        slot.0.set(handle as usize);
         handle
     })
+}
+
+/// Attach the current thread through the JavaVM entry path so it receives a
+/// `JNIEnv` handle and its local references are cleared on detach or thread exit.
+fn attached_thread_env(vm: &Vm) -> crate::ThreadEnv {
+    let _ = thread_env(vm);
+    vm.get_env()
+        .expect("thread_env attaches the current thread before returning")
 }
 
 unsafe extern "system" fn get_version(_env: *mut jni::JNIEnv) -> jni::jint {
@@ -918,7 +942,7 @@ unsafe extern "system" fn is_same_object(
     ) {
         return jni::JNI_TRUE;
     }
-    let env = vm.get_env().unwrap_or_else(|| vm.attach_current_thread());
+    let env = attached_thread_env(vm);
     let left_id = crate::ObjectId(left_raw);
     let right_id = crate::ObjectId(right_raw);
     let left_value = vm.object_value(&env, left_id).ok();
@@ -999,7 +1023,7 @@ unsafe extern "system" fn get_java_vm(
 include!("abi/calls.rs");
 
 fn env_token(vm: &Vm, env: *mut jni::JNIEnv) -> Option<crate::ThreadEnv> {
-    let current = THREAD_ENV.with(Cell::get);
+    let current = THREAD_ENV.with(|slot| slot.0.get());
     if current == 0 || env as usize != current {
         return None;
     }
@@ -1041,7 +1065,7 @@ unsafe extern "system" fn attach_current_thread(
 
 unsafe extern "system" fn detach_current_thread(_vm: *mut jni::JavaVM) -> jni::jint {
     THREAD_ENV.with(|slot| {
-        let raw = slot.replace(0);
+        let raw = slot.0.replace(0);
         if raw == 0 {
             return jni::JNI_EDETACHED;
         }
@@ -1070,7 +1094,7 @@ unsafe extern "system" fn get_env(
         return jni::JNI_EVERSION;
     }
     let Some(env) = THREAD_ENV
-        .with(Cell::get)
+        .with(|slot| slot.0.get())
         .checked_sub(0)
         .filter(|value| *value != 0)
     else {

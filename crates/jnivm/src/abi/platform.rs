@@ -192,7 +192,7 @@ fn device_utils_physical_size(
         return JniValue::Object(None);
     }
 
-    let env = vm.get_env().unwrap_or_else(|| vm.attach_current_thread());
+    let env = attached_thread_env(vm);
     let Ok(class) = vm.find_class("android/graphics/Point") else {
         return JniValue::Object(None);
     };
@@ -589,7 +589,7 @@ fn java_string_arg(vm: &Vm, args: &[JniValue], index: usize) -> Option<String> {
     let Some(JniValue::Object(Some(id))) = args.get(index) else {
         return None;
     };
-    let env = vm.get_env().unwrap_or_else(|| vm.attach_current_thread());
+    let env = attached_thread_env(vm);
     match vm.object_value(&env, *id) {
         Ok(crate::ObjectValue::String(units)) => Some(String::from_utf16_lossy(&units)),
         _ => None,

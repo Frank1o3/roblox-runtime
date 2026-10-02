@@ -613,7 +613,7 @@ fn messagebus_connection_init(
     else {
         return JniValue::Object(None);
     };
-    let env = vm.get_env().unwrap_or_else(|| vm.attach_current_thread());
+    let env = attached_thread_env(vm);
     match vm.new_local_object(&env, class, crate::ObjectValue::Opaque) {
         Ok(connection) => {
             MESSAGEBUS_CONNECTION_HANDLES
@@ -661,7 +661,7 @@ fn install_system_dialog_singleton(vm: &Vm) -> Result<(), String> {
             true,
         )
         .map_err(|error| error.to_string())?;
-    let env = vm.get_env().unwrap_or_else(|| vm.attach_current_thread());
+    let env = attached_thread_env(vm);
     let local_instance = vm
         .new_local_object(&env, class, crate::ObjectValue::Opaque)
         .map_err(|error| error.to_string())?;
@@ -741,7 +741,7 @@ fn install_build_manufacturer(vm: &Vm) -> Result<(), String> {
     let JniValue::Object(Some(manufacturer)) = java_string(vm, "roblox-runtime", "Build") else {
         return Err("could not allocate android/os/Build.MANUFACTURER".into());
     };
-    let env = vm.get_env().unwrap_or_else(|| vm.attach_current_thread());
+    let env = attached_thread_env(vm);
     let manufacturer = vm
         .new_global_ref(&env, manufacturer)
         .map_err(|error| error.to_string())?;
@@ -810,7 +810,7 @@ fn native_text_box_info_init(
         eprintln!("[jnivm] NativeTextBoxInfo constructor received invalid arguments");
         return JniValue::Object(None);
     };
-    let env = vm.get_env().unwrap_or_else(|| vm.attach_current_thread());
+    let env = attached_thread_env(vm);
     let Ok(class) = vm.find_or_define_class("com/roblox/engine/jni/model/NativeTextBoxInfo") else {
         return JniValue::Object(None);
     };
@@ -890,7 +890,7 @@ fn native_helper_show_keyboard(
     };
     let text = match args.get(2) {
         Some(JniValue::Object(Some(array))) => {
-            let env = vm.get_env().unwrap_or_else(|| vm.attach_current_thread());
+            let env = attached_thread_env(vm);
             match vm.object_value(&env, *array) {
                 Ok(crate::ObjectValue::ByteArray(bytes)) => bytes
                     .into_iter()
@@ -945,7 +945,7 @@ fn system_dialog_proxy_init(
     ) else {
         return JniValue::Object(None);
     };
-    let env = vm.get_env().unwrap_or_else(|| vm.attach_current_thread());
+    let env = attached_thread_env(vm);
     let Ok(object) = vm.new_local_object(&env, class, crate::ObjectValue::Opaque) else {
         return JniValue::Object(None);
     };
@@ -956,7 +956,7 @@ fn system_dialog_proxy_init(
 }
 
 fn new_opaque_local(vm: &Vm, class_name: &str) -> JniValue {
-    let env = vm.get_env().unwrap_or_else(|| vm.attach_current_thread());
+    let env = attached_thread_env(vm);
     let Ok(class) = vm.find_or_define_class(class_name) else {
         return JniValue::Object(None);
     };
@@ -1086,9 +1086,9 @@ fn zero_insets(vm: &Vm, _receiver: Option<crate::ObjectId>, _args: &[JniValue]) 
     let Ok(class) = vm.find_or_define_class("androidx/core/graphics/Insets") else {
         return JniValue::Object(None);
     };
-    vm.get_env()
-        .or_else(|| Some(vm.attach_current_thread()))
-        .and_then(|env| vm.new_local_object(&env, class, crate::ObjectValue::Opaque).ok())
+    let env = attached_thread_env(vm);
+    vm.new_local_object(&env, class, crate::ObjectValue::Opaque)
+        .ok()
         .map_or(JniValue::Object(None), |object| {
             for name in ["left", "top", "right", "bottom"] {
                 if let Ok(field) = vm.resolve_field(class, name, "I", false) {
@@ -1164,7 +1164,7 @@ fn empty_video_codecs(
     _receiver: Option<crate::ObjectId>,
     _args: &[JniValue],
 ) -> JniValue {
-    let env = vm.get_env().unwrap_or_else(|| vm.attach_current_thread());
+    let env = attached_thread_env(vm);
     match vm.new_local_object_array(&env, 0, None) {
         Ok(array) => JniValue::Object(Some(array)),
         Err(error) => {
@@ -1197,7 +1197,7 @@ fn class_get_class_loader(
     _receiver: Option<crate::ObjectId>,
     _args: &[JniValue],
 ) -> JniValue {
-    let env = vm.get_env().unwrap_or_else(|| vm.attach_current_thread());
+    let env = attached_thread_env(vm);
     let Ok(class) = vm.find_or_define_class("java/lang/ClassLoader") else {
         return JniValue::Object(None);
     };
@@ -1218,7 +1218,7 @@ fn class_loader_find_class(
     let Some(JniValue::Object(Some(name))) = args.first() else {
         return JniValue::Object(None);
     };
-    let env = vm.get_env().unwrap_or_else(|| vm.attach_current_thread());
+    let env = attached_thread_env(vm);
     let Ok(crate::ObjectValue::String(units)) = vm.object_value(&env, *name) else {
         eprintln!("[jnivm] ClassLoader class lookup received a non-string name");
         return JniValue::Object(None);
@@ -1242,7 +1242,7 @@ fn device_static_params(
     _receiver: Option<crate::ObjectId>,
     _args: &[JniValue],
 ) -> JniValue {
-    let env = vm.get_env().unwrap_or_else(|| vm.attach_current_thread());
+    let env = attached_thread_env(vm);
     let Ok(class) = vm.find_or_define_class("com/roblox/engine/jni/model/DeviceStaticParams") else {
         return JniValue::Object(None);
     };
@@ -1389,7 +1389,7 @@ fn theme_string(vm: &Vm, _receiver: Option<crate::ObjectId>, _args: &[JniValue])
 }
 
 fn java_string(vm: &Vm, value: &str, source: &str) -> JniValue {
-    let env = vm.get_env().unwrap_or_else(|| vm.attach_current_thread());
+    let env = attached_thread_env(vm);
     let Ok(class) = vm.find_or_define_class("java/lang/String") else {
         return JniValue::Object(None);
     };

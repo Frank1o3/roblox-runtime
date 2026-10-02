@@ -617,7 +617,7 @@ fn to_cpp_jvalue(vm: &Vm, ty: &crate::Type, value: &JniValue) -> Option<jni::jva
 }
 
 fn cpp_reference_for(vm: &Vm, object: crate::ObjectId, class_name: &str) -> Option<usize> {
-    let value = vm.object_value(&vm.get_env().unwrap_or_else(|| vm.attach_current_thread()), object).ok()?;
+    let value = vm.object_value(&attached_thread_env(vm), object).ok()?;
     if let crate::ObjectValue::CppObject(reference) = value {
         return Some(reference);
     }
@@ -677,7 +677,7 @@ fn from_cpp_jvalue(vm: &Vm, ty: &crate::Type, value: jni::jvalue) -> Option<JniV
                 if class_name == "java/lang/String" {
                     return cpp_string_to_rust(vm, value.l as *mut std::ffi::c_void);
                 }
-                let env = vm.get_env().unwrap_or_else(|| vm.attach_current_thread());
+                let env = attached_thread_env(vm);
                 let class = vm.find_or_define_class(class_name).ok()?;
                 let object = vm
                     .new_local_object(
@@ -720,7 +720,7 @@ fn cpp_string_to_rust(vm: &Vm, string_ref: *mut std::ffi::c_void) -> Option<JniV
         eprintln!("[jnivm:fallback] could not copy C++ Java String contents");
         return None;
     }
-    let env = vm.get_env().unwrap_or_else(|| vm.attach_current_thread());
+    let env = attached_thread_env(vm);
     let class = vm.find_or_define_class("java/lang/String").ok()?;
     let object = vm
         .new_local_object(&env, class, crate::ObjectValue::String(units))

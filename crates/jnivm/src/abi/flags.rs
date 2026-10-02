@@ -60,7 +60,7 @@ fn rust_java_string(vm: &Vm, value: &JniValue) -> Option<String> {
     let JniValue::Object(Some(object)) = value else {
         return None;
     };
-    let env = vm.get_env().unwrap_or_else(|| vm.attach_current_thread());
+    let env = attached_thread_env(vm);
     let ObjectValue::String(units) = vm.object_value(&env, *object).ok()? else {
         return None;
     };

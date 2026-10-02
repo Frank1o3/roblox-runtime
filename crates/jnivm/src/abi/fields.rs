@@ -64,7 +64,7 @@ fn read_game_text_input_state(
                 .map(|byte| *byte as u8)
                 .collect::<Vec<_>>();
             let text = String::from_utf8_lossy(&raw);
-            let env = vm.get_env().unwrap_or_else(|| vm.attach_current_thread());
+            let env = attached_thread_env(vm);
             let class = vm.find_or_define_class("java/lang/String").ok()?;
             let object = vm
                 .new_local_object(
