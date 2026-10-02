@@ -81,6 +81,28 @@ fn image_count_limits(surface: vk::SurfaceKHR) -> Option<(u32, u32)> {
     Some((capabilities.min_image_count, capabilities.max_image_count))
 }
 
+fn surface_usage(surface: vk::SurfaceKHR) -> Option<vk::ImageUsageFlags> {
+    let instance =
+        vk::Instance::from_raw(super::dispatch::INSTANCE.load(Ordering::Relaxed) as u64 as _);
+    let physical = vk::PhysicalDevice::from_raw(
+        super::dispatch::PHYSICAL_DEVICE.load(Ordering::Relaxed) as u64 as _,
+    );
+    if instance.is_null() || physical.is_null() {
+        return None;
+    }
+    let function =
+        super::loader::host_proc(instance, c"vkGetPhysicalDeviceSurfaceCapabilitiesKHR")?;
+    // SAFETY: this function pointer has Vulkan's surface-capabilities ABI.
+    let function: vk::PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR =
+        unsafe { std::mem::transmute(function) };
+    let mut capabilities = vk::SurfaceCapabilitiesKHR::default();
+    // SAFETY: output is a valid writable Vulkan capabilities struct.
+    if unsafe { function(physical, surface, &mut capabilities) } != vk::Result::SUCCESS {
+        return None;
+    }
+    Some(capabilities.supported_usage_flags)
+}
+
 pub(crate) extern "system" fn create_swapchain(
     device: vk::Device,
     create_info: *const vk::SwapchainCreateInfoKHR<'_>,
@@ -99,8 +121,15 @@ pub(crate) extern "system" fn create_swapchain(
         // SAFETY: forwarding all caller arguments unchanged preserves Vulkan's validation.
         return unsafe { function(device, create_info, allocator, output) };
     };
+    let mut rewritten = *info;
+    let usage_supported = surface_usage(info.surface)
+        .is_some_and(|usage| usage.contains(vk::ImageUsageFlags::TRANSFER_SRC));
+    if usage_supported {
+        rewritten.image_usage |= vk::ImageUsageFlags::TRANSFER_SRC;
+    }
+
     let setting = PRESENT_MODE.load(Ordering::Relaxed);
-    let rewritten = (setting != MODE_ENGINE)
+    let present_rewrite = (setting != MODE_ENGINE)
         .then(|| supported_modes(info.surface))
         .flatten()
         .and_then(|modes| {
@@ -127,18 +156,28 @@ pub(crate) extern "system" fn create_swapchain(
                             }
                         }
                     }
-                    vk::SwapchainCreateInfoKHR {
-                        present_mode: chosen,
-                        min_image_count: image_count,
-                        ..*info
-                    }
+                    (chosen, image_count)
                 })
         });
-    let effective_info = rewritten.as_ref().unwrap_or(info);
-    // SAFETY: `effective_info` is either the caller's structure or a shallow
-    // copy with only the present mode/image count adjusted; chained pointers
-    // remain valid for this synchronous Vulkan call.
-    unsafe { function(device, effective_info, allocator, output) }
+    if let Some((present_mode, image_count)) = present_rewrite {
+        rewritten.present_mode = present_mode;
+        rewritten.min_image_count = image_count;
+    }
+    // SAFETY: `rewritten` preserves the caller's struct and only adjusts
+    // supported image usage and optional presentation settings. Chained
+    // pointers remain valid for this synchronous Vulkan call.
+    let result = unsafe { function(device, &rewritten, allocator, output) };
+    if result == vk::Result::SUCCESS && !output.is_null() {
+        // SAFETY: successful vkCreateSwapchainKHR wrote the created handle.
+        super::capture::register_swapchain(
+            device,
+            unsafe { *output },
+            info.image_format,
+            info.image_extent,
+            usage_supported,
+        );
+    }
+    result
 }
 
 pub(crate) extern "system" fn get_surface_capabilities(

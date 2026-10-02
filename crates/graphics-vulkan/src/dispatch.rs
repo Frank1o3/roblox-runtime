@@ -73,7 +73,8 @@ extern "system" fn get_device_proc_addr(
     // SAFETY: the pointer is the host loader's vkGetDeviceProcAddr.
     let function: Function = unsafe { std::mem::transmute(address) };
     // SAFETY: Vulkan requires a NUL-terminated function name.
-    match unsafe { CStr::from_ptr(name) }.to_bytes() {
+    let c_name = unsafe { CStr::from_ptr(name) };
+    match c_name.to_bytes() {
         b"vkCreateSwapchainKHR" => {
             HOST_CREATE_SWAPCHAIN.store(
                 raw(unsafe { function(device, name) }) as usize,
@@ -81,7 +82,11 @@ extern "system" fn get_device_proc_addr(
             );
             Some(unsafe { std::mem::transmute(super::swapchain::create_swapchain as *const ()) })
         }
-        _ => unsafe { function(device, name) },
+        _ => {
+            // SAFETY: host GDeviceProcAddr is called with the original device/name.
+            let host = unsafe { function(device, name) };
+            super::capture::intercept_device_proc(device, c_name, host).or(host)
+        }
     }
 }
 
@@ -107,7 +112,46 @@ extern "system" fn create_device(
     let result = unsafe { function(physical_device, info, allocator, output) };
     if result == vk::Result::SUCCESS {
         PHYSICAL_DEVICE.store(physical_device.as_raw() as usize, Ordering::Relaxed);
+        if !output.is_null() {
+            let host_get_device_proc_addr = HOST_GET_DEVICE_PROC_ADDR.load(Ordering::Acquire);
+            if host_get_device_proc_addr != 0 {
+                // SAFETY: the saved function pointer was resolved from the live host loader.
+                let get_device_proc_addr: unsafe extern "system" fn(
+                    vk::Device,
+                    *const c_char,
+                )
+                    -> vk::PFN_vkVoidFunction =
+                    unsafe { std::mem::transmute(host_get_device_proc_addr) };
+                let instance = vk::Instance::from_raw(INSTANCE.load(Ordering::Acquire) as _);
+                let memory_properties =
+                    super::loader::host_proc(instance, c"vkGetPhysicalDeviceMemoryProperties");
+                let queue_family_properties =
+                    super::loader::host_proc(instance, c"vkGetPhysicalDeviceQueueFamilyProperties");
+                if let (Some(memory_properties), Some(queue_family_properties)) =
+                    (memory_properties, queue_family_properties)
+                {
+                    // SAFETY: each symbol name above selects the exact typed Vulkan ABI.
+                    let memory_properties: unsafe extern "system" fn(
+                        vk::PhysicalDevice,
+                        *mut vk::PhysicalDeviceMemoryProperties,
+                    ) = unsafe { std::mem::transmute(memory_properties) };
+                    // SAFETY: same typed symbol-resolution guarantee as above.
+                    let queue_family_properties: unsafe extern "system" fn(
+                        vk::PhysicalDevice,
+                        *mut u32,
+                        *mut vk::QueueFamilyProperties,
+                    ) = unsafe { std::mem::transmute(queue_family_properties) };
+                    // SAFETY: successful vkCreateDevice wrote a live logical-device handle.
+                    super::capture::register_device(
+                        physical_device,
+                        unsafe { *output },
+                        get_device_proc_addr,
+                        memory_properties,
+                        queue_family_properties,
+                    );
+                }
+            }
+        }
     }
     result
 }
-
