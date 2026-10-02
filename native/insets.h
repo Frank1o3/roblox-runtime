@@ -13,7 +13,7 @@
 /// has to be visible where the hook is written.
 ///
 /// Four fields. Zero on every one is the correct answer and, unusually here,
-/// not a placeholder: Cordial's window has no status bar, no navigation bar,
+/// not a placeholder: roblox-runtime's window has no status bar, no navigation bar,
 /// no display cutout and no gesture areas, so there is genuinely nothing for
 /// the engine to inset its layout by. A phone's values invented here would
 /// push Roblox's UI inward from edges that do not exist.

@@ -24,7 +24,7 @@ pub mod jni {
     ///
     /// `f` must be a live pointer to the exported JNI native this call
     /// names, obtained via [`Library::symbol`] (or the module-level dlsym
-    /// equivalent) against a `libroblox.so` Cordial has `dlopen`'d and never
+    /// equivalent) against a `libroblox.so` roblox-runtime has `dlopen`'d and never
     /// `dlclose`s. The C shim supplies the `JNIEnv`/`jobject` it invokes the
     /// native with from the process's own `JavaVM`, not from anything passed
     /// here -- so the one thing this call cannot check is that `f` really

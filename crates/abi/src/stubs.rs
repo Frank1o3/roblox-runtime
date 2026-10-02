@@ -1,4 +1,4 @@
-//! Stub implementations for every Android symbol Cordial does not provide yet.
+//! Stub implementations for every Android symbol roblox-runtime does not provide yet.
 //!
 //! A stub records that it was called and returns zero. That makes the first
 //! launch attempt produce a *prioritised* list of what to implement — which is

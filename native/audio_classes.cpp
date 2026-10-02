@@ -39,12 +39,12 @@
 //
 // Not paused, not muted, not connected-but-inactive — absent. A capture stream
 // in any of those states still keeps the desktop's microphone indicator lit
-// and still shows every other application that Cordial is holding the capture
+// and still shows every other application that roblox-runtime is holding the capture
 // device, which is the harm; whether samples are flowing is not the part a
 // user can see. `CaptureStream::close()` therefore destroys the `pw_stream`
 // rather than deactivating it.
 //
-// There are exactly three callers of `CaptureStream::open()` in Cordial:
+// There are exactly three callers of `CaptureStream::open()` in roblox-runtime:
 // `AudioRecord::startRecording` and `WebRtcAudioRecord::startRecording` below,
 // and `AudioRecorderObject::start_capture` in `opensles.cpp`, which runs only
 // from `SLRecordItf::SetRecordState(SL_RECORDSTATE_RECORDING)`. All three close
@@ -60,9 +60,9 @@
 // it held again: a `pw-dump` sampler independently caught the node while
 // `SL_RECORDSTATE_RECORDING` and not otherwise, and 590 buffers of real
 // samples were read across two record/pause cycles, proving data flowed
-// rather than the stream merely existing. A real `cordial-run` session with
+// rather than the stream merely existing. A real `roblox-runtime-run` session with
 // this change built in, 25 s at Roblox's Landing screen with no voice call
-// joined, showed zero `cordial-`-named nodes in `pw-dump` throughout. What
+// joined, showed zero `roblox-runtime-`-named nodes in `pw-dump` throughout. What
 // that does not cover — `WebRtcAudioRecord`'s own JNI glue actually being
 // driven by the engine end to end — needs a live voice call; see this class's
 // own comment and the report accompanying the change that added it.
@@ -266,7 +266,7 @@ public:
     std::string productName;
 
     /// PipeWire converts on the graph edge, so a device's *native* rate is not
-    /// the set of rates a stream may ask for. These are the rates Cordial will
+    /// the set of rates a stream may ask for. These are the rates roblox-runtime will
     /// actually accept from Roblox and honour, which is what the getter is
     /// asked to describe.
     static std::shared_ptr<jnivm::Array<jint>> rates(ENV*, Object*) {
@@ -416,7 +416,7 @@ public:
         }
         // Once, and only the first time. Whether Roblox asks for the device
         // list at all is a question `--dump-classes` cannot answer — the dump
-        // lists this class because Cordial registered it, not because anything
+        // lists this class because roblox-runtime registered it, not because anything
         // called it — and it is the difference between a device list that is
         // used and one that is merely correct.
         static bool announced = false;
@@ -454,10 +454,10 @@ public:
     }
 
     static jboolean isMicrophoneMute(ENV*, Object*) {
-        // Cordial has no global microphone mute of its own, and reporting the
+        // roblox-runtime has no global microphone mute of its own, and reporting the
         // *host's* mute state would be reporting on a control Roblox cannot
         // then operate through `setMicrophoneMute`. False is the truthful
-        // answer to "is Cordial muting the microphone", which is the question
+        // answer to "is roblox-runtime muting the microphone", which is the question
         // this object is being asked.
         return false;
     }
@@ -591,7 +591,7 @@ public:
         return 0;
     }
 
-    /// **One of exactly two places in Cordial that open the microphone.**
+    /// **One of exactly two places in roblox-runtime that open the microphone.**
     static void startRecording(ENV*, Object* self) {
         auto* r = as(self);
         if (!r || r->sampleRate <= 0) return;
@@ -727,9 +727,9 @@ bool cache_audio_parameters(ENV* env, Object* self, jlong native_audio_manager);
 /// WebRTC's voice engine asks Java for the platform's audio parameters once,
 /// at construction, and then builds its whole audio device module around the
 /// answers. On real Android this class is Kotlin/Java running in the app; that
-/// cannot execute under Cordial (there is no JVM — the same established
+/// cannot execute under roblox-runtime (there is no JVM — the same established
 /// finding that governs `MainGameActivity.bootstrapTheApp`), so the class is
-/// implemented here instead and answers from what Cordial can actually do.
+/// implemented here instead and answers from what roblox-runtime can actually do.
 ///
 /// **`init()` used to report failure, deliberately** — the parameter getters
 /// were honest, but the uplink was only half the path: WebRTC also needed
@@ -824,7 +824,7 @@ public:
     }
 
     // Android's hardware audio effects. There are none here — PipeWire's echo
-    // canceller is a separate module the user opts into, not something Cordial
+    // canceller is a separate module the user opts into, not something roblox-runtime
     // can claim on the device's behalf — and saying otherwise would have
     // WebRTC switch off its own software AEC in favour of one that does not
     // exist, which is audible as echo rather than as an error.
@@ -1109,7 +1109,7 @@ public:
         return static_cast<jint>(r->bufferBytes);
     }
 
-    /// **One of exactly two places in Cordial that open the microphone** —
+    /// **One of exactly two places in roblox-runtime that open the microphone** —
     /// `AudioRecord::startRecording` above is the other, and
     /// `pipewire_backend.h`'s own comment on `CaptureStream::open` names both
     /// as the only permitted callers.
@@ -1324,8 +1324,8 @@ private:
 // because this was missing — see that class's own comment — so this is the
 // change that lets a signed-in client receive voice audio at all.
 //
-// **Which of Cordial's three audio paths carries voice chat was established
-// by running, not assumed.** A signed-in `cordial-run` reaching Roblox's Home
+// **Which of roblox-runtime's three audio paths carries voice chat was established
+// by running, not assumed.** A signed-in `roblox-runtime-run` reaching Roblox's Home
 // screen on 2.736.1408, `--dump-classes` against the real client, shows
 // exactly `org/webrtc/voiceengine/{WebRtcAudioManager,WebRtcAudioRecord,
 // WebRtcAudioTrack}` under `org/webrtc` — no `org/webrtc/audio/*` (the newer,
@@ -1344,7 +1344,7 @@ private:
 // leaves unverified.
 //
 // **`nativeCacheDirectBufferAddress` and `nativeGetPlayoutData` are native
-// methods the *engine* provides, not ones Cordial answers.** Checked against
+// methods the *engine* provides, not ones roblox-runtime answers.** Checked against
 // `docs/analysis/jni-natives.tsv` — the same exported-symbol table every other
 // JNI binding in this tree is checked against — and neither name appears
 // there as a `Java_org_webrtc_voiceengine_WebRtcAudioTrack_native...` export.
@@ -1379,7 +1379,7 @@ private:
 // recalled from WebRTC's own long-public `WebRtcAudioTrack.java` and is
 // `INFERRED` rather than read out of Roblox's bytecode body — Roblox's copy
 // of this class is not decompiled anywhere in this tree, only its declared
-// method table is. The buffer-size arithmetic below is Cordial's own choice
+// method table is. The buffer-size arithmetic below is roblox-runtime's own choice
 // (WE are standing in for the Java method's entire implementation, so nothing
 // downstream depends on reproducing its exact original formula), not a
 // transcription of anything Roblox or WebRTC ships.
@@ -1778,7 +1778,7 @@ private:
 ///
 /// It exists because of a gap that took a while to notice: the whole audio
 /// backend can be verified out of process (`native/audio_probe.cpp` does), and
-/// none of that says whether it works *inside* `cordial-run`, where bionic's
+/// none of that says whether it works *inside* `roblox-runtime-run`, where bionic's
 /// linker, libjnivm and a second libc are in the same address space. Until
 /// something in Roblox actually asks for audio, this is the only way to find
 /// out, and "nothing asked, so nothing was tested" is how a backend stays
@@ -1871,7 +1871,7 @@ public:
     ///
     /// **This predicate, not `dlopen`, is the real gate**, and that was worth
     /// measuring rather than assuming. `docs/analysis/aaudio-contract.md` had
-    /// it that Roblox's `dlopen("libaaudio.so")` fails because Cordial
+    /// it that Roblox's `dlopen("libaaudio.so")` fails because roblox-runtime
     /// registers no such library. It does not fail — it never happens. A
     /// signed-in run into place 1818 with `RBX_RUNTIME_TRACE_DLSYM=1` records six
     /// guest `dlopen` calls (`libc`, `libcamera2ndk`, `libmediandk`,
@@ -1983,7 +1983,7 @@ public:
         // The sink comes from `configured_output_device()` rather than from
         // anything FMOD said, and it cannot come from anywhere else: Roblox's
         // own picker is populated by FMOD's output backend, which presents a
-        // single device on every path Cordial provides, and the AAudio path
+        // single device on every path roblox-runtime provides, and the AAudio path
         // has no `AAudioStreamBuilder_setDeviceId` for the engine to ask with
         // (`docs/analysis/aaudio-contract.md`). Empty is the default and means
         // the session's own default sink, followed live.
@@ -2068,7 +2068,7 @@ public:
     ///
     ///   RBX Worker B   AudioDevice::close  -> holds lock_
     ///                  PlaybackStream::set_active -> pw_thread_loop_lock, waits
-    ///   cordial-pipewire  loop_iterate -> Impl::process -> holds the loop lock
+    ///   roblox-runtime-pipewire  loop_iterate -> Impl::process -> holds the loop lock
     ///                  AudioDevice::drained -> lock_, waits
     ///
     /// Every `stream_` entry point takes PipeWire's thread-loop lock, and the
@@ -2076,7 +2076,7 @@ public:
     /// across any `stream_` call is an AB-BA against PipeWire's own loop, and
     /// it never recovers.
     ///
-    /// It cost two days pointed at the wrong component. Cordial's pump stays
+    /// It cost two days pointed at the wrong component. roblox-runtime's pump stays
     /// perfectly healthy through this -- `epoll_wait` in `looper::pump` at 1%
     /// CPU, 74 million polls on an earlier specimen -- because nothing is wrong
     /// with the pump. The engine's audio worker is blocked, so the engine stops

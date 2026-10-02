@@ -2,7 +2,7 @@
 //
 // `libOpenSLES.so` was listed in `EMPTY_LIBRARIES` on the basis that Roblox
 // consulted it only through `dlsym`, if at all. That was true of the build
-// Cordial was first developed against. It is not true of current builds, which
+// roblox-runtime was first developed against. It is not true of current builds, which
 // reference eight OpenSL symbols directly:
 //
 //     slCreateEngine
@@ -932,7 +932,7 @@ SLresult androidconfig_ReleaseJavaProxy(SLAndroidConfigurationItf, SLuint32) {
 //
 // Pausing destroying the stream rather than deactivating it is the same rule
 // as `CaptureStream::close`'s: a paused-but-connected capture node is still a
-// lit indicator and still shows every other application that Cordial holds the
+// lit indicator and still shows every other application that roblox-runtime holds the
 // device. Samples arriving during a pause are discarded either way, so nothing
 // is lost by not being there for them.
 
@@ -1599,7 +1599,7 @@ uint32_t slCreateEngine(void** engine, uint32_t numOptions, const void* pEngineO
     (void)pEngineOptions;
 
     // Announced on entry, before anything can decline. Whether the engine calls
-    // this at all is the first question about Cordial's audio and it has been
+    // this at all is the first question about roblox-runtime's audio and it has been
     // answered "not at the Landing screen" only — with no line printed on the
     // way in, an absent engine and a refused one looked identical in a log, and
     // the PipeWire "session reachable" line below is not a substitute because

@@ -572,7 +572,7 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
             .map_err(|error| error.to_string())?;
     }
 
-    // Cordial's message-bus bridge implements this factory in C++ and keeps
+    // roblox-runtime's message-bus bridge implements this factory in C++ and keeps
     // the returned native pointer with the Connection object. Keep that
     // constructor in the selected Rust VM too; otherwise each webview
     // subscription crosses into the companion VM just to create its wrapper.
@@ -586,7 +586,7 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
         "(J)Lcom/roblox/universalapp/messagebus/Connection;",
         messagebus_connection_init,
     )?;
-    // Cordial registers the factory with a Class receiver, while the engine
+    // roblox-runtime registers the factory with a Class receiver, while the engine
     // lookup observed in rusty-blox does not expose whether it asks for the
     // static or instance method table. Support both JNI lookup forms.
     install_instance_builtin(
@@ -738,7 +738,7 @@ fn install_build_manufacturer(vm: &Vm) -> Result<(), String> {
     let field = vm
         .register_field(class, "MANUFACTURER", "Ljava/lang/String;", true)
         .map_err(|error| error.to_string())?;
-    let JniValue::Object(Some(manufacturer)) = java_string(vm, "Cordial", "Build") else {
+    let JniValue::Object(Some(manufacturer)) = java_string(vm, "roblox-runtime", "Build") else {
         return Err("could not allocate android/os/Build.MANUFACTURER".into());
     };
     let env = vm.get_env().unwrap_or_else(|| vm.attach_current_thread());
@@ -1131,7 +1131,7 @@ fn default_files_dir() -> String {
                 .map(|home| format!("{home}/.local/share"))
         })
         .unwrap_or_else(|| "/tmp".to_owned());
-    format!("{base}/cordial/instances/default/data")
+    format!("{base}/roblox-runtime/instances/default/data")
 }
 
 fn reporter_empty_string(

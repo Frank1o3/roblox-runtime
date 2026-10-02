@@ -1,8 +1,8 @@
-//! Everything Cordial did not answer, in one place.
+//! Everything Corroblox-runtimedial did not answer, in one place.
 //!
 //! ## Why this exists
 //!
-//! Cordial answers the Android platform for an engine that assumes Android is
+//! roblox-runtime answers the Android platform for an engine that assumes Android is
 //! there. When it does not have an answer, the gap shows up in four unrelated
 //! places and three different formats: a generated libc stub returning zero, a
 //! JNI class or method libjnivm has never heard of, an AGDK native the engine
@@ -17,7 +17,7 @@
 //!
 //! ## What it does not tell you
 //!
-//! **A gap listed here is not a cause.** This is a list of questions Cordial
+//! **A gap listed here is not a cause.** This is a list of questions roblox-runtime
 //! answered badly or not at all; which one mattered is a separate investigation,
 //! and this project's own history is largely of confident answers to that
 //! question being wrong. The report is a work queue and a starting point for
@@ -190,9 +190,9 @@ fn render_from(seen: &BTreeMap<(Kind, String), u64>) -> String {
     }
 
     let mut out = String::new();
-    out.push_str("=== what Cordial did not answer this run ===\n");
+    out.push_str("=== what roblox-runtime did not answer this run ===\n");
     out.push_str(
-        "Each line is a question the engine asked that Cordial answered badly or not at\n\
+        "Each line is a question the engine asked that roblox-runtime answered badly or not at\n\
          all. This is a work queue, not a diagnosis: a gap here is not evidence that it\n\
          is the gap that broke anything. Only what was reached this run is listed.\n\n",
     );

@@ -3,7 +3,7 @@
 //!
 //! There is no `strace` in the target environment and the process has no frame
 //! pointers, so an unwound backtrace past the innermost frame is guesswork.
-//! Cordial owns the symbol table, though, which means any import can be
+//! roblox-runtime owns the symbol table, though, which means any import can be
 //! intercepted. That is a better instrument than a debugger here: it says what
 //! was called, with what, in order.
 //!
@@ -150,7 +150,7 @@ extern "C" fn t_abort() -> ! {
 
 extern "C" fn t_stack_chk_fail() -> ! {
     eprintln!("\n*** stack protector tripped inside Roblox ***");
-    eprintln!("    A callee wrote past its frame. If Cordial provided that callee,");
+    eprintln!("    A callee wrote past its frame. If roblox-runtime provided that callee,");
     eprintln!("    its signature or a struct layout is wrong — see bionic::pthread.");
     crate::stubs::report();
     // SAFETY: as above.

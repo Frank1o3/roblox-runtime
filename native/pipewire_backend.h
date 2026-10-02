@@ -80,7 +80,7 @@ struct DeviceInfo {
 /// as "no devices" rather than substituting a plausible-looking one.
 std::vector<DeviceInfo> enumerate_devices();
 
-/// The PipeWire sink Cordial has been asked to play into, as a stable
+/// The PipeWire sink roblox-runtime has been asked to play into, as a stable
 /// `node.name` — `alsa_output.pci-0000_00_1f.3-...`, not an index and not a
 /// description.
 ///
@@ -128,7 +128,7 @@ std::string resolve_output_target(const std::string& requested);
 /// `audio_classes.cpp` logs this when the engine stops recording, and the
 /// test binary reads it to prove enumeration left it at zero. `pw-top` and
 /// the desktop's own microphone indicator are the independent checks; this
-/// is the one Cordial can make about itself.
+/// is the one roblox-runtime can make about itself.
 uint32_t active_capture_streams();
 
 /// One playback stream, backed by one `pw_stream`. `opensles.cpp` owns one of
@@ -253,7 +253,7 @@ public:
 /// spells it. Read once, from one place, and announced at startup -- which was written here before it was true and became true on 2026-08-28, after a user set the variable, got silence, and had nothing to read that would tell them whether it had been seen.
 ///
 /// **A separate variable from `RBX_RUNTIME_AUDIO`, and ADR-023 says why.** That one
-/// selects which *Android* API FMOD reaches Cordial through — AAudio, OpenSL,
+/// selects which *Android* API FMOD reaches roblox-runtime through — AAudio, OpenSL,
 /// or FMOD's Java path — and every combination of those with a host backend is
 /// meaningful. One variable for two orthogonal axes is a variable nobody can
 /// document.
@@ -417,9 +417,9 @@ inline std::atomic<bool>& voice_muted() {
 /// instance holds no PipeWire resource at all until `open()`, and holds none
 /// again the moment `close()` returns. There is no paused state and no muted
 /// state, because neither of those puts the desktop's microphone indicator
-/// out and neither of those stops another application seeing Cordial holding
+/// out and neither of those stops another application seeing roblox-runtime holding
 /// the capture device. A recording that has stopped must be indistinguishable
-/// from a Cordial that never recorded, and the only way to be
+/// from a roblox-runtime that never recorded, and the only way to be
 /// indistinguishable is to actually not be there.
 ///
 /// That is why the read side is a ring buffer owned by this object rather
@@ -439,7 +439,7 @@ public:
     /// `channels`, from `target_node_name` if it is non-empty and from
     /// whatever PipeWire calls the default source otherwise.
     ///
-    /// **This is the only function in Cordial that opens the microphone.**
+    /// **This is the only function in roblox-runtime that opens the microphone.**
     /// Every caller of it must be on a path the engine explicitly asked to
     /// record on: `AudioRecord.startRecording`, `WebRtcAudioRecord.startRecording`,
     /// OpenSL's recorder transition, or `AAudioStream_requestStart`.
@@ -466,7 +466,7 @@ public:
 
     /// Bytes the ring had to drop because the reader was too slow, since
     /// `open`. This is the capture side's *real* overrun count, and unlike
-    /// the playback side's it is one Cordial can see for itself: the ring is
+    /// the playback side's it is one roblox-runtime can see for itself: the ring is
     /// ours, the reader is ours, and a reader that falls half a second behind
     /// loses samples here rather than at the server.
     ///

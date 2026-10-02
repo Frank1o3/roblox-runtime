@@ -1,4 +1,4 @@
-// Drives Cordial's audio backend the way Roblox drives it, so that "audio
+// Drives roblox-runtime's audio backend the way Roblox drives it, so that "audio
 // works" can be a measurement rather than a reading of the code.
 //
 // Everything about this backend that had been established before this file

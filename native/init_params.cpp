@@ -17,7 +17,7 @@
 // `isMouseDevice` **not once**. Setting those two to the desktop answer has
 // therefore never told the engine anything. The control in the same run is
 // `DeviceParams.deviceName`, whose getter fired and whose value came back out of
-// the engine as `[FLog::Graphics] Vulkan Android Device: Cordial`, so the probe
+// the engine as `[FLog::Graphics] Vulkan Android Device: roblox-runtime`, so the probe
 // was working when the two peripheral fields stayed silent.
 //
 // What that leaves: the engine is told there is no touchscreen, and behaves as a
@@ -136,7 +136,7 @@ std::shared_ptr<Object> make_display_metrics(ENV* env);
 /// return one without duplicating the class.
 std::shared_ptr<Insets> roblox_make_zero_insets(ENV* env);
 
-/// Which device identity Cordial presents to the engine and to roblox.com.
+/// Which device identity roblox-runtime presents to the engine and to roblox.com.
 ///
 /// Three, not two. **The default is unchanged: `pc-windows-11`.** The third
 /// identity is shipped as a choice, not as a new default -- a tablet identity
@@ -163,7 +163,7 @@ std::shared_ptr<Insets> roblox_make_zero_insets(ENV* env);
 /// in-experience web view gets the site's embedded layout for **every**
 /// identity here, and the full desktop site with its own navigation bar only
 /// for a browser `User-Agent` -- the branch roblox.com makes is app against
-/// browser, not PC against Android. `crates/cordial-shell/src/webview.rs` said
+/// browser, not PC against Android. `crates/roblox-runtime/src/webview.rs` said
 /// the right thing about the browser case and was read as though the *PC*
 /// identity were what preserved the in-app layout; it is not, and nothing here
 /// trades the web view for a graphics tier.
@@ -189,8 +189,8 @@ std::shared_ptr<Insets> roblox_make_zero_insets(ENV* env);
 ///
 /// So `roblox-app` claims to be the Roblox app and declines to claim a form
 /// factor at all: no phone, no tablet, no Windows PC, and no device block full
-/// of numbers whose only purpose is to look like hardware Cordial is not. The
-/// channel stays `Cordial` rather than borrowing `GooglePlayStore`, on the same
+/// of numbers whose only purpose is to look like hardware roblox-runtime is not. The
+/// channel stays `roblox-runtime` rather than borrowing `GooglePlayStore`, on the same
 /// rule every other identity field in this file follows.
 ///
 /// **What this does not do, and must not be read as doing.** It is an identity,
@@ -208,7 +208,7 @@ std::shared_ptr<Insets> roblox_make_zero_insets(ENV* env);
 /// refusing Vulkan when it was lowered -- so the identity is not internally
 /// uniform and nobody should read it as a complete disguise.
 ///
-/// The accepted spellings match `crates/cordial-runtime/src/flags.rs`'s
+/// The accepted spellings match `crates/roblox-runtime-runtime/src/flags.rs`'s
 /// `DeviceProfile::parse` exactly, **including what an unrecognised value
 /// does**. That agreement is new. This function used to treat anything it did
 /// not recognise as `pc-windows-11` while `flags.rs` treated the same string
@@ -284,8 +284,8 @@ const char* device_platform_name() {
 /// against a local table would make `RBX_RUNTIME_DEVICE_PROFILE` change InitParams
 /// and the User-Agent while leaving WebRTC's BuildInfo on a stale answer.
 ///
-/// Values stay inside Cordial's own honest vocabulary (manufacturer/device
-/// name already report `"Cordial"`). Only the fields that legitimately differ
+/// Values stay inside roblox-runtime's own honest vocabulary (manufacturer/device
+/// name already report `"roblox-runtime"`). Only the fields that legitimately differ
 /// by profile — model/device/product form factor, and the Android release
 /// string — change with the switch. `sdk_version` stays `"33"` for every
 /// profile: `DeviceParams.osVersion` is load-bearing for Vulkan and is not
@@ -309,20 +309,20 @@ const DeviceProfile& device_profile() {
                 // model matches mocktail's `class=pc model="Windows 11 PC"`
                 // line; device/product keep the PC form factor distinct from
                 // the tablet identity so a BuildInfo read can see the switch.
-                return DeviceProfile{"Cordial", "Cordial", "Windows 11 PC",
-                                     "roblox_pc", "roblox_pc", "cordial", "user",
+                return DeviceProfile{"roblox-runtime", "roblox-runtime", "Windows 11 PC",
+                                     "roblox_pc", "roblox_pc", "roblox-runtime", "user",
                                      "11", "33"};
             case DeviceIdentity::AndroidTablet:
-                return DeviceProfile{"Cordial", "Cordial", "Cordial", "cordial",
-                                     "cordial", "cordial", "user", "13", "33"};
+                return DeviceProfile{"roblox-runtime", "roblox-runtime", "roblox-runtime", "roblox-runtime",
+                                     "roblox-runtime", "roblox-runtime", "user", "13", "33"};
             case DeviceIdentity::RobloxApp:
-                // Bare app token: no form-factor claim beyond Cordial's own
+                // Bare app token: no form-factor claim beyond roblox-runtime's own
                 // name, matching the User-Agent arm that drops the device block.
-                return DeviceProfile{"Cordial", "Cordial", "Cordial", "cordial",
-                                     "cordial", "cordial", "user", "13", "33"};
+                return DeviceProfile{"roblox-runtime", "roblox-runtime", "roblox-runtime", "roblox-runtime",
+                                     "roblox-runtime", "roblox-runtime", "user", "13", "33"};
         }
-        return DeviceProfile{"Cordial", "Cordial", "Cordial", "cordial", "cordial",
-                             "cordial", "user", "13", "33"};
+        return DeviceProfile{"roblox-runtime", "roblox-runtime", "roblox-runtime", "roblox-runtime", "roblox-runtime",
+                             "roblox-runtime", "user", "13", "33"};
     }();
     return v;
 }
@@ -331,7 +331,7 @@ const DeviceProfile& device_profile() {
 ///
 /// **This was `"Roblox/Android"`, and the comment above it was wrong in the most
 /// expensive way available.** It said the string was "Roblox's own client
-/// string, not Cordial's: the service routes and gates on it, and a fabricated
+/// string, not roblox-runtime's: the service routes and gates on it, and a fabricated
 /// one would be both untrue and likely rejected". `Roblox/Android` appears
 /// **zero times** in `libroblox.so`. It was fabricated, by us, and the comment
 /// stated the exact risk of doing so while doing it.
@@ -346,11 +346,11 @@ const DeviceProfile& device_profile() {
 ///  GooglePlayStore RobloxApp/2.732.1043 (GlobalDist; GooglePlayStore)
 /// ```
 ///
-/// Built here with the same **shape** and Cordial's own **honest values**: real
+/// Built here with the same **shape** and roblox-runtime's own **honest values**: real
 /// installed memory, the real window size, the density `DisplayMetrics` already
 /// reports, the API level `Build.VERSION.SDK_INT` already answers, and the
 /// engine version already read out of the binary. The device name stays
-/// `Cordial` rather than borrowing a phone's — matching the format is not the
+/// `roblox-runtime` rather than borrowing a phone's — matching the format is not the
 /// same as claiming to be hardware we are not, and every other identity field
 /// in this file makes the same choice for the same reason.
 ///
@@ -366,13 +366,13 @@ const DeviceProfile& device_profile() {
 /// `PcWindows11` swaps exactly the two words that would otherwise contradict
 /// `isTablet` below (`Android` and `Tablet`, for `Windows` and `Desktop`),
 /// drops the trailing Android API-level slot rather than filling it with a
-/// guess, and replaces the two `GooglePlayStore` tokens with `Cordial`. Nobody
+/// guess, and replaces the two `GooglePlayStore` tokens with `roblox-runtime`. Nobody
 /// here has captured what Roblox's actual Windows client sends — only
 /// mocktail's own `class=pc model="Windows 11 PC"` line
 /// (`docs/analysis/flag-init.md` §13) — so it invents no Windows build number,
 /// no NT version, and no other syntax nothing here has seen. **It is also the
 /// one identity roblox.com reads as `data-app-type="uwp"`**, i.e. a Microsoft
-/// Store app, which Cordial is not; that is a cost of the shape rather than
+/// Store app, which roblox-runtime is not; that is a cost of the shape rather than
 /// something chosen, and it is part of why it is no longer the default.
 ///
 /// `RobloxApp` is the bare app token and nothing else: no `Mozilla`, no WebKit
@@ -464,11 +464,11 @@ static std::string build_user_agent() {
 /// Hands `build_user_agent`'s exact answer to the Rust side.
 ///
 /// `build_user_agent` has internal linkage (`static`, inside `namespace
-/// cordial`), which is correct for a value nothing outside this translation
+/// roblox-runtime`), which is correct for a value nothing outside this translation
 /// unit is supposed to invent independently — but the desktop web view and
 /// `NativeGLInterface.setWebviewUserAgent` both need to present the identical
 /// string `InitParams.userAgent` was built with, and they live in
-/// `crates/cordial-shell` and `crates/cordial-runtime/src/bin/load.rs`. The
+/// `crates/roblox-runtime-shell` and `crates/roblox-runtime-runtime/src/bin/load.rs`. The
 /// alternative was a second copy of this function in Rust, which is exactly
 /// the failure mode `docs/analysis/platform-identity.md` and this file's own
 /// history warn about: two computations of "what device are we" drifting the
@@ -634,7 +634,7 @@ public:
     /// Was an unconditional `NOTOUCH` with a comment saying that claiming
     /// otherwise would ask Roblox for touch controls on a machine that cannot
     /// produce a touch event. The reasoning was right and the constant was
-    /// wrong the moment Cordial could produce one: this and
+    /// wrong the moment roblox-runtime could produce one: this and
     /// `PlatformParams.isTouchDevice` are two descriptions of the same fact,
     /// and a client told twice, differently, what kind of machine it is on is
     /// the inconsistency the `kSource*`/`kToolType*` pairing in
@@ -742,7 +742,7 @@ public:
 /// `FindClass` does not reach it.
 ///
 /// That is where this stops, and the remaining question is about jnivm's
-/// lookup rather than about the contract: other Cordial classes are found, so
+/// lookup rather than about the contract: other roblox-runtime classes are found, so
 /// something distinguishes this path. `--dump-classes` would name what the
 /// engine asked for and did not produce a file on the run that tried it.
 ///
@@ -788,8 +788,8 @@ std::shared_ptr<Insets> roblox_make_zero_insets(ENV* env) { return Insets::Creat
 /// **The exact bit values do not need to match AndroidX's**, and pretending
 /// otherwise would be the guess. What has to hold is that they are distinct
 /// and stable within one process, because the only consumer of the mask is
-/// Cordial's own `getWindowInsets`, which answers zero insets for every family.
-/// Distinct powers of two satisfy that. If a future change makes Cordial return
+/// roblox-runtime's own `getWindowInsets`, which answers zero insets for every family.
+/// Distinct powers of two satisfy that. If a future change makes roblox-runtime return
 /// real insets per family, these become load-bearing and should be taken from
 /// the capture rather than from here.
 class WindowInsetsCompatType : public Object {
@@ -874,7 +874,7 @@ public:
 /// immediately after this call, so the reading is confirmed twice over.
 ///
 /// It is Android's `ActivityManager.getHistoricalProcessExitReasons()`: what
-/// killed the app last time. Cordial has no such history to report, and an empty
+/// killed the app last time. roblox-runtime has no such history to report, and an empty
 /// list says exactly that — no prior abnormal exit. Inventing entries would be
 /// telling the engine about crashes that did not happen, which is the kind of
 /// stub that lies.
@@ -1128,9 +1128,9 @@ public:
 /// then repeated `add(name, value)`.
 ///
 /// This class was entirely unimplemented, so any attempt at calling
-/// `readLocalFlags` from Cordial would fault or silently do nothing useful —
+/// `readLocalFlags` from roblox-runtime would fault or silently do nothing useful —
 /// nothing in the shipping dex ever called it either (the real app's only
-/// caller is a different, non-`ActivityNativeMain` startup path Cordial does
+/// caller is a different, non-`ActivityNativeMain` startup path roblox-runtime does
 /// not replicate), so this was dead on arrival either way.
 ///
 /// The `<init>` registration uses the same static-factory idiom
@@ -1182,7 +1182,7 @@ public:
 /// `com.roblox.client.startup.NativeHelper`
 ///
 /// The engine's own status channel back into the app. `onFlagsFailed` is the one
-/// Cordial has always gotten, on every launch — this is now investigated to a
+/// roblox-runtime has always gotten, on every launch — this is now investigated to a
 /// conclusion (docs/analysis/flag-init.md, commits e553d85 and bee6c14), not an
 /// open question. Confirmed live, with a debugger: it is written by
 /// `RBX::NativeDataModelManager::getFlagsFromEngine()`'s completion lambda, on a
@@ -1220,8 +1220,8 @@ public:
 /// `onFlagsFailed` returning is a no-op — but it is exactly the state that a
 /// *separate* engine assertion checks moments later, on the "Main" thread the
 /// engine spawns for itself inside `nativeGameGlobalInit`
-/// (`crates/cordial-runtime/src/bin/load.rs`, `call_globals`), which races
-/// Cordial's own synchronous `nativeAppBridgeStartLuaAppDM` /
+/// (`crates/roblox-runtime-runtime/src/bin/load.rs`, `call_globals`), which races
+/// roblox-runtime's own synchronous `nativeAppBridgeStartLuaAppDM` /
 /// `nativeAppBridgeV2StartAppWithParams` calls through the same StartLuaAppDM
 /// machinery. Both reporters' logs die between "app bridge initialised" and
 /// the surface handoff — before `RBX_RUNTIME_LATE_POST_MS`'s late
@@ -1274,12 +1274,12 @@ public:
     //
     // They are being answered now because of what sits beside them in the log.
     // `SessionTransitionFSM` reaches `Entered play session` in both clients and
-    // then diverges: Sober logs `Sent play session success` and Cordial logs
+    // then diverges: Sober logs `Sent play session success` and roblox-runtime logs
     // nothing, and roughly sixty seconds later the server disconnects with 304.
     // Whether these callbacks are what unblocks that report is **not
     // established** — they are `void` notifications, so it is equally possible
     // the engine tells the app and carries on regardless. What is not in doubt
-    // is that the engine is speaking and Cordial was not listening, which is
+    // is that the engine is speaking and roblox-runtime was not listening, which is
     // the `broken_feature` shape and worth closing on its own.
     //
     // Answering a `void` notification by receiving it is not a stub that lies.
@@ -1313,7 +1313,7 @@ public:
 
     /// The rest of the channel, which was going into unresolved stubs.
     ///
-    /// The dex declares 23 `gameActivity_*` callbacks on this class and Cordial
+    /// The dex declares 23 `gameActivity_*` callbacks on this class and roblox-runtime
     /// answered seven. The other sixteen were not "unused": libjnivm hands the
     /// engine a placeholder for a name it has no hook for, and §3 records that
     /// the engine's template for these is "call the no-arg NativeHelper callback,
@@ -1345,7 +1345,7 @@ public:
         fprintf(stderr, "[roblox] lua app restart requested\n");
     }
     static void onScanQrCode(ENV*, Object*) {
-        fprintf(stderr, "[roblox] QR scan requested (Cordial has no camera yet)\n");
+        fprintf(stderr, "[roblox] QR scan requested (roblox-runtime has no camera yet)\n");
     }
     /// Counted, not printed, for the same reason as `onDidLogInReceived`: this
     /// carries a sign-up identifier and log files end up in issues.
@@ -1420,7 +1420,7 @@ public:
 /// That matters because RbxStorage gates itself on the answer. The live flag set
 /// carries `DFFlagRbxStorageAvailableSpaceError`,
 /// `DFFlagRbxStorageAvailableSpaceCreatePath` and `DFFlagRbxStorageFixEmptyPath`,
-/// and Cordial's engine reports `RbxStorage is not initialized, cannot access
+/// and roblox-runtime's engine reports `RbxStorage is not initialized, cannot access
 /// storage interface` on every run while Sober's `appData` carries a 167 MB
 /// `rbx-storage.db`. A client that believes it has no disk has no reason to
 /// build a cache.
@@ -1515,7 +1515,7 @@ public:
 };
 
 /// `RBX_RUNTIME_TRACE_PARAM_READS=1`: name each `PlatformParams` and `DeviceParams`
-/// field the engine actually reads off Cordial's own object.
+/// field the engine actually reads off roblox-runtime's own object.
 ///
 /// This exists to settle a premise the whole "Roblox thinks you're mobile" line
 /// of work rests on. `isKeyboardDevice`, `isMouseDevice` and `isTouchDevice`
@@ -1525,12 +1525,12 @@ public:
 /// all. `docs/analysis/unresolved-java.md` records a live observation of the
 /// second — `platformParams`, `dpiScale` and `isTouchDevice` being reached
 /// through `GetObjectClass(null)`, so against class `Invalid` rather than
-/// against the object Cordial handed over — and nothing has re-checked it since
+/// against the object roblox-runtime handed over — and nothing has re-checked it since
 /// the bring-up moved to `nativeAppBridgeV2InitWithParams`.
 ///
 /// `DeviceParams` is the control, and it is a real one rather than a hopeful
 /// one: `deviceName` is known to arrive, because the engine echoes it into
-/// `[FLog::Graphics] Vulkan Android Device: Cordial` on every run. So a trace
+/// `[FLog::Graphics] Vulkan Android Device: roblox-runtime` on every run. So a trace
 /// where the `DeviceParams` getters fire and the `PlatformParams` getters do
 /// not is not a broken probe — it is the answer.
 ///
@@ -1568,10 +1568,10 @@ public:
         p->appBuildVariant = S("release");
         p->appVersion = S("");
         p->country = S("US");
-        p->deviceName = S("Cordial");
-        p->deviceSku = S("cordial");
-        p->manufacturer = S("Cordial");
-        p->socModel = S("cordial");
+        p->deviceName = S("roblox-runtime");
+        p->deviceSku = S("roblox-runtime");
+        p->manufacturer = S("roblox-runtime");
+        p->socModel = S("roblox-runtime");
         // The API *level*, not the release name. The engine echoes this field
         // straight into `[FLog::Graphics] Android API <n>` and gates on it: at
         // 15 it refused Vulkan with "Android version is too old". 33 is what the
@@ -1614,7 +1614,7 @@ public:
         if (trace_param_reads()) {
             // The control. `deviceName` is the one parameter field with a
             // standing, independent proof that it reaches the engine — it comes
-            // back out in `[FLog::Graphics] Vulkan Android Device: Cordial` —
+            // back out in `[FLog::Graphics] Vulkan Android Device: roblox-runtime` —
             // so if this getter does not fire either, the probe is broken and
             // the run says nothing about PlatformParams.
             c->HookInstanceGetterFunction(env, "deviceName",
@@ -1781,7 +1781,7 @@ public:
         // gives for doing the same thing there: this is the one line that
         // makes the switch's own doc comment's claim checkable against a run
         // rather than only against the source, and the User-Agent itself
-        // never appears in Cordial's own logs or the engine's FLog output --
+        // never appears in roblox-runtime's own logs or the engine's FLog output --
         // it goes out on the wire, not into anything grep can reach here.
         // The platform name is printed with the rest because it is answered
         // from `android_classes.cpp`, and a run is the only place the two can
@@ -1806,7 +1806,7 @@ public:
         // AConfiguration. It is false under `pc-windows-11` because a
         // User-Agent saying `Windows` and `Desktop` beside a field saying
         // tablet is a worse story than either half told alone, and false under
-        // the default `roblox-app` for the plainer reason that Cordial is a
+        // the default `roblox-app` for the plainer reason that roblox-runtime is a
         // window on a desktop with a keyboard and a mouse, and the bare app
         // token deliberately claims no form factor at all.
         //
@@ -1893,7 +1893,7 @@ public:
         // This object is built once, inside
         // `nativeAppBridgeV2StartAppWithParams`, and the engine never asks for
         // these fields again — so the identity has to be restored before that
-        // call, which `crates/cordial-runtime/src/identity.rs` does at startup
+        // call, which `crates/roblox-runtime-runtime/src/identity.rs` does at startup
         // rather than anywhere near here.
         p->username = S(identity_username().c_str());
         p->appUserId = identity_user_id();
@@ -2089,14 +2089,14 @@ int roblox_storage_init(void* fn, const char* a, const char* b, char* err, size_
 ///
 /// `NativeSettingsInterface` is where the app tells the engine which directories
 /// it owns — `nativeSetFilesDirectory`, `nativeSetCacheDirectory`,
-/// `nativeSetExternalDirectory`, `nativeSetBaseDataDirectories`. Cordial called
+/// `nativeSetExternalDirectory`, `nativeSetBaseDataDirectories`. roblox-runtime called
 /// none of them, so the engine ran with those roots unset and resolved every
 /// path it built from them against the working directory: `./appData`, `cache`,
 /// `http`, `sounds`, `ContentProvider_<pid>`. The Waydroid capture shows the
 /// real client using absolute paths under the app's own storage for all of them.
 ///
 /// The signatures come from the shipping APK's own declarations, read out of the
-/// dex — the host app's side of a contract Cordial is reimplementing.
+/// dex — the host app's side of a contract roblox-runtime is reimplementing.
 int roblox_call_static_strings(void* fn, const char* class_name, const char* const* args,
                                 size_t n, char* err, size_t err_len) {
     auto* env = roblox_runtime::process_env();
@@ -2184,7 +2184,7 @@ int roblox_call_static_bool_string(void* fn, const char* class_name, int flag, c
 
 /// `NativeSettingsInterface.nativeSetDeviceInfo(DeviceParams)`.
 ///
-/// The dedicated path for telling the engine what it is running on. Cordial only
+/// The dedicated path for telling the engine what it is running on. roblox-runtime only
 /// ever delivered `DeviceParams` nested inside `InitParams`, and never called
 /// this at all.
 int roblox_set_device_info(void* fn, int width, int height, char* err, size_t err_len) {
@@ -2212,11 +2212,11 @@ int roblox_set_device_info(void* fn, int width, int height, char* err, size_t er
 
 /// `LocalStorageManager.initStorageManagerNativeV3(AssetManager, String, String)`
 ///
-/// The engine's content store, which Cordial has never initialised. Its own log
+/// The engine's content store, which roblox-runtime has never initialised. Its own log
 /// says so on every run -- `RbxStorage is not initialized, cannot access storage
 /// interface`, and `CrashMetricStorage: Failed to initialize storage interface`
 /// -- and the effect is visible on disk: Sober's `appData` carries a 167 MB
-/// `rbx-storage.db` plus `rbx-storage/` and `rbx-storage.id`, and Cordial's
+/// `rbx-storage.db` plus `rbx-storage/` and `rbx-storage.id`, and roblox-runtime's
 /// carries none of the three.
 ///
 /// The prototype is read from the dex with `tools/dex_method.py`, not guessed.
@@ -2224,7 +2224,7 @@ int roblox_set_device_info(void* fn, int width, int height, char* err, size_t er
 ///
 /// The `AssetManager` is the deliberately-empty object from `game_activity.cpp`:
 /// the native side reaches assets through `AAssetManager_fromJava`, which
-/// resolves to Cordial's process-wide manager, so the object only has to exist
+/// resolves to roblox-runtime's process-wide manager, so the object only has to exist
 /// and be of the right class.
 ///
 /// **What the two strings are is not established.** They are passed the files
@@ -2249,7 +2249,7 @@ int roblox_init_storage_manager(void* fn, const char* a, const char* b, char* er
         // entirely from an instance of that class.
         //
         // Nothing threw, so `roblox_init_storage_manager` returned 0 and
-        // Cordial has been logging `initStorageManagerNativeV3 ok` on every
+        // roblox-runtime has been logging `initStorageManagerNativeV3 ok` on every
         // run while handing the engine a receiver of the wrong kind. That is
         // the same failure as the static-vs-instance mismatch on
         // `NetworkUtils.getPublicIPv4Addresseses` found hours earlier, and the
@@ -2344,7 +2344,7 @@ extern "C" {
 /// This is what `bootstrapTheApp()` exists to reach. On Android the Kotlin
 /// bootstrap fetches the flag set and passes it here; the engine then reports
 /// back through `NativeHelper.gameActivity_onFlagsLoaded` or, failing that,
-/// `gameActivity_onFlagsFailed` — and the second is what Cordial has been
+/// `gameActivity_onFlagsFailed` — and the second is what roblox-runtime has been
 /// getting, because nothing ever called this.
 ///
 /// An empty array means "no overrides": the engine falls back to the defaults
@@ -2376,7 +2376,7 @@ int roblox_init_flags(void* fn, const char* settings_json, char* err, size_t err
         //   ... 5: FixAndroidWebDialogPaymentSessionId = true
         //
         // and docs/traces/native-flag-names.txt is that list, in order. An empty
-        // array is what Cordial sent for a long time; it is accepted, but it is
+        // array is what roblox-runtime sent for a long time; it is accepted, but it is
         // not what the client does.
         //
         // `settings_json` is a newline-separated list of names. Blank lines are
@@ -2445,16 +2445,16 @@ extern "C" {
 /// reads whatever bundled/cached flag defaults it has on disk and hands them
 /// back as a `ClientLocalFlags`, built the same `new` + repeated `add(name,
 /// value)` way `nativeInitializeNativeFlags` builds its result. Nothing in
-/// the shipping dex calls this on the `ActivityNativeMain` path Cordial
+/// the shipping dex calls this on the `ActivityNativeMain` path roblox-runtime
 /// drives — its only caller is a different startup path (`com/roblox/client/
-/// startup/a.l`, found by dex xref) that Cordial does not replicate — so it
+/// startup/a.l`, found by dex xref) that roblox-runtime does not replicate — so it
 /// is otherwise dead code here. Calling it directly, with no argument and no
 /// forged network response, is legitimate: it is the engine's own exported
 /// native reading its own bundled state.
 /// `NativeGLInterface.nativePassCurrentDisplayRefreshRate(F)V` and
 /// `nativePassSupportedRefreshRates([F)V`.
 ///
-/// How a client tells the engine what its display can do. Cordial has never
+/// How a client tells the engine what its display can do. roblox-runtime has never
 /// called either, so the engine has been running on whatever it assumes when the
 /// application says nothing — and AGENTS.md records the frame rate as a hard
 /// FIFO vsync lock to the output's refresh whenever input is flowing. Whether
@@ -2462,7 +2462,7 @@ extern "C" {
 /// staying silent is worth ending either way.
 ///
 /// The choice of *which* rate, when a window is on two outputs at once, is made
-/// in `crates/cordial-runtime/src/refresh.rs` and tested there. These two only
+/// in `crates/roblox-runtime-runtime/src/refresh.rs` and tested there. These two only
 /// carry the answer across.
 int roblox_pass_current_refresh_rate(void* fn, float hz, char* err, size_t err_len) {
     using Call = void (*)(JNIEnv*, jclass, jfloat);
@@ -2542,7 +2542,7 @@ extern "C" {
 /// On Android this is what the app calls once it has fetched
 /// `https://clientsettings.roblox.com/...` itself — the engine does not fetch
 /// its own flags; its *host app* does, and hands the response to the engine
-/// through this native. Cordial *is* the host app in this architecture, so
+/// through this native. roblox-runtime *is* the host app in this architecture, so
 /// calling it directly, with Roblox's own real ClientSettings response body,
 /// is the legitimate interface, not a workaround: no HTTP stub, no forged
 /// server, no impersonation of `clientsettings.roblox.com`.
@@ -2601,7 +2601,7 @@ int roblox_init_client_settings(void* fn, const char* a, const char* b, const ch
 /// 1280x720 by everything that reads these.
 ///
 /// **Whether the engine scales pointer deltas by any of this is `INFERRED`** and
-/// is being chased separately. It is wired regardless, because an answer Cordial
+/// is being chased separately. It is wired regardless, because an answer roblox-runtime
 /// gives the engine should be true whether or not the current bug turns out to
 /// depend on it.
 /// The desktop's dark/light preference, as an `android.content.res.Configuration`
@@ -2707,7 +2707,7 @@ extern "C" void roblox_get_display_physical_mm(int* width_mm, int* height_mm) {
 /// `FlagJniInterface.nativeGetFInt(String, int)I` — read a live `FInt` back out
 /// of the engine.
 ///
-/// Read-only, and that is the point. This exists because Cordial had no way to
+/// Read-only, and that is the point. This exists because roblox-runtime had no way to
 /// ask the engine what value a flag actually holds, only to push values in and
 /// infer from behaviour. That inference went wrong: setting `FLogNativeDM` in
 /// `flags.json` *silenced* the channel at every value tried, including 100,
@@ -2753,7 +2753,7 @@ int roblox_get_fint(void* fn, const char* name, jint fallback, jint* out_result,
 /// The engine writes its own compressed flag cache -- `flag_cache.dat`, 365 KB
 /// on this machine, produced by `[DFLog::FlagCache] writeFlagCache` -- and
 /// exports three natives that take a cache back in besides the plain
-/// three-string form Cordial has always used. Cordial has never handed one
+/// three-string form roblox-runtime has always used. roblox-runtime has never handed one
 /// back, so every launch has been a cold one from the engine's point of view
 /// even when the cache was sitting on disk beside it.
 ///
@@ -2999,7 +2999,7 @@ int roblox_appbridge_start_app(void* fn, const char* assets, int width, int heig
 /// and `...UpdateSurfaceGameWithPlatformParams(Surface, PlatformParams, Activity)`.
 ///
 /// **Measured gap, 2026-08-04.** Sober makes 87 `FLog::JNIAppBridge` calls in a
-/// session and Cordial made 3; these two were among the ones Cordial never made,
+/// session and roblox-runtime made 3; these two were among the ones roblox-runtime never made,
 /// and neither was referenced anywhere in the tree. Sober calls both at about
 /// 3.79s — before any join — and again at 109s, so they are not a one-shot part
 /// of startup. Everything they need was already built here for
@@ -3071,7 +3071,7 @@ extern "C" {
 /// Android's `Application.ActivityLifecycleCallbacks` fires these as the Activity
 /// moves through its states, and the engine stores per-Activity context —
 /// including the JNI environment it later reaches through — when it does.
-/// Nothing in Cordial was driving them, which is why the engine held a null
+/// Nothing in roblox-runtime was driving them, which is why the engine held a null
 /// environment on the game thread and faulted calling FindClass through it.
 int roblox_activity_lifecycle(void* fn, const char* activity, char* err, size_t err_len) {
     using Call = void (*)(JNIEnv*, jobject, jstring);

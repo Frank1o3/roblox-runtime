@@ -9,7 +9,7 @@
 // Google Play services rather than to Roblox's process. On Android the URL goes
 // the other way: Roblox's own Java receives it and calls *inward*.
 //
-// So the surface here is the set of inward calls, and Cordial is the Java side
+// So the surface here is the set of inward calls, and roblox-runtime is the Java side
 // in this architecture — the same reasoning `cookies.cpp` sets out for
 // `nativeSetMultipleCookies`. Three of them matter:
 //
@@ -40,7 +40,7 @@
 // desktop play button emits `roblox-player:1+launchmode:play+gameinfo:<ticket>+…`,
 // which the engine's own link pattern does not match, so `deeplink.rs` rewrites
 // it into `roblox://experiences/start?placeId=<id>` and it is the rewrite that
-// arrives here. The one-time ticket in the original is dropped on Cordial's side
+// arrives here. The one-time ticket in the original is dropped on roblox-runtime's side
 // and never crosses into the engine, which is deliberate: this engine is the
 // Android client and has no such ticket to redeem.
 
@@ -146,7 +146,7 @@ int roblox_deeplink_cold_start(void* fn, const char* class_name, const char* url
 /// A static native taking one `Context` — `JNIBaseUrlProtocol.init` and
 /// `JNIWebLoginProtocol.init`.
 ///
-/// The `Context` is a bare object. Cordial has no `android.content.Context` and
+/// The `Context` is a bare object. roblox-runtime has no `android.content.Context` and
 /// never has; every other place the engine is handed one (`initializeNativeCode`,
 /// `initStorageManagerNativeV3`) passes the same empty stand-in, and libjnivm
 /// answers whatever is asked of it with an unresolved-symbol stub rather than
@@ -178,7 +178,7 @@ int roblox_deeplink_protocol_init(void* fn, const char* class_name, char* err, s
 /// A static native taking one `String` and returning one —
 /// `MessageBus.getLastRaw(String)`.
 ///
-/// This is the only way anything on Cordial's side can *see* the engine's
+/// This is the only way anything on roblox-runtime's side can *see* the engine's
 /// message bus without implementing a `RawCallback` class for it to call back
 /// into: it hands back the last raw payload published on a message id. It is
 /// how "did the publish land" and "did the app shell answer" stop being

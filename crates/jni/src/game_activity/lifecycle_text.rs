@@ -52,7 +52,7 @@ pub fn text_input(handle: i64, text: &str, sel_start: i32, sel_end: i32) -> Resu
 ///
 /// `native` must be a live pointer to the exported JNI native this call
 /// names, obtained via [`Library::symbol`] (or the module-level dlsym
-/// equivalent) against a `libroblox.so` Cordial has `dlopen`'d and never
+/// equivalent) against a `libroblox.so` roblox-runtime has `dlopen`'d and never
 /// `dlclose`s. The C shim supplies the `JNIEnv`/`jobject` it invokes the
 /// native with from the process's own `JavaVM`, not from anything passed
 /// here -- so the one thing this call cannot check is that `native` really
@@ -133,7 +133,7 @@ pub fn textbox_property_generation() -> u32 {
 /// declares the same six ints in the order `xAlignment, yAlignment,
 /// textColor, font, textInputType, returnKeyType`. That order is a fact
 /// about Roblox's platform API and is taken as one; the values this
-/// struct actually carries were captured from Cordial's own boxes and are
+/// struct actually carries were captured from roblox-runtime's own boxes and are
 /// not mocktail's. See the long comment on `RobloxRuntimeTextBoxInfo` in
 /// `native/android_classes.cpp` for the rest of the reasoning, and for
 /// what these names are evidence of: two positional readings of the same
@@ -176,7 +176,7 @@ pub struct RawTextBoxInfo {
     /// enum was reindexed at some point in Roblox's history, swapping
     /// `Right` and `Center`, and this struct's comment had the pre-reindex
     /// order). Fixed alongside `gtk_xalign` in
-    /// `crates/cordial-shell/src/host_window.rs`, which is where the wrong
+    /// `crates/roblox-runtime-shell/src/host_window.rs`, which is where the wrong
     /// ordinal actually reached a pixel: it drew `Right`-styled boxes
     /// centred and `Center`-styled boxes flush right.
     pub x_alignment: i32,
@@ -211,7 +211,7 @@ pub struct RawTextBoxInfo {
 }
 
 /// The focused box's spec, or `None` when nothing is focused or the engine
-/// gave Cordial no `NativeTextBoxInfo` for it.
+/// gave roblox-runtime no `NativeTextBoxInfo` for it.
 ///
 /// `None` is not a zeroed box. A caller must not fall back to drawing an
 /// editor at the origin: an editor in the wrong place reads as a layout bug
@@ -251,7 +251,7 @@ pub fn last_place() -> i64 {
 ///
 /// `native` must be a live pointer to the exported JNI native this call
 /// names, obtained via [`Library::symbol`] (or the module-level dlsym
-/// equivalent) against a `libroblox.so` Cordial has `dlopen`'d and never
+/// equivalent) against a `libroblox.so` roblox-runtime has `dlopen`'d and never
 /// `dlclose`s. The C shim supplies the `JNIEnv`/`jobject` it invokes the
 /// native with from the process's own `JavaVM`, not from anything passed
 /// here -- so the one thing this call cannot check is that `native` really
@@ -291,7 +291,7 @@ pub fn focused_textbox_info() -> Option<RawTextBoxInfo> {
 /// A native registered through `RegisterNatives` never appears in `nm -D`,
 /// so an exported-symbol table says nothing about whether the engine drives
 /// a class -- and `docs/HANDOVER.md` concluded for weeks that voice chat's
-/// downlink "cannot be written" from exactly that absence. Cordial has
+/// downlink "cannot be written" from exactly that absence. roblox-runtime has
 /// depended on the distinction since `terminateNativeCode` (see
 /// `native/game_activity.cpp`) without being able to see it.
 ///

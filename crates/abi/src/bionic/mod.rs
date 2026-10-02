@@ -1,4 +1,4 @@
-//! Symbols Cordial implements itself, because neither a host library nor a stub
+//! Symbols roblox-runtime implements itself, because neither a host library nor a stub
 //! is right.
 //!
 //! Three kinds live here:
@@ -22,7 +22,7 @@ pub mod pthread;
 pub mod signal;
 pub mod trace;
 
-/// Functions Cordial provides. Consulted before any host library.
+/// Functions roblox-runtime provides. Consulted before any host library.
 pub fn function_overrides() -> Vec<(&'static str, *mut c_void)> {
     macro_rules! f {
         ($name:literal, $fn:expr) => {
@@ -426,7 +426,7 @@ extern "C" fn fread_chk(
     unsafe { fread(ptr, size, n, stream) }
 }
 
-/// What Cordial reports for `ro.*` system properties.
+/// What roblox-runtime reports for `ro.*` system properties.
 ///
 /// These are the values §4.2's "Roblox thinks you're mobile" fix turns on. They
 /// are guesses until the client is observed reacting to them; the point for now
@@ -461,7 +461,7 @@ const PROPERTIES: &[(&str, &str)] = &[
     // evidence the engine does anything with the answer, and none that a
     // different one would change behaviour.
     //
-    // Filling it in would mean choosing a SoC vendor. Cordial is not running on
+    // Filling it in would mean choosing a SoC vendor. roblox-runtime is not running on
     // one, every plausible string is a lie the engine may act on, and AGENTS.md
     // is explicit that a stub which lies is worse than one which fails. `""`
     // fails honestly, so `""` stays. If something is ever traced to it, this is

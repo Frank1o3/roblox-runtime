@@ -19,7 +19,7 @@ pub fn app_ready_set_sink(on_ready: Option<extern "C" fn(*const c_char)>) {
 /// into the app-start parameters once and never asks again.
 ///
 /// A username identifies a person. It crosses this boundary as bytes and is
-/// never printed on either side; see `crate::identity` in `cordial-runtime`
+/// never printed on either side; see `crate::identity` in `roblox-runtime`
 /// for the rest of that reasoning.
 pub fn identity_publish(
     user_id: i64,
@@ -118,7 +118,7 @@ impl std::fmt::Debug for Jar {
 ///
 /// `native` must be a live pointer to the exported JNI native this call
 /// names, obtained via [`Library::symbol`] (or the module-level dlsym
-/// equivalent) against a `libroblox.so` Cordial has `dlopen`'d and never
+/// equivalent) against a `libroblox.so` roblox-runtime has `dlopen`'d and never
 /// `dlclose`s. The C shim supplies the `JNIEnv`/`jobject` it invokes the
 /// native with from the process's own `JavaVM`, not from anything passed
 /// here -- so the one thing this call cannot check is that `native` really
@@ -149,7 +149,7 @@ pub unsafe fn cookies_register_handler(
 ///
 /// `native` must be a live pointer to the exported JNI native this call
 /// names, obtained via [`Library::symbol`] (or the module-level dlsym
-/// equivalent) against a `libroblox.so` Cordial has `dlopen`'d and never
+/// equivalent) against a `libroblox.so` roblox-runtime has `dlopen`'d and never
 /// `dlclose`s. The C shim supplies the `JNIEnv`/`jobject` it invokes the
 /// native with from the process's own `JavaVM`, not from anything passed
 /// here -- so the one thing this call cannot check is that `native` really
@@ -193,7 +193,7 @@ pub unsafe fn cookies_for_domain(
 ///
 /// `native` must be a live pointer to the exported JNI native this call
 /// names, obtained via [`Library::symbol`] (or the module-level dlsym
-/// equivalent) against a `libroblox.so` Cordial has `dlopen`'d and never
+/// equivalent) against a `libroblox.so` roblox-runtime has `dlopen`'d and never
 /// `dlclose`s. The C shim supplies the `JNIEnv`/`jobject` it invokes the
 /// native with from the process's own `JavaVM`, not from anything passed
 /// here -- so the one thing this call cannot check is that `native` really
@@ -227,7 +227,7 @@ pub unsafe fn call_static_bool_string(
 ///
 /// `native` must be a live pointer to the exported JNI native this call
 /// names, obtained via [`Library::symbol`] (or the module-level dlsym
-/// equivalent) against a `libroblox.so` Cordial has `dlopen`'d and never
+/// equivalent) against a `libroblox.so` roblox-runtime has `dlopen`'d and never
 /// `dlclose`s. The C shim supplies the `JNIEnv`/`jobject` it invokes the
 /// native with from the process's own `JavaVM`, not from anything passed
 /// here -- so the one thing this call cannot check is that `native` really
@@ -254,7 +254,7 @@ pub unsafe fn set_device_info(native: *mut c_void, width: i32, height: i32) -> R
 ///
 /// `native` must be a live pointer to the exported JNI native this call
 /// names, obtained via [`Library::symbol`] (or the module-level dlsym
-/// equivalent) against a `libroblox.so` Cordial has `dlopen`'d and never
+/// equivalent) against a `libroblox.so` roblox-runtime has `dlopen`'d and never
 /// `dlclose`s. The C shim supplies the `JNIEnv`/`jobject` it invokes the
 /// native with from the process's own `JavaVM`, not from anything passed
 /// here -- so the one thing this call cannot check is that `native` really
@@ -276,14 +276,14 @@ pub unsafe fn init_flags(native: *mut c_void, settings_json: &str) -> Result<(),
 
 /// `NativeGLInterface.readLocalFlags()` — the offline counterpart to the
 /// network `ClientSettings` fetch. Not on the `ActivityNativeMain` chain
-/// Cordial drives (its only dex caller is a different startup path), so
+/// roblox-runtime drives (its only dex caller is a different startup path), so
 /// nothing else here calls it unless a caller in `load.rs` does.
 ///
 /// # Safety
 ///
 /// `native` must be a live pointer to the exported JNI native this call
 /// names, obtained via [`Library::symbol`] (or the module-level dlsym
-/// equivalent) against a `libroblox.so` Cordial has `dlopen`'d and never
+/// equivalent) against a `libroblox.so` roblox-runtime has `dlopen`'d and never
 /// `dlclose`s. The C shim supplies the `JNIEnv`/`jobject` it invokes the
 /// native with from the process's own `JavaVM`, not from anything passed
 /// here -- so the one thing this call cannot check is that `native` really
@@ -302,7 +302,7 @@ pub unsafe fn read_local_flags(native: *mut c_void) -> Result<(), String> {
 ///
 /// `native` must be a live pointer to the exported JNI native this call
 /// names, obtained via [`Library::symbol`] (or the module-level dlsym
-/// equivalent) against a `libroblox.so` Cordial has `dlopen`'d and never
+/// equivalent) against a `libroblox.so` roblox-runtime has `dlopen`'d and never
 /// `dlclose`s. The C shim supplies the `JNIEnv`/`jobject` it invokes the
 /// native with from the process's own `JavaVM`, not from anything passed
 /// here -- so the one thing this call cannot check is that `native` really
@@ -323,7 +323,7 @@ pub unsafe fn call_bare_on(native: *mut c_void, class_name: &str) -> Result<(), 
 }
 
 /// `NativeGLInterface.nativeInitClientSettings(String, String, String)I` —
-/// what the real app calls after fetching client settings itself. Cordial
+/// what the real app calls after fetching client settings itself. roblox-runtime
 /// *is* the host app in this architecture, so this is the legitimate
 /// interface, not a workaround. Returns the engine's own `int` result
 /// code, which is a better signal than anything printed to the log.
@@ -332,7 +332,7 @@ pub unsafe fn call_bare_on(native: *mut c_void, class_name: &str) -> Result<(), 
 ///
 /// `native` must be a live pointer to the exported JNI native this call
 /// names, obtained via [`Library::symbol`] (or the module-level dlsym
-/// equivalent) against a `libroblox.so` Cordial has `dlopen`'d and never
+/// equivalent) against a `libroblox.so` roblox-runtime has `dlopen`'d and never
 /// `dlclose`s. The C shim supplies the `JNIEnv`/`jobject` it invokes the
 /// native with from the process's own `JavaVM`, not from anything passed
 /// here -- so the one thing this call cannot check is that `native` really
@@ -366,7 +366,7 @@ pub unsafe fn init_client_settings(
 /// `NativeGLInterface.nativeInitClientSettingsCachedCompressed(...)I` —
 /// hand the engine back the compressed flag cache it wrote itself.
 ///
-/// Cordial has only ever used the plain three-string form, so every launch
+/// roblox-runtime has only ever used the plain three-string form, so every launch
 /// has looked cold to the engine even with `flag_cache.dat` on disk beside
 /// it. Returns the engine's own `int`, on the same reasoning as
 /// [`init_client_settings`]: the result code is a better signal than the log.
@@ -375,7 +375,7 @@ pub unsafe fn init_client_settings(
 ///
 /// `native` must be a live pointer to the exported JNI native this call
 /// names, obtained via [`Library::symbol`] (or the module-level dlsym
-/// equivalent) against a `libroblox.so` Cordial has `dlopen`'d and never
+/// equivalent) against a `libroblox.so` roblox-runtime has `dlopen`'d and never
 /// `dlclose`s. The C shim supplies the `JNIEnv`/`jobject` it invokes the
 /// native with from the process's own `JavaVM`, not from anything passed
 /// here -- so the one thing this call cannot check is that `native` really

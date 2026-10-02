@@ -3,7 +3,7 @@
 // `NativeGLInterface.reportBatteryStateChanged(II)V` and
 // `NativeGLInterface.reportBatteryStatus(Lcom/roblox/engine/jni/model/
 // BatteryStatus;)V` are exported by every build this project has looked at and
-// neither had ever been called. See `crates/cordial-runtime/src/battery.rs` for
+// neither had ever been called. See `crates/roblox-runtime-runtime/src/battery.rs` for
 // the sysfs read, the argument-meaning reasoning (`docs/traces/
 // waydroid-roblox-startup.log.gz` settles what the two ints track together, not
 // their exact numbering, which is `INFERRED` from Android's own public
@@ -11,7 +11,7 @@
 // unset rather than guessed at.
 //
 // `BatteryStatus`'s fields were not guessed either. `tools/dex_method.py
-// ~/.cache/cordial-dex/ --class .../BatteryStatus` shows only a no-arg
+// ~/.cache/roblox-runtime-dex/ --class .../BatteryStatus` shows only a no-arg
 // `<init>()V` — a plain field-carrying object, the same shape as
 // `DeviceStaticParams` in `android_classes.cpp` — so this project's own
 // `tools/dex_fields.py` was written to answer the next question that tool
@@ -35,7 +35,7 @@
 // int fields, i.e. a lookup from Android's raw number to Roblox's own —
 // confirming the outer object's plain-`Integer` fields are meant to receive
 // Android's raw numbers, with Roblox doing its own translation on the far
-// side, not Cordial's job to replicate.
+// side, not roblox-runtime's job to replicate.
 //
 // **What was not established, because no APK was available in the session that
 // wrote this**: the actual live-run confirmation every other class in this
@@ -82,9 +82,9 @@ jnivm::ENV* process_env();
 // classes' private layout, which would be exactly the kind of ART-internals
 // guess `docs/adr/` and AGENTS.md both warn away from.
 //
-// Kept minimal on purpose: no `valueOf`, no caching, no interning. Cordial is
+// Kept minimal on purpose: no `valueOf`, no caching, no interning. roblox-runtime is
 // always the one constructing these — the engine only ever reads a
-// `BatteryStatus` Cordial built — so there is no call path that needs a
+// `BatteryStatus` roblox-runtime built — so there is no call path that needs a
 // factory the engine itself invokes.
 
 class JavaInteger : public Object {
@@ -157,7 +157,7 @@ static std::shared_ptr<JavaFloat> box_float(jfloat v) {
 /// "sysfs on this machine did not answer this question" — a boxed type reads
 /// as Java `null` from an unset `shared_ptr`, not a fabricated zero.
 /// `battery_low` and `battery_saver_mode` are never set by anything in this
-/// file: Cordial has no low-battery threshold or power-saver concept of its
+/// file: roblox-runtime has no low-battery threshold or power-saver concept of its
 /// own to report, and inventing one — Android's real low-battery event is a
 /// system policy decision, not a sysfs fact — would be exactly the kind of
 /// comfortable lie this project's `native/opensles.cpp` precedent argues
@@ -242,7 +242,7 @@ extern "C" {
 /// `NativeGLInterface.reportBatteryStateChanged(II)V`.
 ///
 /// `status` and `plugged` are Android's own `BatteryManager` raw values — see
-/// this file's header and `crates/cordial-runtime/src/battery.rs` for where
+/// this file's header and `crates/roblox-runtime-runtime/src/battery.rs` for where
 /// that reading came from and what about it is `INFERRED`.
 int roblox_report_battery_state_changed(void* fn, int status, int plugged, char* err,
                                           size_t err_len) {
@@ -270,8 +270,8 @@ int roblox_report_battery_state_changed(void* fn, int status, int plugged, char*
 /// not need fifteen positional parameters of five different types. Each
 /// nullable field carries its own `has_*` flag; when clear the corresponding
 /// value is ignored and the Java field is left null, not zeroed — the whole
-/// point being that Cordial only claims what sysfs actually answered. Mirrored
-/// on the Rust side as a `#[repr(C)]` struct in `crates/cordial-linker-sys`.
+/// point being that roblox-runtime only claims what sysfs actually answered. Mirrored
+/// on the Rust side as a `#[repr(C)]` struct in `crates/roblox-runtime-linker-sys`.
 ///
 /// `temperature_c` is a real Celsius float, not the tenths-of-a-degree integer
 /// Android's own `EXTRA_TEMPERATURE` uses and `battery.rs` reads out of

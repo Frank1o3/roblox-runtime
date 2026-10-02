@@ -1,4 +1,4 @@
-// Android's `/system` tree, served from a directory Cordial owns.
+// Android's `/system` tree, served from a directory roblox-runtime owns.
 //
 // Roblox asks the platform for `/system/fonts/NotoSansCJK-Regular.ttc`. On
 // Android that always exists. On a Linux host there is no `/system` at all, the
@@ -14,7 +14,7 @@
 //
 // Serving `/system` is not a workaround for a Roblox bug. It is part of what an
 // Android runtime owes the code it hosts, exactly like `AAssetManager` or
-// `ALooper`. Cordial owns the symbol table, so the redirect belongs at the libc
+// `ALooper`. roblox-runtime owns the symbol table, so the redirect belongs at the libc
 // boundary rather than anywhere near the engine.
 //
 // Written in C++ because `open` is variadic, and forwarding a C variadic to the
@@ -135,7 +135,7 @@ char* s_realpath(const char* path, char* resolved) {
         // expected to `free` it. That allocation comes from the *host's*
         // allocator — Roblox statically links its own (mimalloc, going by
         // `DFLog::Mimalloc`), and every one of its `malloc`/`free`/`new`/
-        // `delete` symbols is resolved internally, never through Cordial's
+        // `delete` symbols is resolved internally, never through roblox-runtime's
         // symbol table. When the engine later releases a buffer this call
         // handed it, that release runs entirely inside Roblox's own
         // allocator, which indexes a table keyed by the pointer's own
@@ -152,7 +152,7 @@ char* s_realpath(const char* path, char* resolved) {
         // address that later faults on the `HttpClient` thread with
         // `rax=0x0, rcx=0xe000` — a segment-map miss for foreign memory.
         //
-        // There is no buffer Cordial can hand back here that is safe for the
+        // There is no buffer roblox-runtime can hand back here that is safe for the
         // engine to free through its own allocator, because that allocator's
         // bookkeeping is not reachable from here (its `malloc`/`free` are not
         // exported). The only safe move is to never produce the host
@@ -205,7 +205,7 @@ int s_open(const char* path, int flags, ...) {
     return r;
 }
 
-/// `statvfs`, which the engine imports and Cordial had never intercepted.
+/// `statvfs`, which the engine imports and roblox-runtime had never intercepted.
 ///
 /// Two separate defects, and the second is why this is not just a redirect.
 ///

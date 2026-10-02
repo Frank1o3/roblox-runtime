@@ -57,11 +57,11 @@ void* roblox_linker_dlopen(const char* filename, int flags) {
     return h;
 }
 
-// EXPERIMENTAL, cordial-agent-defer: cordial-agent-defer's split-phase
+// EXPERIMENTAL, roblox-runtime-agent-defer: roblox-runtime-agent-defer's split-phase
 // dlopen. Declared here rather than added to mcpelauncher's own public
 // header (`public_include/mcpelauncher/linker.h`) because that header is
 // shared surface and this pair exists only to test whether deferring
-// libroblox.so's ELF constructors past Cordial's own directory setup is
+// libroblox.so's ELF constructors past roblox-runtime's own directory setup is
 // coherent — see docs/analysis/flag-init.md §26 and patches/README.md for
 // the patch this corresponds to once (if) it earns a permanent home.
 //

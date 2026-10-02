@@ -304,7 +304,7 @@ bool PulseStream::open(uint32_t, bool, const char* node_description,
     loop_ = pa->mainloop_new();
     if (!loop_) return false;
     context_ = pa->context_new(pa->mainloop_get_api(loop_),
-                               node_description ? node_description : "Cordial");
+                               node_description ? node_description : "roblox-runtime");
     if (!context_) { close(); return false; }
 
     pa->context_set_state_callback(context_, &PulseStream::on_context_state, this);
@@ -416,7 +416,7 @@ bool pulse_available() {
         pa_threaded_mainloop* loop = pa->mainloop_new();
         if (!loop) return false;
         bool ready = false;
-        pa_context* ctx = pa->context_new(pa->mainloop_get_api(loop), "Cordial (probe)");
+        pa_context* ctx = pa->context_new(pa->mainloop_get_api(loop), "roblox-runtime (probe)");
         if (ctx) {
             struct Probe { pa_threaded_mainloop* loop; } probe{loop};
             pa->context_set_state_callback(ctx, [] (pa_context*, void* p) {

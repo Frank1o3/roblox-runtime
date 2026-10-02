@@ -15,7 +15,7 @@
 // parsing that would make something like it true is being written against the
 // engine's own log file instead -- `roblox_runtime::bloxstrap_rpc` reads
 // `appData/logs/*_Player_*.log`, which is a file with a settled format, and
-// not this stderr channel, whose shape is Cordial's own narration.
+// not this stderr channel, whose shape is roblox-runtime's own narration.
 //
 // Written in C++ rather than Rust because three of the six entry points are
 // variadic, and forwarding a C variadic to a real `vsnprintf` is the one thing
@@ -72,7 +72,7 @@ char priority_letter(int prio) {
 /// `flagCount = 139`, the two lines that tell you the flag provider registered
 /// exactly as the real client's Waydroid capture shows it registering.
 ///
-/// Because they were hidden, their absence was read as Cordial failing to
+/// Because they were hidden, their absence was read as roblox-runtime failing to
 /// register a flag provider at all, and `docs/analysis/flag-init.md` §41 had to
 /// warn in writing against building on that absence before someone did. This
 /// project has mistaken an absence for evidence nine times; a logger whose
@@ -109,7 +109,7 @@ int minimum_priority() {
 
 /// Wall-clock, to millisecond precision, in front of every line.
 ///
-/// **Cordial's logs carried no clock at all.** All 265 log files on the
+/// **roblox-runtime's logs carried no clock at all.** All 265 log files on the
 /// development machine, not one timestamped line -- which meant "is startup
 /// getting slower?" could not be answered from the corpus, and no startup
 /// regression here has ever been caught by reading a log. Sober and mocktail
@@ -206,11 +206,11 @@ void android_set_abort_message(const char* msg) {
 
 /// Table of everything above, for the Rust symbol table to install.
 ///
-/// The functions have internal linkage on purpose. Cordial links the AOSP bionic
+/// The functions have internal linkage on purpose. roblox-runtime links the AOSP bionic
 /// linker into the same binary and it defines `__android_log_write` and
 /// `android_set_abort_message` for its own logging; exporting a second copy is a
 /// duplicate-symbol error. Roblox never resolves these by name through the host
-/// linker anyway — they reach it through this table and Cordial's virtual
+/// linker anyway — they reach it through this table and roblox-runtime's virtual
 /// `liblog.so`, which is the only path that matters.
 extern "C" struct RuntimeSymbol {
     const char* name;

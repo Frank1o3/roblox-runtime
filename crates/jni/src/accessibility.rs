@@ -3,7 +3,7 @@
 /// Roblox's engine makes over JNI. Kept as its own top-level module rather
 /// than folded into [`game_activity`]: unlike everything else there, nothing
 /// here is on the render/input critical path, and
-/// `crates/cordial-runtime/src/android/accessibility.rs` is the only caller,
+/// `crates/roblox-runtime/src/android/accessibility.rs` is the only caller,
 /// so a clean boundary keeps that file's own header comment about what is and
 /// is not verified from getting lost among touch/key/IME plumbing.
 pub mod accessibility {
@@ -47,7 +47,7 @@ pub mod accessibility {
     }
 
     /// A [`RawNode`], decoded into owned Rust types. What
-    /// `crates/cordial-runtime/src/android/accessibility.rs` actually works
+    /// `crates/roblox-runtime-runtime/src/android/accessibility.rs` actually works
     /// with — the raw struct exists only to cross the FFI boundary cheaply.
     #[derive(Clone, Debug, Default)]
     pub struct Node {

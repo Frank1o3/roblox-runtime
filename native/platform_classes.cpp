@@ -1,7 +1,7 @@
 // `android.app.ActivityThread` and `android.app.Application`.
 //
 // Both were checked against the dex before anything here was written, not
-// assumed: `tools/dex_method.py ~/.cache/cordial-dex/ --class
+// assumed: `tools/dex_method.py ~/.cache/roblox-runtime-dex/ --class
 // android/app/ActivityThread` lists exactly two members --
 // `getApplication()Landroid/app/Application;` (instance) and
 // `currentActivityThread()Landroid/app/ActivityThread;` (static) -- and both
@@ -18,10 +18,10 @@
 // .currentActivityThread().getApplication()` is a well-known, JNI-only path
 // that needs no cooperation from the app's own Java bootstrap. That fits this
 // codebase's running finding about the engine's Java surface: `bootstrapTheApp`
-// and everything Java-bootstrap-shaped never runs here because Cordial has no
+// and everything Java-bootstrap-shaped never runs here because roblox-runtime has no
 // JVM (`docs/analysis/unresolved-java.md` §2a), while calls the engine's own
 // *native* code places directly through JNI -- like this one -- are exactly
-// the calls Cordial can answer, because nothing upstream of them needed to be
+// the calls roblox-runtime can answer, because nothing upstream of them needed to be
 // real Java bytecode in the first place.
 //
 // **What was deliberately not built alongside these two.** `PackageManager`,
@@ -39,7 +39,7 @@
 // exactly the territory AGENTS.md's hard rule covers: "never make a stub lie".
 //
 // **The second reason as originally written is now wrong, and is corrected
-// here rather than left to mislead.** It said Cordial "has no genuine APK
+// here rather than left to mislead.** It said roblox-runtime "has no genuine APK
 // signing certificate to hand back for this build". It has one: the APK the
 // user already supplies carries the real certificate in its v2 and v3 signing
 // blocks — `O=Roblox Corporation, OU=Mobile`, self-signed, valid 2014 to 2039,
@@ -59,9 +59,9 @@
 // to assert about another.
 //
 // Note also which side of the line this sits on. Answering a platform call
-// truthfully is Cordial's job; deciding whether the client is tampered with is
+// truthfully is roblox-runtime's job; deciding whether the client is tampered with is
 // Roblox's, and AGENTS.md puts client-side integrity flags permanently out of
-// scope. Cordial hands over the facts and forms no opinion about them.
+// scope. roblox-runtime hands over the facts and forms no opinion about them.
 //
 // Rather than build it unobserved and half-finished, this is left unimplemented and reported so;
 // see the task's own final report for the class-by-class account. `BatteryStatus`

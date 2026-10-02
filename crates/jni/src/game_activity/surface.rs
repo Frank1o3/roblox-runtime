@@ -22,7 +22,7 @@ pub fn surface_resized(handle: i64, format: i32, width: i32, height: i32) -> Res
 ///
 /// `native` must be a live pointer to the exported JNI native this call
 /// names, obtained via [`Library::symbol`] (or the module-level dlsym
-/// equivalent) against a `libroblox.so` Cordial has `dlopen`'d and never
+/// equivalent) against a `libroblox.so` roblox-runtime has `dlopen`'d and never
 /// `dlclose`s. The C shim supplies the `JNIEnv`/`jobject` it invokes the
 /// native with from the process's own `JavaVM`, not from anything passed
 /// here -- so the one thing this call cannot check is that `native` really
@@ -59,7 +59,7 @@ pub unsafe fn update_keyboard_size(
 ///
 /// `native` must be a live pointer to the exported JNI native this call
 /// names, obtained via [`Library::symbol`] (or the module-level dlsym
-/// equivalent) against a `libroblox.so` Cordial has `dlopen`'d and never
+/// equivalent) against a `libroblox.so` roblox-runtime has `dlopen`'d and never
 /// `dlclose`s. The C shim supplies the `JNIEnv`/`jobject` it invokes the
 /// native with from the process's own `JavaVM`, not from anything passed
 /// here -- so the one thing this call cannot check is that `native` really
@@ -89,7 +89,7 @@ pub unsafe fn sync_textbox(native: *mut c_void, text: &str, cursor: i32) -> Resu
 ///
 /// `native` must be a live pointer to the exported JNI native this call
 /// names, obtained via [`Library::symbol`] (or the module-level dlsym
-/// equivalent) against a `libroblox.so` Cordial has `dlopen`'d and never
+/// equivalent) against a `libroblox.so` roblox-runtime has `dlopen`'d and never
 /// `dlclose`s. The C shim supplies the `JNIEnv`/`jobject` it invokes the
 /// native with from the process's own `JavaVM`, not from anything passed
 /// here -- so the one thing this call cannot check is that `native` really
@@ -125,7 +125,7 @@ pub unsafe fn pass_text(
 ///
 /// `native` must be a live pointer to the exported JNI native this call
 /// names, obtained via [`Library::symbol`] (or the module-level dlsym
-/// equivalent) against a `libroblox.so` Cordial has `dlopen`'d and never
+/// equivalent) against a `libroblox.so` roblox-runtime has `dlopen`'d and never
 /// `dlclose`s. The C shim supplies the `JNIEnv`/`jobject` it invokes the
 /// native with from the process's own `JavaVM`, not from anything passed
 /// here -- so the one thing this call cannot check is that `native` really
@@ -159,7 +159,7 @@ pub unsafe fn pass_mouse_move(
 ///
 /// `native` must be a live pointer to the exported JNI native this call
 /// names, obtained via [`Library::symbol`] (or the module-level dlsym
-/// equivalent) against a `libroblox.so` Cordial has `dlopen`'d and never
+/// equivalent) against a `libroblox.so` roblox-runtime has `dlopen`'d and never
 /// `dlclose`s. The C shim supplies the `JNIEnv`/`jobject` it invokes the
 /// native with from the process's own `JavaVM`, not from anything passed
 /// here -- so the one thing this call cannot check is that `native` really
@@ -188,14 +188,14 @@ pub unsafe fn pass_mouse_button(
 }
 
 /// `NativeInputInterface.nativePassMouseWheel(F,F,F)` — the wheel's
-/// equivalent of [`pass_mouse_button`], and the call Cordial had never
+/// equivalent of [`pass_mouse_button`], and the call roblox-runtime had never
 /// made. `delta` is in detents, positive away from the user.
 ///
 /// # Safety
 ///
 /// `native` must be a live pointer to the exported JNI native this call
 /// names, obtained via [`Library::symbol`] (or the module-level dlsym
-/// equivalent) against a `libroblox.so` Cordial has `dlopen`'d and never
+/// equivalent) against a `libroblox.so` roblox-runtime has `dlopen`'d and never
 /// `dlclose`s. The C shim supplies the `JNIEnv`/`jobject` it invokes the
 /// native with from the process's own `JavaVM`, not from anything passed
 /// here -- so the one thing this call cannot check is that `native` really
@@ -247,7 +247,7 @@ pub fn set_touchscreen_present(present: bool) {
 ///
 /// `native` must be a live pointer to the exported JNI native this call
 /// names, obtained via [`Library::symbol`] (or the module-level dlsym
-/// equivalent) against a `libroblox.so` Cordial has `dlopen`'d and never
+/// equivalent) against a `libroblox.so` roblox-runtime has `dlopen`'d and never
 /// `dlclose`s. The C shim supplies the `JNIEnv`/`jobject` it invokes the
 /// native with from the process's own `JavaVM`, not from anything passed
 /// here -- so the one thing this call cannot check is that `native` really
@@ -296,7 +296,7 @@ pub unsafe fn pass_input(
 ///
 /// `native` must be a live pointer to the exported JNI native this call
 /// names, obtained via [`Library::symbol`] (or the module-level dlsym
-/// equivalent) against a `libroblox.so` Cordial has `dlopen`'d and never
+/// equivalent) against a `libroblox.so` roblox-runtime has `dlopen`'d and never
 /// `dlclose`s. The C shim supplies the `JNIEnv`/`jobject` it invokes the
 /// native with from the process's own `JavaVM`, not from anything passed
 /// here -- so the one thing this call cannot check is that `native` really
@@ -327,7 +327,7 @@ pub unsafe fn gamepad_connect(
 ///
 /// `native` must be a live pointer to the exported JNI native this call
 /// names, obtained via [`Library::symbol`] (or the module-level dlsym
-/// equivalent) against a `libroblox.so` Cordial has `dlopen`'d and never
+/// equivalent) against a `libroblox.so` roblox-runtime has `dlopen`'d and never
 /// `dlclose`s. The C shim supplies the `JNIEnv`/`jobject` it invokes the
 /// native with from the process's own `JavaVM`, not from anything passed
 /// here -- so the one thing this call cannot check is that `native` really
@@ -351,7 +351,7 @@ pub unsafe fn gamepad_disconnect(native: *mut c_void, id: i32) -> Result<(), Str
 ///
 /// `native` must be a live pointer to the exported JNI native this call
 /// names, obtained via [`Library::symbol`] (or the module-level dlsym
-/// equivalent) against a `libroblox.so` Cordial has `dlopen`'d and never
+/// equivalent) against a `libroblox.so` roblox-runtime has `dlopen`'d and never
 /// `dlclose`s. The C shim supplies the `JNIEnv`/`jobject` it invokes the
 /// native with from the process's own `JavaVM`, not from anything passed
 /// here -- so the one thing this call cannot check is that `native` really
@@ -387,7 +387,7 @@ pub unsafe fn gamepad_button(
 ///
 /// `native` must be a live pointer to the exported JNI native this call
 /// names, obtained via [`Library::symbol`] (or the module-level dlsym
-/// equivalent) against a `libroblox.so` Cordial has `dlopen`'d and never
+/// equivalent) against a `libroblox.so` roblox-runtime has `dlopen`'d and never
 /// `dlclose`s. The C shim supplies the `JNIEnv`/`jobject` it invokes the
 /// native with from the process's own `JavaVM`, not from anything passed
 /// here -- so the one thing this call cannot check is that `native` really
@@ -424,7 +424,7 @@ pub unsafe fn gamepad_axis(
 ///
 /// `native` must be a live pointer to the exported JNI native this call
 /// names, obtained via [`Library::symbol`] (or the module-level dlsym
-/// equivalent) against a `libroblox.so` Cordial has `dlopen`'d and never
+/// equivalent) against a `libroblox.so` roblox-runtime has `dlopen`'d and never
 /// `dlclose`s. The C shim supplies the `JNIEnv`/`jobject` it invokes the
 /// native with from the process's own `JavaVM`, not from anything passed
 /// here -- so the one thing this call cannot check is that `native` really
@@ -462,7 +462,7 @@ pub unsafe fn gamepad_supported_key(
 ///
 /// `native` must be a live pointer to the exported JNI native this call
 /// names, obtained via [`Library::symbol`] (or the module-level dlsym
-/// equivalent) against a `libroblox.so` Cordial has `dlopen`'d and never
+/// equivalent) against a `libroblox.so` roblox-runtime has `dlopen`'d and never
 /// `dlclose`s. The C shim supplies the `JNIEnv`/`jobject` it invokes the
 /// native with from the process's own `JavaVM`, not from anything passed
 /// here -- so the one thing this call cannot check is that `native` really

@@ -1,12 +1,12 @@
 // Bridging Roblox's Android accessibility surface to a Rust-side mirror that
-// `crates/cordial-runtime/src/android/accessibility.rs` turns into AT-SPI —
+// `crates/roblox-runtime-runtime/src/android/accessibility.rs` turns into AT-SPI —
 // Linux's screen-reader protocol, the OS-level equivalent of TalkBack.
 //
 // Same shape as every other class in this directory: Roblox's native engine
 // calls out to Java for a platform service, libjnivm hands it a stub by
 // default, and this file answers instead of leaving the call unresolved.
 // What is different here is *why* the surface exists in the first place —
-// nothing upstream of this file asked Cordial to build it; it exists because
+// nothing upstream of this file asked roblox-runtime to build it; it exists because
 // `docs/analysis/framework-classes.txt` shows the shipping dex references
 // `android/view/accessibility/AccessibilityManager`,
 // `AccessibilityNodeInfo` (and its `AccessibilityAction`/`CollectionInfo`/
@@ -30,7 +30,7 @@
 // receives a pre-built tree. A provider is Java/Kotlin code the *app*
 // subclasses, and per this project's own established finding on
 // `MainGameActivity.bootstrapTheApp()`, Java/Kotlin application logic cannot
-// execute under Cordial at all — there is no JVM. If Roblox's Android build
+// execute under roblox-runtime at all — there is no JVM. If Roblox's Android build
 // implements its accessibility bridge that way (plausible: it is the
 // documented, idiomatic mechanism for a single-View/SurfaceView app), no
 // amount of hooking `AccessibilityNodeInfo` here reaches it, for the same
@@ -74,7 +74,7 @@
 // than deleted for two reasons: it is a faithful implementation of the public
 // AOSP contract, so it costs nothing and answers correctly if a future Roblox
 // build ever does populate a tree; and the AT-SPI half in `accessibility.rs`
-// is independently useful for exposing *Cordial's own* interface, which is
+// is independently useful for exposing *roblox-runtime's own* interface, which is
 // GTK and already has a real accessibility tree.
 //
 // What this closes: a semantic UI-element route for any test harness or
@@ -119,9 +119,9 @@ std::shared_ptr<String> S(const char* v) {
 // `AccessibilityManager.isEnabled()` is the single most load-bearing call in
 // this file: real Android apps skip building an accessibility tree entirely
 // when it answers false, on the (correct) assumption that nobody is listening
-// and the work would be wasted. Cordial has no system AccessibilityManagerService
+// and the work would be wasted. roblox-runtime has no system AccessibilityManagerService
 // to poll for "is a real service running" — the nearest honest equivalent on
-// Linux is "did Cordial's own AT-SPI bridge manage to attach to the
+// Linux is "did roblox-runtime's own AT-SPI bridge manage to attach to the
 // accessibility bus", which `accessibility.rs` decides once, early, off the
 // engine's hot path, and reports here through a plain atomic rather than
 // blocking a JNI call on a D-Bus round-trip.
@@ -160,7 +160,7 @@ bool accessibility_enabled() {
 // So this mirror does not attempt to reconstruct a hierarchy: it is a flat
 // registry of whatever nodes get built and populated, each independently
 // addressable. `accessibility.rs` exposes them as flat children of one
-// "Cordial" application object. That is a real limitation, not a placeholder
+// "roblox-runtime" application object. That is a real limitation, not a placeholder
 // — recovering the actual parent/child structure needs to know how Roblox's
 // engine actually calls this surface, which is exactly the unresolved
 // question the file comment above describes.
@@ -233,7 +233,7 @@ constexpr size_t kMaxQueuedEvents = 256; // bounded: a stuck consumer must not l
 
 // ---------------------------------------------------------------- Rect
 //
-// `android.graphics.Rect`: four public fields, no behaviour Cordial needs.
+// `android.graphics.Rect`: four public fields, no behaviour roblox-runtime needs.
 // Both directions of `AccessibilityNodeInfo.{set,get}BoundsInScreen` have the
 // *caller* (Roblox's native code) construct the `Rect` via JNI, so the
 // constructor has to resolve, not just field access — see
@@ -437,7 +437,7 @@ public:
     }
     // `packageName` is accepted and dropped: nothing on the AT-SPI side reads
     // it (there is no equivalent concept once the node is flattened into
-    // Cordial's own application), but the call still has to resolve rather
+    // roblox-runtime's own application), but the call still has to resolve rather
     // than land on an unresolved-symbol stub.
     void setPackageNameCs(ENV*, std::shared_ptr<CharSequence>) {}
     void setPackageNameStr(ENV*, std::shared_ptr<String>) {}
@@ -621,7 +621,7 @@ public:
     // whatever `isEnabled()` returns.
     jboolean isTouchExplorationEnabled(ENV*) { return false; }
 
-    // Accepted and stored nowhere: Cordial's own answer to both of these
+    // Accepted and stored nowhere: roblox-runtime's own answer to both of these
     // never changes mid-session (the AT-SPI bridge either connected at
     // startup or it did not), so there is nothing to notify a listener about
     // later. Resolving the call is the point — see the same reasoning on

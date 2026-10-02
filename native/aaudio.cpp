@@ -211,7 +211,7 @@ Backend parse_backend(const char* value) {
     //     input stream opened   x2      FMOD probing for capabilities
     //     microphone opened      0
     //     microphone closed      0
-    //     cordial-audiorecord nodes at the end: 0
+    //     roblox-runtime-audiorecord nodes at the end: 0
     //     AudioDevice.init       0      the Java path never ran at all
     //
     // **FMOD opens input streams and never calls requestStart.** So the
@@ -289,7 +289,7 @@ struct Builder {
 /// converts on its side of the link, which it does for capture the same way
 /// it does for playback.
 ///
-/// Mono S16 at 48 kHz because that is what the rest of Cordial's capture side
+/// Mono S16 at 48 kHz because that is what the rest of roblox-runtime's capture side
 /// already asks for and what voice wants: `CaptureStream` negotiates
 /// `SPA_AUDIO_FORMAT_S16` and nothing else, and `WebRtcAudioRecord` in
 /// `audio_classes.cpp` is opened mono for the same reason.
@@ -376,7 +376,7 @@ struct Stream {
     std::atomic<unsigned long> callback_thread{0};
 
     /// Reported by `AAudioStream_getXRunCount`. See the comment there: this
-    /// counts what Cordial can honestly see, which is not what Android counts.
+    /// counts what roblox-runtime can honestly see, which is not what Android counts.
     std::atomic<int32_t> xruns{0};
 
     // RBX_RUNTIME_TRACE_AUDIO=1 bookkeeping only. Output callbacks and each input
@@ -855,7 +855,7 @@ static aaudio_result_t AAudioStreamBuilder_openStream(AAudioStreamBuilder* build
     // 25 symbols this build dlsyms, so nothing on this path will ever be asked
     // for a particular output and the choice has to arrive from outside the
     // engine entirely. See `docs/analysis/aaudio-contract.md`.
-    if (!s->pw->open(bits, is_float, "Cordial (Roblox via AAudio)",
+    if (!s->pw->open(bits, is_float, "roblox-runtime (Roblox via AAudio)",
                     roblox_runtime::audio::configured_output_device().c_str(), &fill_from_engine, s)) {
         delete s;
         return AAUDIO_ERROR_UNAVAILABLE;
@@ -906,7 +906,7 @@ static aaudio_result_t AAudioStream_close(AAudioStream* stream) {
         }
         std::fprintf(stderr,
             "I/RobloxRuntime-AAudio          input stream closed; %u capture stream(s) still "
-            "open across Cordial (must be 0 unless something else is recording).\n",
+            "open across roblox-runtime (must be 0 unless something else is recording).\n",
             roblox_runtime::audio::active_capture_streams());
         // The lifecycle guard must be gone before this destroys its mutex.
         delete s;
@@ -1018,7 +1018,7 @@ static aaudio_result_t AAudioStream_requestStart(AAudioStream* stream) {
 /// which costs nothing anybody can see. For input the equivalent would be a
 /// `pw_stream` left in the graph with the samples thrown away — the desktop's
 /// microphone indicator still lit, every other application still seeing
-/// Cordial holding the capture device, and no way for a user to tell it from
+/// roblox-runtime holding the capture device, and no way for a user to tell it from
 /// recording. So an input pause destroys the stream, the same as a stop, and
 /// a later `requestStart` opens a fresh one.
 static void stop_capture(Stream* s, aaudio_stream_state_t to) {
@@ -1036,7 +1036,7 @@ static void stop_capture(Stream* s, aaudio_stream_state_t to) {
     if (was_started) {
         std::fprintf(stderr,
             "I/RobloxRuntime-AAudio          recording %s: capture stream destroyed, not "
-            "deactivated. %u capture stream(s) still open across Cordial.\n",
+            "deactivated. %u capture stream(s) still open across roblox-runtime.\n",
             to == AAUDIO_STREAM_STATE_PAUSED ? "paused" : "stopped",
             roblox_runtime::audio::active_capture_streams());
     }
@@ -1160,19 +1160,19 @@ static aaudio_result_t AAudioStream_setBufferSizeInFrames(AAudioStream* stream,
 /// PipeWire's own cycle, so a late callback is a late PipeWire cycle: the
 /// glitch is real and audible, but it is counted on the server side, and
 /// nothing in `pw_time` or the stream API hands it back to the client. What
-/// this reports is the only underrun Cordial can see for itself — cycles that
+/// this reports is the only underrun roblox-runtime can see for itself — cycles that
 /// had to be filled with silence while the stream was running, which in a
 /// healthy run is zero and stays zero.
 ///
 /// So a flat zero here is **not** evidence of a clean run. The instrument for
-/// that is `pw-top`'s ERR column against Cordial's node, which counts the
+/// that is `pw-top`'s ERR column against roblox-runtime's node, which counts the
 /// server's own xruns and is comparable across this backend and the Java one.
 /// This project has four "fixes" on record that were scored with an
 /// instrument that turned out to be constant across every run; this comment
 /// is here so that this counter does not become the fifth.
 ///
 /// **Input is the exception, and there the number means something.** The ring
-/// a capture stream fills is Cordial's own, so a reader that falls half a
+/// a capture stream fills is roblox-runtime's own, so a reader that falls half a
 /// second behind loses samples where this file can count them:
 /// `CaptureStream::dropped_bytes` is a real overrun tally and this reports it
 /// in frames. A non-zero reading there is evidence; a zero one still is not,

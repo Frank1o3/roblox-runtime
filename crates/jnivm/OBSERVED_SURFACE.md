@@ -142,7 +142,7 @@ Rust dispatch. Java compatibility handlers are incomplete, and the Rust
 backend remains opt-in through `USE_EXPERIMENTAL_JNIVM=true`.
 
 When that backend is selected, Roblox receives the Rust JavaVM. The runtime also
-starts a separate C++ libjnivm VM for Cordial's existing compatibility classes,
+starts a separate C++ libjnivm VM for roblox-runtime's existing compatibility classes,
 which runtime-owned direct calls still use during startup and app-bridge setup.
 Objects allocated by that companion VM are not interchangeable with Rust VM
 objects; the experimental GameActivity initialization path now avoids crossing
@@ -202,7 +202,7 @@ Android dialogs.
 
 The previously unresolved `SystemThemeProtocol.isSystemThemeAvailable()` now
 returns false for the same missing host capability. `Build.MANUFACTURER` is
-registered as the static string `Cordial`, matching `device_profile()` in
+registered as the static string `roblox-runtime`, matching `device_profile()` in
 `native/init_params.cpp`. `NativeQuoteInterface.requestResponse([B)[B` has no
 service implementation in the C++ runtime; the Rust handler explicitly
 preserves the prior JNI-default null response.

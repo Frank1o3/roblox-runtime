@@ -16,7 +16,7 @@
 //     OnSetCookieHandlerImpl.b(): Updated WebViewCookieHandler with Cookies
 //     from URL https://apis.roblox.com/browser-tracker-api/device/initialize
 //
-// Cordial has no Java side, so nothing was persisting anything. This is worth
+// roblox-runtime has no Java side, so nothing was persisting anything. This is worth
 // stating precisely because it rules out the fix everybody reaches for first:
 // no shutdown path can flush a file that is never written, and the graceful
 // teardown descent in `looper.rs` — which does exist and does work — was
@@ -24,7 +24,7 @@
 // No file is created or updated at shutdown that a killed run does not also
 // produce. Teardown was never the missing piece.
 //
-// So Cordial has to be the Java side. Three natives, all read out of the
+// So roblox-runtime has to be the Java side. Three natives, all read out of the
 // shipping APK's own dex declarations and confirmed as real exports in
 // `libroblox.so` (`readelf --dyn-syms`):
 //
@@ -93,7 +93,7 @@ std::shared_ptr<Object> g_handler;
 /// Deliberately not a URL parser. Everything after the authority is dropped
 /// without being examined, because a Roblox URL's query string can carry a
 /// one-time authentication ticket and this value's whole purpose is to be
-/// recorded somewhere Cordial can see it later.
+/// recorded somewhere roblox-runtime can see it later.
 std::string host_of(const std::string& url) {
     auto start = url.find("://");
     start = (start == std::string::npos) ? 0 : start + 3;
@@ -161,11 +161,11 @@ public:
         // twice, once with a receiver and once without, under either helper —
         // so the dump does not settle which descriptor the engine would resolve.
         // Settling it needs a real `Set-Cookie` to arrive, and no response in a
-        // logged-out Cordial run carries one: over repeated runs the sink was
+        // logged-out roblox-runtime run carries one: over repeated runs the sink was
         // called zero times while the engine's own log showed it reaching the
         // network and collecting the documented 401s. The capture's cookie
         // traffic comes from requests Roblox's *Java* code issues, which
-        // Cordial does not run.
+        // roblox-runtime does not run.
         //
         // So this stays INFERRED, and the session is saved by reading the jar
         // back on a timer and at teardown instead. If this callback does fire
@@ -236,7 +236,7 @@ int roblox_cookies_register_handler(void* fn, char* err, size_t err_len) {
 /// `needed`. **Truncation is an error, not a short answer.** A cookie jar cut
 /// off mid-value would still parse as a list of cookies, and handing that back
 /// to the engine on the next launch is the "half-token that parses" failure —
-/// it presents as an invalid session rather than as a Cordial bug, which is
+/// it presents as an invalid session rather than as a roblox-runtime bug, which is
 /// the worst place for it to present.
 int roblox_cookies_get_for_domain(void* fn, const char* class_name, const char* domain,
                                    char* out, size_t out_len, size_t* needed,

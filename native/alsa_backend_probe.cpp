@@ -55,7 +55,7 @@ int main() {
     if (!roblox_runtime::audio::alsa_available()) return 1;
     auto stream = roblox_runtime::audio::make_alsa_stream();
     if (!stream) { std::printf("make_alsa_stream returned null\n"); return 1; }
-    if (!stream->open(0, false, "Cordial (alsa probe)", nullptr, fill, nullptr)) {
+    if (!stream->open(0, false, "roblox-runtime (alsa probe)", nullptr, fill, nullptr)) {
         std::printf("open failed\n");
         return 1;
     }

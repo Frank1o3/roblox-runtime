@@ -77,7 +77,7 @@
 //! it to the host's own `pthread_create`.
 //!
 //! **Run, not just typechecked, as of 2026-09-23**: `cargo test --release -p
-//! cordial-runtime --lib bionic::pthread::` inside the same emulated aarch64
+//! roblox-runtime-runtime --lib bionic::pthread::` inside the same emulated aarch64
 //! container the size measurement used, natively (the container is aarch64;
 //! nothing here is cross-compiled) -- 14 passed, 0 failed, covering a
 //! statically-initialised normal/recursive/errorcheck mutex each, a mutex
@@ -907,7 +907,7 @@ unsafe extern "C" {
 /// `pthread_once` returning 0 means "your initialiser ran", so whatever it was
 /// meant to set up is uninitialised and the next access faults with no visible
 /// relationship to this call; `pthread_getspecific` returning 0 is a NULL the
-/// caller dereferences on the next line. `cordial-run --lib-dir DIR` without
+/// caller dereferences on the next line. `roblox-runtime-run --lib-dir DIR` without
 /// `--host-libc` segfaulted at exit 139 with `[stub] pthread_once` and
 /// `[stub] pthread_getspecific` as the last two lines before the core dump.
 ///

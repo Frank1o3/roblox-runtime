@@ -41,7 +41,7 @@ JavaVM* g_real_vm = nullptr;
 
 /// Stand up libjnivm's compatibility classes independently of the JavaVM
 /// Roblox receives. The experimental Rust VM owns that JavaVM, while existing
-/// Cordial Java hooks still use libjnivm objects when the runtime invokes
+/// roblox-runtime Java hooks still use libjnivm objects when the runtime invokes
 /// exported engine natives directly (GameActivity/app-bridge startup).
 bool initialize_compat_vm() {
     if (g_vm) {
@@ -60,7 +60,7 @@ bool initialize_compat_vm() {
 ///
 /// Roblox spawns worker threads during `JNI_OnLoad` and they call straight back
 /// into JNI. libjnivm reports misuse by throwing, and an exception escaping a
-/// thread Cordial did not start cannot be caught anywhere — the default is
+/// thread roblox-runtime did not start cannot be caught anywhere — the default is
 /// `std::terminate` and a core dump carrying no information about which thread,
 /// which call, or why.
 /// Write the observed Java surface out, if a VM exists and a path was given.

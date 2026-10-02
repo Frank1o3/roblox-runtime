@@ -14,7 +14,7 @@ Vendored from [`Z3ki/sober-oss`](https://github.com/Z3ki/sober-oss) at commit
 preserved verbatim in [`LICENSE.upstream`](LICENSE.upstream).
 
 Upstream describes this as a **clean-room reimplementation** written from documented
-behaviour, with no decompiled pseudocode copied into it. Cordial vendors only
+behaviour, with no decompiled pseudocode copied into it. roblox-runtime vendors only
 `src/libbadcpu/`, `include/badcpu.h` and the test — none of that repository's decompiled
 material.
 

@@ -1,4 +1,4 @@
-// The Java side of Cordial's framework layer.
+// The Java side of roblox-runtime's framework layer.
 //
 // Roblox's native code calls out to Java for everything the platform is supposed
 // to answer. libjnivm hands it stub classes by default, which return null — and
@@ -45,7 +45,7 @@ extern "C" void roblox_runtime_webview_open(const char* url, const char* title);
 /// The `NativeTextBoxInfo` the engine built for the box it is focusing, in the
 /// order its constructor takes its arguments: `(FFFFFZIIIIIIZZ)`.
 ///
-/// This is a widget spec, and Cordial needs it because on Android the engine
+/// This is a widget spec, and roblox-runtime needs it because on Android the engine
 /// does not draw a focused TextBox's contents at all — the platform does.
 /// Established from the APK's own declarations: `com.roblox.client.RbxKeyboard`
 /// extends `q.l` extends `android.widget.EditText`, and
@@ -134,7 +134,7 @@ extern "C" void roblox_runtime_webview_open(const char* url, const char* title);
 /// it at slot 7 and was wrong, noted above.
 ///
 /// `RBX_RUNTIME_TEXTBOX_FONT_SLOT` (see `font_slot` in
-/// `crates/cordial-runtime/src/android/editor_font.rs`) still defaults to 9
+/// `crates/roblox-runtime-runtime/src/android/editor_font.rs`) still defaults to 9
 /// and is kept rather than deleted: it is one env var now confirming a fact
 /// instead of covering for an unresolved one, and it stays useful if a future
 /// Roblox build renumbers the constructor again.
@@ -159,10 +159,10 @@ extern "C" void roblox_runtime_webview_open(const char* url, const char* title);
 /// is two independent readings of the same constructor agreeing, not a
 /// reflection of the real Java class. It is corroboration and it is worth
 /// having; it is not proof, and a build that renumbers the constructor would
-/// make both wrong together. The captured *values* remain Cordial's own.
+/// make both wrong together. The captured *values* remain roblox-runtime's own.
 ///
 /// When a slot is settled, rename it here and in `RawTextBoxInfo` in
-/// `crates/cordial-linker-sys/src/lib.rs` together. A wrong name would be
+/// `crates/roblox-runtime-linker-sys/src/lib.rs` together. A wrong name would be
 /// worse than no name, because it would be believed.
 struct RobloxRuntimeTextBoxInfo {
     float x, y, width, height, font_size;
@@ -185,7 +185,7 @@ struct RobloxRuntimeTextBoxInfo {
     // until 2026-09-26, which nothing here had ever checked against a real
     // `Right`- or `Center`-styled box (every capture so far reads `0`).
     // See `RawTextBoxInfo::x_alignment` in
-    // `crates/cordial-linker-sys/src/lib.rs` for the sources.
+    // `crates/roblox-runtime-linker-sys/src/lib.rs` for the sources.
     int x_alignment, y_alignment;
     int text_color;
     // Slots 9-11, named from the same constructor order as the two alignments.
@@ -203,7 +203,7 @@ RobloxRuntimeTextBoxInfo g_textbox_info{};
 bool g_textbox_info_known = false;
 /// The most recently constructed `NativeTextBoxInfo`, kept because the engine
 /// builds the object and hands it to `showKeyboard` as a separate step, and it
-/// is only at `showKeyboard` that Cordial learns a box has focus. Also the
+/// is only at `showKeyboard` that roblox-runtime learns a box has focus. Also the
 /// fallback for the object arriving null there, which would otherwise lose the
 /// spec silently — the trace says which of the two supplied it.
 RobloxRuntimeTextBoxInfo g_textbox_last_built{};
@@ -219,7 +219,7 @@ std::atomic<unsigned> g_textbox_generation{0};
 /// make `android::input`'s reseed logic treat every property change as a new
 /// box to type into, discarding whatever the user had queued. This counter
 /// exists only so `WaylandWindow::polled_textbox_info`
-/// (crates/cordial-runtime/src/android/wayland.rs) can tell "the geometry
+/// (crates/roblox-runtime-runtime/src/android/wayland.rs) can tell "the geometry
 /// this box last reported may be stale" from "nothing has happened", and skip
 /// its own poll interval when it has.
 std::atomic<unsigned> g_textbox_property_generation{0};
@@ -326,7 +326,7 @@ extern "C" unsigned roblox_textbox_property_generation() {
 /// counter and nothing else: whatever thread this arrives on (see that
 /// callback's own comment) gets no GTK call, no re-read of the box's
 /// geometry, and no lock beyond the atomic itself. The actual re-read
-/// happens on Cordial's own pump, the next time it looks.
+/// happens on roblox-runtime's own pump, the next time it looks.
 extern "C" void roblox_textbox_property_changed() {
     if (getenv("RBX_RUNTIME_TRACE_TEXT")) {
         fprintf(stderr, "[runtime] textbox property changed, generation now %u\n",
@@ -360,7 +360,7 @@ extern "C" long long roblox_last_place(void) {
 /// Copy the focused box's spec into `*out`. Returns 1 when one is known, 0
 /// otherwise — and 0 has to mean "do not style anything from this", because
 /// `*out` is left untouched rather than zeroed. A box at (0, 0) sized 0x0 is
-/// indistinguishable from a box Cordial was never told about, and only one of
+/// indistinguishable from a box roblox-runtime was never told about, and only one of
 /// those is worth drawing an editor for.
 extern "C" int roblox_textbox_info(RobloxRuntimeTextBoxInfo* out) {
     if (!out) return 0;
@@ -495,7 +495,7 @@ public:
         auto p = std::make_shared<DeviceStaticParams>();
         // Desktop values, deliberately, with one exception below. Roblox reads
         // this once and believes it for the session, so it is the single most
-        // load-bearing place to be honest about what Cordial is. Claiming to be
+        // load-bearing place to be honest about what roblox-runtime is. Claiming to be
         // a particular phone would invite device-specific workarounds that do
         // not apply here.
         //
@@ -513,7 +513,7 @@ public:
         p->deviceSku       = str("linux-x86_64");
         p->socModel        = str("unknown");
         p->appBuildVariant = str("release");
-        // Left as the client's own version until Cordial reads it from the APK
+        // Left as the client's own version until roblox-runtime reads it from the APK
         // manifest; a wrong value here shows up in telemetry and support threads.
         p->appVersion      = str("");
         p->cpu64Bit        = true;
@@ -561,7 +561,7 @@ public:
     //
     // Every argument used to be discarded here. Resolving the call was only
     // half of it: these are the numbers that say where the box is on screen and
-    // what its text should look like, and without them Cordial has nothing to
+    // what its text should look like, and without them roblox-runtime has nothing to
     // position or style an editor from.
     /// **Fifteen arguments, not fourteen, and the fifteenth is why text was
     /// invisible for a year.**
@@ -578,7 +578,7 @@ public:
     /// engine passed that null straight into `showKeyboard` -- which is the
     /// `info=NULL` every trace here showed, and therefore the whole of
     /// "characters are invisible until the box loses focus". Android places a
-    /// real `EditText` from these numbers; Cordial received none of them.
+    /// real `EditText` from these numbers; roblox-runtime received none of them.
     ///
     /// An earlier attempt added a `shared_ptr<java::lang::Class>` third
     /// parameter, read off `--dump-classes`. That was wrong: the dump prints
@@ -633,7 +633,7 @@ public:
 // it is guarded rather than plain.
 //
 // Nothing here prints a username or a user id at any verbosity. A username is a
-// person; `crates/cordial-runtime/src/identity.rs` carries the rest of that
+// person; `crates/roblox-runtime-runtime/src/identity.rs` carries the rest of that
 // reasoning and is the only place these values are written down.
 
 namespace {
@@ -717,7 +717,7 @@ void trace_identity(const char* field) {
             identity_known() ? "signed in" : "nobody");
 }
 
-/// What Cordial answers when the engine asks which platform it is running on.
+/// What roblox-runtime answers when the engine asks which platform it is running on.
 ///
 /// It follows the profile's device identity (`RBX_RUNTIME_DEVICE_PROFILE`, see
 /// `device_identity()` in `native/init_params.cpp`): `pc-windows-11`, the
@@ -730,7 +730,7 @@ void trace_identity(const char* field) {
 /// string in isolation, and the identity it sat in had already stopped being
 /// the host: the default profile sends a Windows 11 PC User-Agent and
 /// `BuildInfo` model, so `Linux` was the one field contradicting the rest, and
-/// Cordial was the only host on this machine reporting it (mocktail's
+/// roblox-runtime was the only host on this machine reporting it (mocktail's
 /// `pc-windows-11` answers `Windows`). The profile is the claim the user chose;
 /// every field of it should say the same thing.
 ///
@@ -779,7 +779,7 @@ public:
         fprintf(stderr, "[roblox] gameLoadedCallback: place %lld\n",
                 static_cast<long long>(place_id));
         // Recorded, not only printed, so the join watchdog in `looper::pump`
-        // has something to wait for. A join Cordial started and the engine
+        // has something to wait for. A join roblox-runtime started and the engine
         // never completed is otherwise invisible: the pump keeps running, the
         // window keeps presenting the place it was already on, and the user is
         // left looking at a screen that simply never changes.
@@ -800,7 +800,7 @@ public:
     // was wrong, and it is why the login form's boxes stayed empty: the `jlong`
     // is the *handle of the text box being edited*, and it is the only place the
     // host is ever told which box has focus. Android's IME keeps it and passes it
-    // straight back as the first argument of `nativePassText`. Cordial threw it
+    // straight back as the first argument of `nativePassText`. roblox-runtime threw it
     // away and then sent text for handle 0, so every keystroke arrived addressed
     // to a box that was not the focused one.
     //
@@ -817,7 +817,7 @@ public:
     // reason the other half of text entry can work at all: it says where the
     // box is and how its text is drawn. Android uses it to place a real
     // `EditText` over the GL surface, because the engine does not paint a
-    // focused box's contents itself. Cordial dropped it, which is why typing
+    // focused box's contents itself. roblox-runtime dropped it, which is why typing
     // into a box that is genuinely receiving the keystrokes still shows
     // nothing.
     static void showKeyboard(ENV*, Class*, jlong handle, jboolean,
@@ -884,7 +884,7 @@ public:
     // `EditText`-equivalent widget rather than letting the engine paint it,
     // and both callbacks exist to keep that widget in sync — one with the
     // text, one with everything else (`NativeTextBoxInfo`'s geometry and
-    // style fields). Cordial is now that widget too (`host_window.rs`'s text
+    // style fields). roblox-runtime is now that widget too (`host_window.rs`'s text
     // overlay), which is why the property callback stopped being a pure
     // no-op: a box that resizes or restyles mid-edit previously only refreshed
     // on `WaylandWindow::polled_textbox_info`'s 100ms poll.
@@ -898,18 +898,18 @@ public:
     // `host_window.rs`'s note on `connect_editor_changed` for why a careless
     // write there is worse than the stale text this leaves in place.
     static void onLuaTextBoxChangedCallback(ENV*, Class*, std::shared_ptr<String>) {}
-    // Does not arrive on Cordial's GTK main loop, or even on the engine's
+    // Does not arrive on roblox-runtime's GTK main loop, or even on the engine's
     // main thread -- confirmed 2026-09-16 by logging `gettid()` and the
     // calling thread's `pthread_getname_np` name under `RBX_RUNTIME_TRACE_TEXT=1`
     // while cycling fullscreen with a Create Account username field focused
     // (a resize is what the box's own responsive layout reacts to). Both
     // firings printed the same tid, named `RBX Worker A` -- one of the
     // engine's own job-system pool threads, not `Main` and not anything
-    // Cordial spawns. That is exactly why this only bumps an atomic rather
+    // roblox-runtime spawns. That is exactly why this only bumps an atomic rather
     // than re-reading geometry or touching GTK here:
     // `roblox_textbox_property_changed` does no engine work and takes no
     // lock beyond the counter itself, and the actual re-read happens later,
-    // on Cordial's own pump, which is the only thread anything here may
+    // on roblox-runtime's own pump, which is the only thread anything here may
     // safely call into GTK from.
     static void onLuaTextBoxPropertyChangedCallback(ENV*, Class*) {
         roblox_textbox_property_changed();
@@ -925,7 +925,7 @@ public:
     // transport this build uses. See docs/analysis/webview-surface.md for how
     // that was established, and in particular for why `android.webkit.WebView`
     // is *not* the boundary to implement: the engine never touches it, because
-    // driving a `WebView` is Roblox's own Java code's job and Cordial stands in
+    // driving a `WebView` is Roblox's own Java code's job and roblox-runtime stands in
     // for that code rather than running it.
     //
     // `openNativeOverlay` hands the request to the runtime's bounded event slot.
@@ -962,7 +962,7 @@ public:
                 type ? type->c_str() : "(null)", data ? data->c_str() : "");
     }
 
-    /// The one notification Cordial acts on rather than only prints.
+    /// The one notification roblox-runtime acts on rather than only prints.
     ///
     /// **`DID_LOG_IN` is the engine handing over the answer the identity
     /// mirrors above were inventing a zero for.** Its payload carries exactly
@@ -973,13 +973,13 @@ public:
     ///                 "userId":…,"displayName":…}
     ///
     /// and it lands roughly twenty-five milliseconds before `APP_READY Home`.
-    /// Before this, Cordial received it, printed it in full, and dropped it —
+    /// Before this, roblox-runtime received it, printed it in full, and dropped it —
     /// so the next launch went back to `Landing` with a perfectly good cookie,
     /// and a real person's username sat in the terminal scrollback meanwhile.
     ///
     /// `DID_SIGN_UP` and `DID_SWITCH_ACCOUNT` are handled the same way and are
     /// **INFERRED**: they are adjacent strings in `libroblox.so` and neither has
-    /// been seen to fire under Cordial, so they are routed through the same
+    /// been seen to fire under roblox-runtime, so they are routed through the same
     /// parse, which stores nothing if the payload is not identity-shaped. That
     /// makes a wrong guess about them a no-op rather than a wrong account.
     ///
@@ -1072,7 +1072,7 @@ public:
 ///
 /// Roblox distinguishes three locales: the system's, the one the account is set
 /// to, and the one the current experience is running in. Only the first is
-/// Cordial's to answer; the other two are account and session state it does not
+/// roblox-runtime's to answer; the other two are account and session state it does not
 /// have, so they mirror the system locale until auth exists.
 class NativeLocaleJavaInterface : public Object {
 public:
@@ -1232,10 +1232,10 @@ const char* files_dir() {
         }
         // Pre-ADR-012 layout, kept only as the last resort for a caller that
         // runs before the setter. ADR-012 moved storage to
-        // `cordial/profiles/<name>/` and this path names neither the new layout
+        // `roblox-runtime/profiles/<name>/` and this path names neither the new layout
         // nor any particular profile, so anything that reaches it is answering
         // about a directory the client is not using.
-        auto path = base + "/cordial/instances/default/data";
+        auto path = base + "/roblox-runtime/instances/default/data";
         // Roblox assumes the directory exists; on Android the platform made it.
         std::string acc;
         for (size_t i = 1; i <= path.size(); i++) {
@@ -1252,9 +1252,9 @@ const char* files_dir() {
 /// Tell the framework layer which files directory the active profile uses.
 ///
 /// C++ cannot work this out. ADR-012 moved storage to
-/// `cordial/profiles/<name>/`, and which name is active is a `--profile`
+/// `roblox-runtime/profiles/<name>/`, and which name is active is a `--profile`
 /// decision that only Rust has; `files_dir()` was still computing
-/// `cordial/instances/default/data`, the layout ADR-012 replaced, so it named a
+/// `roblox-runtime/instances/default/data`, the layout ADR-012 replaced, so it named a
 /// directory the client was not using and would have named the same one for
 /// every profile.
 ///
@@ -1275,7 +1275,7 @@ extern "C" void roblox_set_files_dir(const char* dir) {
 /// `com.roblox.engine.jni.reporter.SessionReporterJavaInterface`
 ///
 /// Crash and session telemetry. The reporting entry points are deliberately
-/// inert — Cordial is not going to forward a user's session data to an analytics
+/// inert — roblox-runtime is not going to forward a user's session data to an analytics
 /// endpoint on their behalf — but the getters have to answer, because the engine
 /// uses `getFilesDir` for real storage and not merely for reports.
 class SessionReporterJavaInterface : public Object {
@@ -1318,9 +1318,9 @@ public:
 
 /// `com.roblox.engine.jni.video.MediaCodecInfoUtils`
 ///
-/// Hardware video codecs, which on Android come from MediaCodec. Cordial has no
+/// Hardware video codecs, which on Android come from MediaCodec. roblox-runtime has no
 /// MediaCodec: `libmediandk` is entirely stubbed. Reporting none is correct
-/// rather than merely convenient — claiming a codec Cordial cannot decode would
+/// rather than merely convenient — claiming a codec roblox-runtime cannot decode would
 /// fail later, inside video playback, with no way back to this decision.
 class MediaCodecInfoUtils : public Object {
 public:
@@ -1427,7 +1427,7 @@ void register_local_storage_classes(jnivm::ENV* env);
 // Defined in platform_classes.cpp. Separate because its header comment has to
 // carry the direction-of-call reasoning for `ActivityThread`/`Application` —
 // why the engine's own native code reaches for a `Context` this way rather
-// than through the app's Java bootstrap Cordial never runs — and the account
+// than through the app's Java bootstrap roblox-runtime never runs — and the account
 // of which of the fork's requested classes were checked against the dex and
 // found absent, neither of which belongs buried in this file's preamble.
 namespace roblox_runtime {
@@ -1445,7 +1445,7 @@ void register_battery_classes(jnivm::ENV* env);
 
 // -------------------------------------------------------- the identity, in and out
 //
-// Cordial's own boundary, not Roblox's: `crates/cordial-runtime/src/identity.rs`
+// roblox-runtime's own boundary, not Roblox's: `crates/roblox-runtime-runtime/src/identity.rs`
 // owns the profile directory, the parse and the file, and this side owns the
 // mirrors the engine reads. Split there rather than parsing JSON here for the
 // same reason `cookies.cpp` hands out a host and keeps the jar — the half that
@@ -1528,7 +1528,7 @@ namespace roblox_runtime {
 /// sweep looking for integrity checks, and it is here because an unanswered
 /// write is a `broken_feature` gap whatever else is going on.
 ///
-/// The file format is Cordial's own. Android would write XML; nothing reads
+/// The file format is roblox-runtime's own. Android would write XML; nothing reads
 /// this except the code below, and a line-oriented file is far easier to look
 /// at when a question is "did the engine actually store that". One
 /// type-tagged record per line, value newline-escaped:
@@ -1567,7 +1567,7 @@ public:
     ///
     /// That is deliberate and was measured. `files_dir()` hardcodes
     /// `instances/default/data` and does not follow `--profile`, so the first
-    /// version of this wrote `CordialTest`'s preferences into the `default`
+    /// version of this wrote `roblox-runtimeTest`'s preferences into the `default`
     /// profile — two profiles sharing one preference store, which is exactly
     /// what ADR-012 exists to prevent. The engine's own `appData` follows the
     /// profile because the client runs with its working directory set there, so
@@ -1576,7 +1576,7 @@ public:
     /// the same reason.
     ///
     /// The name the engine passes is a full path — observed:
-    /// `…/CordialTest/data/files/appData/GlobalBasicSettings_13.xml` — so the
+    /// `…/roblox-runtimeTest/data/files/appData/GlobalBasicSettings_13.xml` — so the
     /// basename is what makes a readable file, and a short digest of the whole
     /// string is appended so two settings files with the same basename in
     /// different directories cannot collide.
@@ -1795,7 +1795,7 @@ static std::shared_ptr<SharedPreferences> prefs_named(ENV*, const std::string& n
 ///
 /// The mode argument is ignored, and that is correct rather than lazy: every
 /// value it can take describes multi-process sharing on Android
-/// (`MODE_MULTI_PROCESS` and friends), and Cordial's whole storage model is one
+/// (`MODE_MULTI_PROCESS` and friends), and roblox-runtime's whole storage model is one
 /// instance per profile holding an `flock` — there is no second process to
 /// share with by construction.
 static std::shared_ptr<SharedPreferences> context_get_shared_preferences(
@@ -1860,7 +1860,7 @@ void register_shared_preferences(ENV* env) {
 /// something is ever seen calling them.
 ///
 /// **Always grants**, regardless of which permission string is asked about.
-/// That is not a shortcut specific to `RECORD_AUDIO`: Cordial has no
+/// That is not a shortcut specific to `RECORD_AUDIO`: roblox-runtime has no
 /// permission system to consult for any permission, on this platform or any
 /// other Android one Roblox might ask about, so "granted" is the only honest
 /// answer available rather than one this file happens to prefer. The

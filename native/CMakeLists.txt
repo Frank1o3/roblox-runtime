@@ -314,7 +314,7 @@ set(JNIVM_ENABLE_DEBUG ON CACHE BOOL "" FORCE)
 # It is also ruinous to leave on. The engine polls `MotionEvent.getRawX`,
 # `getRawY` and `getAxisValue` per pointer per frame, so this writes several
 # thousand unbuffered lines a second, forever, on the hot path. It was on
-# unconditionally and it made the whole machine lag, not just Cordial.
+# unconditionally and it made the whole machine lag, not just roblox-runtime.
 #
 # So: off by default, and one flag to get it back when diagnosing.
 #
@@ -341,7 +341,7 @@ set(JNIVM_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 # the JNI surface is the part of this tree most likely to want a newer libjnivm
 # and a vendored dependency carrying local edits is one nobody updates.
 #
-# What it captures is `Constructed Unresolved symbol` — the only notice Cordial
+# What it captures is `Constructed Unresolved symbol` — the only notice roblox-runtime
 # gets that the engine asked for a Java class, method or field nobody has
 # written. See `jnivm_logger/log.cpp`.
 add_library(logger STATIC jnivm_logger/log.cpp)

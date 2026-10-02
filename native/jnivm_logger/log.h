@@ -16,7 +16,7 @@
 // surface is the part of this project most likely to need updating.
 //
 // What it buys: libjnivm's `Constructed Unresolved symbol` line is the only
-// notice Cordial gets that the engine asked for a Java class, method or field
+// notice roblox-runtime gets that the engine asked for a Java class, method or field
 // nobody has written. It used to go to stdout and nowhere else, interleaved
 // with the engine's own narration. Now it also goes to
 // `crate::unimplemented`, so the end-of-run report can say what the client

@@ -113,7 +113,7 @@ pub fn host_symbol(library: &str, symbol: &str) -> Option<*mut c_void> {
                 let stem = library
                     .split_once(".so")
                     .map_or(library, |(stem, _)| &library[..stem.len() + 3]);
-                // glibc exposes time-related libc calls from the vDSO. Cordial's host
+                // glibc exposes time-related libc calls from the vDSO. roblox-runtime's host
                 // resolver accepts those as libc implementations; rejecting them here
                 // turns otherwise usable calls into generated stubs in the runtime.
                 let is_vdso_libc =

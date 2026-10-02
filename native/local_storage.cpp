@@ -10,7 +10,7 @@
 // **What `localstorageplatforminterface` is, and what it is not.**
 // `docs/analysis/flag-init.md` §12 already separates two things the dex and
 // the engine both call "storage": `RbxStorage`, the content cache that gates
-// on `LocalStorageManager.getAllocatableBytes` and that Cordial has never
+// on `LocalStorageManager.getAllocatableBytes` and that roblox-runtime has never
 // found a way to construct directly, and *this* -- `ILocalStorageHandlerCore`
 // and `IPlatformLocalStorageHandler` -- which is a small per-user key/value
 // store the engine asks the platform to hold on its behalf. The two are
@@ -29,7 +29,7 @@
 // implementing `IPlatformLocalStorageHandler` and hands it to this static, and
 // the engine then calls straight back into that object's own methods --
 // `getSecureValue`, `setCurrentUser` and the rest -- whenever it wants to read
-// or write something. Cordial has no Java side to build that object, so this
+// or write something. roblox-runtime has no Java side to build that object, so this
 // file is it: `PlatformLocalStorageHandler` below is a libjnivm `Object`
 // subclass whose hooked methods answer exactly the calls the interface
 // declares, in the same idiom `init_params.cpp`'s `AndroidActivity` and
@@ -54,12 +54,12 @@
 // attempt at the secrecy the method names claim, which is a design this
 // project has an explicit rule against repeating (see `secrets.rs`'s own
 // header, and the note below). What is reused is the fact of the call and its
-// argument shapes; the storage behind it is Cordial's own.
+// argument shapes; the storage behind it is roblox-runtime's own.
 //
 // **This handles secrets, named as such.** `getSecureValue`/`setSecureValue`
 // and their `ForUser`/`ForCurrentUser` twins carry per-account credentials --
 // the dex's own vocabulary, not a guess. AGENTS.md's rule and
-// `crates/cordial-runtime/src/secrets.rs`'s own header apply here exactly as
+// `crates/roblox-runtime-runtime/src/secrets.rs`'s own header apply here exactly as
 // they do to the cookie jar and the identity mirror: nothing below prints a
 // value or a user id at any verbosity. The user id is logged nowhere, not even
 // at trace level; only key names and byte counts are, the same restraint
@@ -72,7 +72,7 @@
 // only has two members, `Cookies` and `Identity`, each holding exactly one
 // document per profile; a per-user, arbitrary-key store does not fit that
 // shape, and the task that added this file left `secrets.rs` off limits to
-// edit. So `crates/cordial-runtime/src/bin/load.rs` carries a second, small
+// edit. So `crates/roblox-runtime-runtime/src/bin/load.rs` carries a second, small
 // implementation of the same *reasoning* -- keyring first, honest fallback,
 // nothing ever printed -- under its own schema, reachable from here only
 // through the four `roblox_local_storage_*` externs below. That module's own
@@ -162,10 +162,10 @@ bool identity_known();
 
 // The Rust side of the secure store. Declared here rather than pulled from a
 // generated header for the reason every cross-language boundary in this
-// directory is: `cordial-linker-sys`, which owns the usual generated bindings
+// directory is: `roblox-runtime-linker-sys`, which owns the usual generated bindings
 // for `native/`, was off limits to the task that added this file, so these
 // four symbols are declared directly against what
-// `crates/cordial-runtime/src/bin/load.rs` exports with `#[no_mangle]`.
+// `crates/roblox-runtime-runtime/src/bin/load.rs` exports with `#[no_mangle]`.
 //
 // Return codes, shared by all four: `0` succeeded (a "not found" read is a
 // success that found nothing, not a failure); anything negative is a reason
@@ -317,7 +317,7 @@ public:
 /// desktop keyring holds for this profile and reading each one's attributes
 /// back, which is a second, heavier D-Bus round trip this call has never been
 /// measured to need. What it reports instead is honest on its own narrower
-/// terms -- the users Cordial has actually seen this run, seeded from the
+/// terms -- the users roblox-runtime has actually seen this run, seeded from the
 /// signed-in identity and grown by `setCurrentUser`/`setSecureValueForUser` --
 /// which for the account-per-profile shape this project runs is the same set
 /// either way. `size()`/`isEmpty()` only, matching `JavaMap`'s and
@@ -479,7 +479,7 @@ private:
         if (rc != 0 || !found) {
             // Absent, a locked keyring, a value too large for `kMaxValue`, or
             // any other reason the store could not answer -- all of them are
-            // "nothing stored" to the engine. `crates/cordial-runtime/src/bin/
+            // "nothing stored" to the engine. `crates/roblox-runtime-runtime/src/bin/
             // load.rs` is where the distinction is logged; nothing here lies
             // about which one happened by returning "" for any of them.
             return nullptr;
@@ -538,7 +538,7 @@ static void dump_registered(ENV* env, const char* name) {
 ///
 /// **The reverse direction of the djinni scaffolding, registered only so a
 /// null answer can be read.** `setPlatformImpl` returns an
-/// `ILocalStorageHandlerCore`, and under Cordial it returns null every run --
+/// `ILocalStorageHandlerCore`, and under roblox-runtime it returns null every run --
 /// measured, with the return value printed rather than discarded as it was
 /// until now. Two things produce that null and they mean opposite things:
 /// djinni's `fromCpp` hands back `nullptr` without touching JNI when the C++
@@ -600,7 +600,7 @@ extern "C" {
 /// A static native -- confirmed by mocktail's own call, which passes the
 /// *class* object as the receiver rather than constructing a core instance
 /// first (`ConfigureLocalStorage` in `legacy_runtime.cc`; see this file's
-/// header for what "confirmed" means here). Cordial builds the one argument
+/// header for what "confirmed" means here). roblox-runtime builds the one argument
 /// the engine actually reads from and discards the `ILocalStorageHandlerCore`
 /// this returns -- nothing here has found a reason to call anything on it.
 ///
@@ -669,7 +669,7 @@ int roblox_local_storage_set_platform_impl(void* fn, char* err, size_t err_len) 
 /// The descriptor is read from the dex with `dexproto.py`, not guessed --
 /// `docs/analysis/flag-init.md` §16 records the class as the one call
 /// mocktail makes between `initializeNativeCode` and the settings handshake
-/// that Cordial did not. It is otherwise unrelated to the storage classes
+/// that roblox-runtime did not. It is otherwise unrelated to the storage classes
 /// above; both live here because the task that added them could only create
 /// one new `.cpp` file (see the header).
 ///

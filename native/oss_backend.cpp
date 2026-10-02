@@ -3,7 +3,7 @@
 //! ADR-023 scheduled OSS behind PulseAudio and ALSA and said, at the time
 //! honestly, that it was "an answer to nothing" -- Linux has not shipped OSS as
 //! its sound layer since ALSA replaced it, and the surviving users are on
-//! FreeBSD, which Cordial does not run on. It was written up as the thing to
+//! FreeBSD, which roblox-runtime does not run on. It was written up as the thing to
 //! build if somebody arrived with the hardware and the appetite.
 //!
 //! Somebody asked. So it exists, and the reasoning that deferred it is left in
@@ -19,7 +19,7 @@
 //! serve -- PipeWire and PulseAudio both need something running, and ALSA needs
 //! a configured `default` PCM.
 //!
-//! It also means the device is **exclusive on most drivers**: while Cordial
+//! It also means the device is **exclusive on most drivers**: while roblox-runtime
 //! holds `/dev/dsp`, nothing else on the machine gets sound. That is not a bug
 //! to work around, it is what the interface is, and it is why this is opt-in
 //! behind `RBX_RUNTIME_AUDIO_HOST=oss` and will not be selected for anybody who did
@@ -60,7 +60,7 @@
 namespace roblox_runtime::audio {
 namespace {
 
-/// What the engine is given, and what Cordial converts from.
+/// What the engine is given, and what roblox-runtime converts from.
 constexpr uint32_t kChannels = 2;
 constexpr uint32_t kRate = 48000;
 /// Frames per write. About 10 ms at 48 kHz -- small enough that stopping is

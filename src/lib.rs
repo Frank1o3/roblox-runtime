@@ -134,7 +134,7 @@ pub struct RuntimeOptions {
     /// EGL swap interval when OpenGL ES is selected: -1 adaptive, 0 off, 1 on.
     pub opengl_swap_interval: i32,
     /// Resolve otherwise-unhandled libc symbols from glibc for diagnostics.
-    /// This mirrors Cordial's `--host-libc` and is ABI-unsafe; keep it off for
+    /// This mirrors roblox-runtime's `--host-libc` and is ABI-unsafe; keep it off for
     /// ordinary runtime execution until each required interface is ported.
     pub host_libc: bool,
 }
@@ -420,7 +420,7 @@ impl LoadedEngine {
         Ok(())
     }
 
-    /// Deliver Android storage paths in the startup window Cordial measured:
+    /// Deliver Android storage paths in the startup window roblox-runtime measured:
     /// after ELF constructors, before GameActivity initializes native app code.
     #[allow(unsafe_code)]
     pub fn prepare_startup_directories(&self) -> Result<(), JniError> {

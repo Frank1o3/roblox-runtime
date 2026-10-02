@@ -1,6 +1,6 @@
 // bionic's pre-API-23 `FILE __sF[3]`, translated onto the host's real streams.
 //
-// `crates/cordial-runtime/src/bionic/mod.rs` supplies zeroed storage for `__sF`
+// `crates/roblox-runtime-runtime/src/bionic/mod.rs` supplies zeroed storage for `__sF`
 // so that the symbol resolves and glibc's exit-time walk of its stream list does
 // not report an invalid handle. Its comment is explicit that this is only half
 // the job: anything that actually writes through `&__sF[k]` needs every
@@ -17,7 +17,7 @@
 // ## Why C++ and not Rust
 //
 // `fprintf` is variadic. Rust cannot define a variadic `extern "C"` function, and
-// AGENTS.md records that Cordial's one previous attempt to wrap variadics
+// AGENTS.md records that roblox-runtime's one previous attempt to wrap variadics
 // unsafely -- `RBX_RUNTIME_TRACE=1` -- aborts the engine outright. Forwarding through
 // `va_list` is ordinary C and is safe here, so the wrappers live on this side.
 //
@@ -68,7 +68,7 @@ static FILE* translate(FILE* f) {
 
 // Only the FILE-taking entry points `libroblox.so` actually imports. Checked
 // with `readelf --dyn-syms`; wrapping more would be surface with no caller, and
-// each of these shadows the host symbol for the engine only because Cordial's
+// each of these shadows the host symbol for the engine only because roblox-runtime's
 // symbol table resolves the engine's imports before the host's.
 
 int roblox_legacy_fflush(FILE* f) { return fflush(translate(f)); }

@@ -18,7 +18,7 @@
 //    time, `libpipewire-0.3.so` is never linked. Every function in it that
 //    this file calls is `dlsym`'d through `load_library()` below, and a
 //    missing library or a missing symbol degrades to "no audio" rather than
-//    a failure to start. This is what makes a Cordial binary built on a
+//    a failure to start. This is what makes a roblox-runtime binary built on a
 //    PipeWire machine still run — audio-less — on one that has neither the
 //    daemon nor the library.
 //
@@ -224,7 +224,7 @@ Session* connect_session() {
 
     g_lib.init(nullptr, nullptr);
 
-    pw_thread_loop* loop = g_lib.thread_loop_new("cordial-pipewire", nullptr);
+    pw_thread_loop* loop = g_lib.thread_loop_new("roblox-runtime-pipewire", nullptr);
     if (!loop) {
         std::fprintf(stderr,
             "E/RobloxRuntime-Audio           pw_thread_loop_new failed; no audio output.\n");
@@ -657,7 +657,7 @@ std::vector<DeviceInfo> enumerate_devices() {
         // Audio/Duplex, Audio/Source/Virtual, Stream/Output/Audio and the rest
         // are deliberately not reported. A monitor or another application's
         // playback stream is not a device the user would recognise in a picker,
-        // and Roblox offering to record from Cordial's own output would be a
+        // and Roblox offering to record from roblox-runtime's own output would be a
         // surprising thing to hand someone.
         if (!sink && !source) return;
 
@@ -790,7 +790,7 @@ std::string resolve_output_target(const std::string& requested) {
         // nothing to link the stream to, and the game then plays perfectly
         // into nowhere. Falling back to the default is the recoverable
         // behaviour; saying nothing about it would make a user's unplugged
-        // headset indistinguishable from a Cordial bug.
+        // headset indistinguishable from a roblox-runtime bug.
         std::fprintf(stderr,
             "W/RobloxRuntime-OpenSLES         output device '%s' is not in this PipeWire session "
             "(%zu sink(s) present); falling back to the system default so that audio still "
@@ -986,7 +986,7 @@ bool CallbackStream::open(uint32_t sample_bits, bool is_float, const char* node_
 
     static std::atomic<uint32_t> next_id{0};
     char name[64];
-    std::snprintf(name, sizeof name, "cordial-aaudio-%u", next_id.fetch_add(1));
+    std::snprintf(name, sizeof name, "roblox-runtime-aaudio-%u", next_id.fetch_add(1));
 
     // Resolved before the loop is locked. `resolve_output_target` enumerates,
     // and enumeration takes the same thread-loop lock; doing it here rather
@@ -1005,14 +1005,14 @@ bool CallbackStream::open(uint32_t sample_bits, bool is_float, const char* node_
         target.empty()
             ? g_lib.properties_new(
                   PW_KEY_MEDIA_TYPE, "Audio", PW_KEY_MEDIA_CATEGORY, "Playback",
-                  PW_KEY_MEDIA_ROLE, "Game", PW_KEY_APP_NAME, "Cordial", PW_KEY_NODE_NAME, name,
+                  PW_KEY_MEDIA_ROLE, "Game", PW_KEY_APP_NAME, "roblox-runtime", PW_KEY_NODE_NAME, name,
                   PW_KEY_NODE_DESCRIPTION,
-                  node_description ? node_description : "Cordial (Roblox via AAudio)", nullptr)
+                  node_description ? node_description : "roblox-runtime (Roblox via AAudio)", nullptr)
             : g_lib.properties_new(
                   PW_KEY_MEDIA_TYPE, "Audio", PW_KEY_MEDIA_CATEGORY, "Playback",
-                  PW_KEY_MEDIA_ROLE, "Game", PW_KEY_APP_NAME, "Cordial", PW_KEY_NODE_NAME, name,
+                  PW_KEY_MEDIA_ROLE, "Game", PW_KEY_APP_NAME, "roblox-runtime", PW_KEY_NODE_NAME, name,
                   PW_KEY_NODE_DESCRIPTION,
-                  node_description ? node_description : "Cordial (Roblox via AAudio)",
+                  node_description ? node_description : "roblox-runtime (Roblox via AAudio)",
                   PW_KEY_TARGET_OBJECT, target.c_str(), nullptr);
 
     impl_->stream = g_lib.stream_new_simple(g_lib.thread_loop_get_loop(session->loop), name, props,
@@ -1218,7 +1218,7 @@ bool CaptureStream::open(uint32_t rate_hz, uint32_t channels, const std::string&
     if (impl_->stream) return true;
     impl_->failed.store(false, std::memory_order_release);
 
-    // Cordial has three independent owners of a `CaptureStream`:
+    // roblox-runtime has three independent owners of a `CaptureStream`:
     // `AudioRecord` and `WebRtcAudioRecord` in `audio_classes.cpp`, and
     // `AudioRecorderObject` in `opensles.cpp`. Nothing about the engine's own
     // calling pattern rules out two of them recording at once -- Roblox could
@@ -1233,7 +1233,7 @@ bool CaptureStream::open(uint32_t rate_hz, uint32_t channels, const std::string&
     // place the answer can be enforced rather than merely hoped for.
     //
     // A hard refusal rather than a queue or a shared handle: this project has
-    // no observed case of Cordial genuinely needing two concurrent captures,
+    // no observed case of roblox-runtime genuinely needing two concurrent captures,
     // real Android's own microphone is a scarcer resource than PipeWire lets
     // it look, and a caller told "no" gets exactly the same honest failure
     // path every other refusal in this file already produces -- see
@@ -1243,7 +1243,7 @@ bool CaptureStream::open(uint32_t rate_hz, uint32_t channels, const std::string&
     if (g_open_capture_streams.load() != 0) {
         std::fprintf(stderr,
             "E/RobloxRuntime-OpenSLES         refusing a second capture stream while %u is already "
-            "open; Cordial does not support two microphone paths recording at once.\n",
+            "open; roblox-runtime does not support two microphone paths recording at once.\n",
             g_open_capture_streams.load());
         return false;
     }
@@ -1270,25 +1270,25 @@ bool CaptureStream::open(uint32_t rate_hz, uint32_t channels, const std::string&
 
     static std::atomic<uint32_t> next_id{0};
     char name[64];
-    std::snprintf(name, sizeof name, "cordial-audiorecord-%u", next_id.fetch_add(1));
+    std::snprintf(name, sizeof name, "roblox-runtime-audiorecord-%u", next_id.fetch_add(1));
 
     g_lib.thread_loop_lock(session->loop);
 
     // PW_KEY_MEDIA_ROLE "Communication" is not decoration: it is what tells
     // the session manager this is a voice stream, which is what makes the
-    // desktop's own microphone indicator light up and name Cordial. Being
+    // desktop's own microphone indicator light up and name roblox-runtime. Being
     // conspicuous while recording is the other half of the promise not to
     // record when unasked.
     pw_properties* props =
         target_node_name.empty()
             ? g_lib.properties_new(PW_KEY_MEDIA_TYPE, "Audio", PW_KEY_MEDIA_CATEGORY, "Capture",
-                                   PW_KEY_MEDIA_ROLE, "Communication", PW_KEY_APP_NAME, "Cordial",
+                                   PW_KEY_MEDIA_ROLE, "Communication", PW_KEY_APP_NAME, "roblox-runtime",
                                    PW_KEY_NODE_NAME, name, PW_KEY_NODE_DESCRIPTION,
-                                   "Cordial (Roblox voice chat)", nullptr)
+                                   "roblox-runtime (Roblox voice chat)", nullptr)
             : g_lib.properties_new(PW_KEY_MEDIA_TYPE, "Audio", PW_KEY_MEDIA_CATEGORY, "Capture",
-                                   PW_KEY_MEDIA_ROLE, "Communication", PW_KEY_APP_NAME, "Cordial",
+                                   PW_KEY_MEDIA_ROLE, "Communication", PW_KEY_APP_NAME, "roblox-runtime",
                                    PW_KEY_NODE_NAME, name, PW_KEY_NODE_DESCRIPTION,
-                                   "Cordial (Roblox voice chat)", PW_KEY_TARGET_OBJECT,
+                                   "roblox-runtime (Roblox voice chat)", PW_KEY_TARGET_OBJECT,
                                    target_node_name.c_str(), nullptr);
 
     impl_->stream = g_lib.stream_new_simple(g_lib.thread_loop_get_loop(session->loop), name, props,
@@ -1360,7 +1360,7 @@ void CaptureStream::close() {
         g_lib.thread_loop_lock(session->loop);
         // Destroyed, not deactivated. `pw_stream_set_active(false)` leaves the
         // node in the graph, which leaves the desktop's microphone indicator
-        // lit and leaves every other application seeing Cordial holding the
+        // lit and leaves every other application seeing roblox-runtime holding the
         // capture device. Nothing short of destroying the stream makes a
         // stopped recording indistinguishable from one that never started.
         g_lib.stream_destroy(impl_->stream);
@@ -1437,7 +1437,7 @@ bool PlaybackStream::open(uint32_t rate_hz, uint32_t channels, uint32_t bits_per
 
     static std::atomic<uint32_t> next_id{0};
     char name[64];
-    std::snprintf(name, sizeof name, "cordial-audioplayer-%u", next_id.fetch_add(1));
+    std::snprintf(name, sizeof name, "roblox-runtime-audioplayer-%u", next_id.fetch_add(1));
 
     // Before the lock: see the same call in `CallbackStream::open`.
     const std::string target = resolve_output_target(target_node_name);
@@ -1447,13 +1447,13 @@ bool PlaybackStream::open(uint32_t rate_hz, uint32_t channels, uint32_t bits_per
     pw_properties* props =
         target.empty()
             ? g_lib.properties_new(PW_KEY_MEDIA_TYPE, "Audio", PW_KEY_MEDIA_CATEGORY, "Playback",
-                                   PW_KEY_MEDIA_ROLE, "Game", PW_KEY_APP_NAME, "Cordial",
+                                   PW_KEY_MEDIA_ROLE, "Game", PW_KEY_APP_NAME, "roblox-runtime",
                                    PW_KEY_NODE_NAME, name, PW_KEY_NODE_DESCRIPTION,
-                                   "Cordial (Roblox via OpenSL ES)", nullptr)
+                                   "roblox-runtime (Roblox via OpenSL ES)", nullptr)
             : g_lib.properties_new(PW_KEY_MEDIA_TYPE, "Audio", PW_KEY_MEDIA_CATEGORY, "Playback",
-                                   PW_KEY_MEDIA_ROLE, "Game", PW_KEY_APP_NAME, "Cordial",
+                                   PW_KEY_MEDIA_ROLE, "Game", PW_KEY_APP_NAME, "roblox-runtime",
                                    PW_KEY_NODE_NAME, name, PW_KEY_NODE_DESCRIPTION,
-                                   "Cordial (Roblox via OpenSL ES)", PW_KEY_TARGET_OBJECT,
+                                   "roblox-runtime (Roblox via OpenSL ES)", PW_KEY_TARGET_OBJECT,
                                    target.c_str(), nullptr);
 
     impl_->stream = g_lib.stream_new_simple(g_lib.thread_loop_get_loop(session->loop), name, props,

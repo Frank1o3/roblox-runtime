@@ -1,4 +1,4 @@
-// Classes the engine looks up and Cordial answered with nothing.
+// Classes the engine looks up and roblox-runtime answered with nothing.
 //
 // A `RBX_RUNTIME_JNI_TRACE=ON` capture of a landing-page run shows the engine
 // asking libjnivm for 39 distinct classes. Seven of them had no implementation
@@ -29,10 +29,10 @@
 // voice place appeared to stall against its old "not valid" answer (INFERRED). Its own comment has
 // the reasoning.)
 //
-// So the rule applied here is: hook a method only where Cordial has a truthful
+// So the rule applied here is: hook a method only where roblox-runtime has a truthful
 // answer today. Everything else is left unhooked on purpose. An unhooked
 // method on a *registered* class surfaces through libjnivm's own unresolved
-// reporting and lands in Cordial's end-of-run table, which is exactly where a
+// reporting and lands in roblox-runtime's end-of-run table, which is exactly where a
 // gap should be visible -- rather than being papered over with a plausible
 // zero.
 
@@ -171,7 +171,7 @@ public:
 /// communication mode around a call, and the call's microphone mute.
 ///
 /// **`isValid()` used to answer false, and that was the wrong honest answer.**
-/// It was written when Cordial had no capture path, on the reasoning that a
+/// It was written when roblox-runtime had no capture path, on the reasoning that a
 /// wrapper with nothing behind it should say so. There is a path now -- the
 /// engine records voice through `AAudioStream_read` over PipeWire, and plays
 /// it through the same output as everything else -- and a mic button that did
@@ -249,7 +249,7 @@ public:
 ///
 /// Registered so the lookup resolves against a real class, and nothing more.
 ///
-/// This is not a subsystem Cordial implements: every method on `MemStorage`
+/// This is not a subsystem roblox-runtime implements: every method on `MemStorage`
 /// (`bind`, `fire`, `getItem`, `setItem`, `hasItem`, `removeItem`) is exported
 /// by `libroblox.so` as a `Java_com_roblox_engine_jni_memstorage_*` native, so
 /// the engine owns both sides and the app only holds the handle. `Connection`

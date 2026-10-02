@@ -47,7 +47,7 @@ int main() {
     if (!roblox_runtime::audio::pulse_available()) return 1;
     auto stream = roblox_runtime::audio::make_pulse_stream();
     if (!stream) { std::printf("make_pulse_stream returned null\n"); return 1; }
-    if (!stream->open(0, false, "Cordial (pulse probe)", nullptr, fill, nullptr)) {
+    if (!stream->open(0, false, "roblox-runtime (pulse probe)", nullptr, fill, nullptr)) {
         std::printf("open failed\n");
         return 1;
     }

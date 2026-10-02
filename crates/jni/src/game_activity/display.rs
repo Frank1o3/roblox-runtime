@@ -7,7 +7,7 @@
 /// geometry is known, and again whenever it changes.
 /// The desktop's dark/light preference, as Android's `uiMode` night field.
 ///
-/// Cordial hardcoded "night: no" and Roblox believed it, which is why the
+/// roblox-runtime hardcoded "night: no" and Roblox believed it, which is why the
 /// client stayed light however the desktop was set. Anything above zero
 /// reports night mode on; `-1` means nobody said and leaves the old
 /// behaviour, because a runtime started without the shell has no better
@@ -39,14 +39,14 @@ pub fn set_display_physical_mm(width_mm: i32, height_mm: i32) {
 ///
 /// `fallback` comes back when the name is not a registered flag, so a
 /// sentinel separates "the engine has this set to 0" from "the engine has
-/// never heard of it". Cordial spent a session unable to tell those apart
+/// never heard of it". roblox-runtime spent a session unable to tell those apart
 /// for `FLogNativeDM`; see docs/analysis/flag-init.md §22.
 ///
 /// # Safety
 ///
 /// `native` must be a live pointer to the exported JNI native this call
 /// names, obtained via [`Library::symbol`] (or the module-level dlsym
-/// equivalent) against a `libroblox.so` Cordial has `dlopen`'d and never
+/// equivalent) against a `libroblox.so` roblox-runtime has `dlopen`'d and never
 /// `dlclose`s. The C shim supplies the `JNIEnv`/`jobject` it invokes the
 /// native with from the process's own `JavaVM`, not from anything passed
 /// here -- so the one thing this call cannot check is that `native` really
@@ -77,7 +77,7 @@ pub unsafe fn get_fint(native: *mut c_void, name: &str, fallback: i32) -> Result
 ///
 /// `native` must be a live pointer to the exported JNI native this call
 /// names, obtained via [`Library::symbol`] (or the module-level dlsym
-/// equivalent) against a `libroblox.so` Cordial has `dlopen`'d and never
+/// equivalent) against a `libroblox.so` roblox-runtime has `dlopen`'d and never
 /// `dlclose`s. The C shim supplies the `JNIEnv`/`jobject` it invokes the
 /// native with from the process's own `JavaVM`, not from anything passed
 /// here -- so the one thing this call cannot check is that `native` really
@@ -99,7 +99,7 @@ pub unsafe fn post_client_settings_loaded(native: *mut c_void) -> Result<(), Str
 ///
 /// `native` must be a live pointer to the exported JNI native this call
 /// names, obtained via [`Library::symbol`] (or the module-level dlsym
-/// equivalent) against a `libroblox.so` Cordial has `dlopen`'d and never
+/// equivalent) against a `libroblox.so` roblox-runtime has `dlopen`'d and never
 /// `dlclose`s. The C shim supplies the `JNIEnv`/`jobject` it invokes the
 /// native with from the process's own `JavaVM`, not from anything passed
 /// here -- so the one thing this call cannot check is that `native` really
@@ -127,7 +127,7 @@ pub unsafe fn preload_flag_overrides(native: *mut c_void, json: &str) -> Result<
 ///
 /// `native` must be a live pointer to the exported JNI native this call
 /// names, obtained via [`Library::symbol`] (or the module-level dlsym
-/// equivalent) against a `libroblox.so` Cordial has `dlopen`'d and never
+/// equivalent) against a `libroblox.so` roblox-runtime has `dlopen`'d and never
 /// `dlclose`s. The C shim supplies the `JNIEnv`/`jobject` it invokes the
 /// native with from the process's own `JavaVM`, not from anything passed
 /// here -- so the one thing this call cannot check is that `native` really
@@ -160,7 +160,7 @@ pub unsafe fn appbridge_init(
 ///
 /// `native` must be a live pointer to the exported JNI native this call
 /// names, obtained via [`Library::symbol`] (or the module-level dlsym
-/// equivalent) against a `libroblox.so` Cordial has `dlopen`'d and never
+/// equivalent) against a `libroblox.so` roblox-runtime has `dlopen`'d and never
 /// `dlclose`s. The C shim supplies the `JNIEnv`/`jobject` it invokes the
 /// native with from the process's own `JavaVM`, not from anything passed
 /// here -- so the one thing this call cannot check is that `native` really
@@ -177,7 +177,7 @@ pub unsafe fn appbridge_call_bare(native: *mut c_void) -> Result<(), String> {
 /// its window. Everything before it is setup.
 /// `nativeAppBridgeV2UpdateSurfaceApp/GameWithPlatformParams`.
 ///
-/// Two calls Sober makes and Cordial did not — see `update_surface` in
+/// Two calls Sober makes and roblox-runtime did not — see `update_surface` in
 /// `native/init_params.cpp` for the measurement. `game` selects the
 /// three-argument form, which takes an Activity as well.
 ///
@@ -185,7 +185,7 @@ pub unsafe fn appbridge_call_bare(native: *mut c_void) -> Result<(), String> {
 ///
 /// `native` must be a live pointer to the exported JNI native this call
 /// names, obtained via [`Library::symbol`] (or the module-level dlsym
-/// equivalent) against a `libroblox.so` Cordial has `dlopen`'d and never
+/// equivalent) against a `libroblox.so` roblox-runtime has `dlopen`'d and never
 /// `dlclose`s. The C shim supplies the `JNIEnv`/`jobject` it invokes the
 /// native with from the process's own `JavaVM`, not from anything passed
 /// here -- so the one thing this call cannot check is that `native` really
@@ -222,7 +222,7 @@ pub unsafe fn appbridge_update_surface(
 ///
 /// `native` must be a live pointer to the exported JNI native this call
 /// names, obtained via [`Library::symbol`] (or the module-level dlsym
-/// equivalent) against a `libroblox.so` Cordial has `dlopen`'d and never
+/// equivalent) against a `libroblox.so` roblox-runtime has `dlopen`'d and never
 /// `dlclose`s. The C shim supplies the `JNIEnv`/`jobject` it invokes the
 /// native with from the process's own `JavaVM`, not from anything passed
 /// here -- so the one thing this call cannot check is that `native` really
@@ -257,7 +257,7 @@ pub unsafe fn appbridge_start_app(
 ///
 /// `native` must be a live pointer to the exported JNI native this call
 /// names, obtained via [`Library::symbol`] (or the module-level dlsym
-/// equivalent) against a `libroblox.so` Cordial has `dlopen`'d and never
+/// equivalent) against a `libroblox.so` roblox-runtime has `dlopen`'d and never
 /// `dlclose`s. The C shim supplies the `JNIEnv`/`jobject` it invokes the
 /// native with from the process's own `JavaVM`, not from anything passed
 /// here -- so the one thing this call cannot check is that `native` really
@@ -283,7 +283,7 @@ pub unsafe fn activity_lifecycle(native: *mut c_void, activity: &str) -> Result<
 ///
 /// `native` must be a live pointer to the exported JNI native this call
 /// names, obtained via [`Library::symbol`] (or the module-level dlsym
-/// equivalent) against a `libroblox.so` Cordial has `dlopen`'d and never
+/// equivalent) against a `libroblox.so` roblox-runtime has `dlopen`'d and never
 /// `dlclose`s. The C shim supplies the `JNIEnv`/`jobject` it invokes the
 /// native with from the process's own `JavaVM`, not from anything passed
 /// here -- so the one thing this call cannot check is that `native` really
@@ -299,7 +299,7 @@ pub unsafe fn call_bare(native: *mut c_void) -> Result<(), String> {
 ///
 /// `native` must be a live pointer to the exported JNI native this call
 /// names, obtained via [`Library::symbol`] (or the module-level dlsym
-/// equivalent) against a `libroblox.so` Cordial has `dlopen`'d and never
+/// equivalent) against a `libroblox.so` roblox-runtime has `dlopen`'d and never
 /// `dlclose`s. The C shim supplies the `JNIEnv`/`jobject` it invokes the
 /// native with from the process's own `JavaVM`, not from anything passed
 /// here -- so the one thing this call cannot check is that `native` really

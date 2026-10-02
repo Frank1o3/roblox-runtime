@@ -78,7 +78,7 @@ fn main() {
     // made. That is worse than a build error, and it has already cost one
     // verification -- the change that stopped mapping the engine's text
     // writable appeared to have no effect until `cargo clean -p
-    // cordial-linker-sys` forced the rebuild by hand.
+    // roblox-runtime-linker-sys` forced the rebuild by hand.
     //
     // Cargo watches a directory recursively, so these are two lines rather than
     // a hand-maintained file list -- which is the same argument the comment

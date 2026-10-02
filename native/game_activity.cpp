@@ -1,7 +1,7 @@
 // Driving AGDK `GameActivity` bring-up.
 //
 // On Android the platform calls `GameActivity.initializeNativeCode` from Java
-// with a real Activity behind it. Cordial has no Java, so it constructs the
+// with a real Activity behind it. roblox-runtime has no Java, so it constructs the
 // arguments through libjnivm and calls the exported JNI native directly:
 //
 //     jlong Java_com_google_androidgamesdk_GameActivity_initializeNativeCode(
@@ -128,7 +128,7 @@ public:
 /// `android.content.res.AssetManager`
 ///
 /// Deliberately empty. The native side reaches assets through
-/// `AAssetManager_fromJava`, which Cordial answers with its single process-wide
+/// `AAssetManager_fromJava`, which roblox-runtime answers with its single process-wide
 /// manager (see `android::asset`), so this object carries no state — it exists
 /// to satisfy `initializeNativeCode`'s signature.
 class AssetManager : public Object {
@@ -158,7 +158,7 @@ public:
     // `setWindowFlags` for soft-input-mode-style window flags), and an
     // unresolved call here risks the same silent pending-exception hazard
     // `NativeTextBoxInfo`'s doc comment describes — resolving is the point,
-    // not what either does with its arguments, which Cordial has no window
+    // not what either does with its arguments, which roblox-runtime has no window
     // manager flags or `EditorInfo` layout to apply.
     void setImeEditorInfoFields(ENV*, jint, jint, jint) {}
     void setWindowFlags(ENV*, jint, jint) {}
@@ -166,7 +166,7 @@ public:
     /// `getWindowInsets(int)` and `getWaterfallInsets()`.
     ///
     /// Both return an `androidx.core.graphics.Insets` with every edge zero,
-    /// and that is the true answer rather than a placeholder: Cordial's window
+    /// and that is the true answer rather than a placeholder: roblox-runtime's window
     /// has no status bar, no navigation bar, no display cutout and no gesture
     /// exclusion areas, so there is nothing for the engine to inset its layout
     /// by. A phone's values invented here would push Roblox's UI inward from
@@ -212,7 +212,7 @@ public:
     /// — three consecutive lines. The engine calls the app's bootstrap, gets a
     /// placeholder that does nothing, looks for flags, finds none, and reports
     /// failure. That check happens *inside* `initializeNativeCode`, which is why
-    /// two days of varying the settings call changed nothing: Cordial delivered
+    /// two days of varying the settings call changed nothing: roblox-runtime delivered
     /// the document correctly and did it after the verdict had already been
     /// reached.
     ///
@@ -222,7 +222,7 @@ public:
     /// way ART does, so it is registered here, on the class the engine actually
     /// asks.
     ///
-    /// The work itself belongs to Cordial's host-application side, which owns
+    /// The work itself belongs to roblox-runtime's host-application side, which owns
     /// the settings document and the flag-name list, so this forwards to a
     /// callback installed before `initializeNativeCode` runs. With no callback
     /// installed it says so rather than returning quietly — an unanswered
@@ -273,7 +273,7 @@ constexpr jint kToolTypeMouse = 3;
 // So the fields below are set by the factory that builds the event, from the
 // device that produced it, and nothing in this file reads the environment any
 // more. On a real phone the APK's own Java is what reads
-// `MotionEvent.getSource()` and picks a native; Cordial replaces that Java, so
+// `MotionEvent.getSource()` and picks a native; roblox-runtime replaces that Java, so
 // the routing is ours and it lives one layer up in `android::input`, where the
 // origin of an event is still known.
 
@@ -365,7 +365,7 @@ public:
 
     jint getPointerId(ENV*, jint index) { return at(index).id; }
     // One tool type for the whole event: every contact in a `MotionEvent` here
-    // comes from the same device, because Cordial builds one event per device
+    // comes from the same device, because roblox-runtime builds one event per device
     // rather than merging a finger and a mouse into a single dispatch the way a
     // real Android InputReader could.
     jint getToolType(ENV*, jint) { return toolType; }
@@ -515,7 +515,7 @@ public:
 ///
 /// Android text fields do not receive keystrokes. They receive *state*: the
 /// complete contents of the field, the selection, and any in-progress composing
-/// region from an IME. Cordial had no implementation of this, which is why keys
+/// region from an IME. roblox-runtime had no implementation of this, which is why keys
 /// reached `onKeyDownNative` and the login form's text boxes stayed empty — the
 /// engine resolves these five fields and nothing was ever answering them.
 ///
@@ -611,7 +611,7 @@ extern "C" void roblox_ime_restart_input() {
     g_ime_state_generation.fetch_add(1, std::memory_order_acq_rel);
 }
 
-/// Read-side, for `crates/cordial-linker-sys` to expose to `android::input`.
+/// Read-side, for `crates/roblox-runtime-linker-sys` to expose to `android::input`.
 extern "C" unsigned roblox_ime_state_generation() {
     return g_ime_state_generation.load(std::memory_order_acquire);
 }
@@ -643,7 +643,7 @@ extern "C" void roblox_ime_state_composition(int* start, int* end) {
 /// The object the engine calls `setState`/`setSoftKeyboardActive`/
 /// `restartInput` on. On real Android this is constructed by `GameActivity`'s
 /// Java side inside `onCreateInputConnection` and handed to native code via
-/// `setInputConnectionNative`; Cordial has no Android view system to trigger
+/// `setInputConnectionNative`; roblox-runtime has no Android view system to trigger
 /// that callback, so `roblox_game_activity_set_input_connection` (below)
 /// constructs one directly and drives `setInputConnectionNative` itself,
 /// simulating what the platform would have done. One instance for the
@@ -987,7 +987,7 @@ extern "C" {
 /// lifecycle callbacks "can block on `android_app_set_activity_state` in some
 /// Linux shims". Read there; the switches here are ours.
 ///
-/// What makes that worth a switch rather than a note is that Cordial delivers
+/// What makes that worth a switch rather than a note is that roblox-runtime delivers
 /// the surface through the app bridge as well -- `appbridge_start_app` and
 /// both `UpdateSurface...WithPlatformParams` calls, at `load.rs:3849-3899` --
 /// so by the time the calls below run, the engine has already been told about
@@ -1163,7 +1163,7 @@ int roblox_game_activity_start(long handle, int width, int height, int format,
 
         // Focus, last, and it matters more than it looks. An Android game that
         // has never been told it has the window renders as if it were in the
-        // background — which is what about one frame per second is. Cordial
+        // background — which is what about one frame per second is. roblox-runtime
         // drove the lifecycle up to onResume and then never sent this.
         //
         // Grouped with the lifecycle half rather than the surface half because
@@ -1404,7 +1404,7 @@ int roblox_game_activity_text_input(long handle, const char* text, int sel_start
 ///
 /// On real Android, Java calls this once — from inside `onCreateInputConnection`,
 /// with the `InputConnection` it just built — to hand native code a reference it
-/// then calls back through for the rest of the session. Cordial has no view
+/// then calls back through for the rest of the session. roblox-runtime has no view
 /// system to trigger that callback, so this drives it directly: construct one
 /// `InputConnection` (see `roblox_runtime::shared_input_connection`'s doc for why it is
 /// one, kept alive for the process) and call the native the same way Java would
@@ -1557,14 +1557,14 @@ int roblox_game_activity_surface_resized(long long handle, int format, int width
 /// engine calls `showKeyboard`, the platform opens an IME, and the platform then
 /// reports the keyboard's geometry back through this. Until it arrives the
 /// engine has focused the box but has not begun capturing — which renders as a
-/// focus outline with no blinking caret, and is exactly what Cordial showed
+/// focus outline with no blinking caret, and is exactly what roblox-runtime showed
 /// while it answered `showKeyboard` and said nothing further.
 ///
 /// The Waydroid capture has the Android side of this as
 /// `onUpdateKeyboardSize() v:false x:0 y:999 w:2491 h:0`, which is where the
 /// argument order below comes from.
 ///
-/// Cordial reports a zero-height keyboard: there is no soft keyboard taking up
+/// roblox-runtime reports a zero-height keyboard: there is no soft keyboard taking up
 /// screen space on a desktop, and a non-zero height would make the engine shift
 /// its layout up to avoid something that is not there.
 int roblox_input_update_keyboard_size(void* fn, int visible, int x, int y, int w, int h,
@@ -1760,7 +1760,7 @@ int roblox_input_pass_input(void* fn, int pointer_id, float x, float y, int acti
 // comment carries the whole argument.
 //
 // No rumble. `android/os/Vibrator` is declared in the dex and implemented
-// nowhere in Cordial, and a force-feedback call that silently does nothing is
+// nowhere in roblox-runtime, and a force-feedback call that silently does nothing is
 // the stub that lies. It is absent rather than stubbed.
 //
 // The atomic-gating rule these serve -- resolve all of the registration natives
@@ -2094,13 +2094,13 @@ int roblox_game_activity_key(long handle, int down, int key_code, int scan_code,
 // table, and these natives arrive through `RegisterNatives` at run time. The one
 // WebRTC symbol that *is* exported is a loader, which is what registers them.
 //
-// Cordial has depended on that distinction for months without being able to
+// roblox-runtime has depended on that distinction for months without being able to
 // *see* it: `terminateNativeCode` is looked up in `cls->natives` a few hundred
 // lines above precisely because it is absent from `nm -D`. So the machinery to
 // answer this was already here and there was no way to ask.
 //
 // Now there is, and it costs one call: the answer to "is this path dead or is
-// Cordial simply not on it" is a list rather than an argument.
+// roblox-runtime simply not on it" is a list rather than an argument.
 extern "C" int roblox_registered_natives(const char* class_name, char* out, size_t out_len) {
     if (!class_name || !out || out_len == 0) return -1;
     out[0] = '\0';

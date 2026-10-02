@@ -4,7 +4,7 @@
 // `stat("")` calls to a freshly spawned thread — a real tid, never seen in the
 // log before that line, bottoming out at `start_thread`/`__clone3` rather than
 // at `do_dlopen`. Nobody had asked who creates that thread or what it runs
-// first, because Cordial did not intercept `pthread_create` at all: it is
+// first, because roblox-runtime did not intercept `pthread_create` at all: it is
 // fixed-arity and the bionic/glibc layouts agree on x86_64 (`pthread.rs`'s
 // own size table), so forwarding it untouched has always been correct there.
 //
@@ -45,7 +45,7 @@ namespace {
 
 bool g_trace = false;
 
-// libroblox.so is loaded by Cordial's own bionic linker, not the host
+// libroblox.so is loaded by roblox-runtime's own bionic linker, not the host
 // dynamic loader, so the host's `dladdr` has never heard of it and cannot
 // resolve an address inside it. `/proc/self/maps` is the one place that
 // mapping is recorded regardless of which loader made it. Found once, on
@@ -121,7 +121,7 @@ void* trampoline(void* raw) {
 } // namespace
 
 #if defined(__aarch64__)
-// Defined in crates/cordial-runtime/src/bionic/pthread.rs, aarch64 only —
+// Defined in crates/roblox-runtime-runtime/src/bionic/pthread.rs, aarch64 only —
 // see that file's own comment on `roblox_pthread_attr_real` for why this
 // call exists and what it would silently overrun without it.
 extern "C" const void* roblox_pthread_attr_real(const void* attr);

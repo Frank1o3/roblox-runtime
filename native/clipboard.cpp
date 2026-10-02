@@ -6,7 +6,7 @@
 // framework class to implement. It is not one, for the same reason
 // `docs/analysis/webview-surface.md` §1 gives about `WebView`: that file is the
 // dex's referenced-type table, so it says Roblox's *Java* code uses those
-// classes, not that `libroblox.so` reaches for them. Cordial does not run
+// classes, not that `libroblox.so` reaches for them. roblox-runtime does not run
 // Roblox's Java code — it stands in for it.
 //
 // What the engine actually does was read out of the shipping build rather than
@@ -25,7 +25,7 @@
 //
 // A name that exists as a string on both sides and as a method on neither is a
 // message-bus message id. So this is the same shape as the cookie jar and the
-// deep link: the engine publishes, Roblox's Java subscribes, and Cordial has to
+// deep link: the engine publishes, Roblox's Java subscribes, and roblox-runtime has to
 // be the subscriber. `native/cookies.cpp` and `native/deeplink.cpp` set out the
 // same reasoning for their own surfaces.
 //
@@ -39,14 +39,14 @@
 // real `android.widget.EditText` laid over the GL surface (see
 // `RobloxRuntimeTextBoxInfo` in `android_classes.cpp`), so Android's own editor
 // handles the paste and the engine only ever sees the resulting text arrive
-// through `gametextinput`. Cordial's equivalent of that editor is
+// through `gametextinput`. roblox-runtime's equivalent of that editor is
 // `android::input`, so the paste path is `android::clipboard::paste_into_engine`
 // and involves no JNI at all.
 //
 // **Nothing in this file prints a clipboard value.** The payload is a JSON
 // document that came from whatever the user copied inside an experience; it is
 // counted and handed on, never logged. The trace switch reports the message id
-// and a byte count. `crates/cordial-runtime/src/android/clipboard.rs` carries
+// and a byte count. `crates/roblox-runtime-runtime/src/android/clipboard.rs` carries
 // the rest of that rule, and is the only place the text is looked at.
 //
 // This file also carries the message-bus *subscribe* machinery, and that part

@@ -5,7 +5,7 @@
 /// not been registered yet, which happens for every call that arrives
 /// before `initializeNativeCode` has finished — a normal race during
 /// startup, not a failure. `x`/`y` are window-relative pixels, matching the
-/// `dpiScale = 1.0` Cordial reports in `PlatformParams`.
+/// `dpiScale = 1.0` roblox-runtime reports in `PlatformParams`.
 #[allow(clippy::too_many_arguments)]
 pub fn touch(
     handle: i64,
