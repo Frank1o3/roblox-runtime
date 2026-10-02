@@ -33,6 +33,10 @@ pub struct DetectionConfig {
     pub max_strength: f64,
     /// Fraction of the last frame's movement added to the reported point.
     pub lead: f64,
+    /// Whether aim assist starts enabled (F1 continues to toggle it at runtime).
+    pub enabled: bool,
+    /// Require the right mouse button to be held while aim assist is active.
+    pub aimbot_requires_trigger: bool,
     /// Whether triggerbot starts enabled (F3 continues to toggle it at runtime).
     pub triggerbot: bool,
     /// Maximum distance from frame centre at which triggerbot may click.
@@ -61,6 +65,8 @@ impl Default for DetectionConfig {
             min_strength: 0.033,
             max_strength: 0.8,
             lead: 0.0,
+            enabled: false,
+            aimbot_requires_trigger: false,
             triggerbot: false,
             trigger_dist: 10.0,
             trigger_delay: 250,
