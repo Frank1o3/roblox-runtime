@@ -172,6 +172,7 @@ fn restore_identity(session_dir: &Path) -> Result<(), String> {
     Ok(())
 }
 
+#[allow(unsafe_code)]
 unsafe extern "C" fn identity_logged_in(payload: *const c_char) {
     if payload.is_null() {
         return;
@@ -252,7 +253,7 @@ fn decode_identity(value: &serde_json::Value) -> Option<SavedIdentity> {
             .to_owned(),
         membership_type: value
             .get("membershipType")
-            .and_then(json_i64)
+            .and_then(|value| json_i64(Some(value)))
             .unwrap_or_default(),
         is_under13: value
             .get("isUnder13")
