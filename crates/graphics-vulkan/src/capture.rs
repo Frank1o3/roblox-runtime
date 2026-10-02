@@ -109,9 +109,16 @@ fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 
 pub fn set_enabled(enabled: bool) {
     ENABLED.store(enabled, Ordering::Release);
+    if !enabled {
+        lock(frame_queue()).clear();
+    }
 }
 
 pub fn take_frame() -> Option<CapturedFrame> {
+    if !ENABLED.load(Ordering::Acquire) {
+        lock(frame_queue()).clear();
+        return None;
+    }
     lock(frame_queue()).pop_front()
 }
 
