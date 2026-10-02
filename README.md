@@ -1,50 +1,192 @@
 # roblox-runtime
 
-Standalone runtime for executing the Roblox Android client on Linux. This
-repository owns Android compatibility and native loading; the `rusty-blox`
-client supplies the base/split APKs, extracted libraries, data/cache
-directories, settings, Fast Flags and host rendering surface.
+Standalone runtime for executing the Roblox Android client on Linux.
 
-The workspace is being extracted from the local `rbx-native-runtime` reference
-implementation. See [the runtime audit](docs/runtime-audit.md) for source
-boundaries and current migration status.
+`roblox-runtime` owns the Android compatibility, native loading, JNI bridge,
+ABI handling and graphics integration required to run Roblox's Android client
+inside a normal Linux process. The embedding client, currently `rusty-blox`,
+owns the user-facing application layer: APK discovery/provisioning, extracted
+client files, data/cache locations, settings, Fast Flags and the host window.
 
-The runtime resolves engine imports against implemented ABI symbols, selected
-host libraries and generated fallback stubs, then maps `libroblox.so` with its
-constructors deferred. It does not yet run those constructors or call Roblox's
-GameActivity bootstrap automatically. `LoadedEngine` exposes the ordered JNI
-steps (`JNI_OnLoad`, then `initializeNativeCode`) once constructors have run.
-The resolver uses host glibc for observed constructor-time libc calls whose
-ABI matches bionic and keeps structure-sensitive APIs on runtime-owned
-wrappers. With the explicitly ABI-unsafe diagnostic `host_libc` option, the
-local APK run passed constructors, `JNI_OnLoad`, GameActivity initialisation
-and flag setup, then segfaulted on an engine thread. Normal ABI mode segfaults
-during `NativeSettingsInterface.nativeSetFilesDirectory`, the first
-pre-constructor setter. Neither run establishes a playable client. The runtime
-has EGL support for client-owned X11/Wayland surfaces and a Vulkan interposer in
-`roblox-graphics-vulkan`. The Vulkan crate uses Ash to load the host
-`libvulkan`, reports the host WSI extension to Roblox as Android surface
-support, and translates Android surface creation to the supplied Xlib or
-Wayland surface. Roblox's own renderer then submits to the host Vulkan driver
-and hardware. Automatic selects Vulkan when the loader and matching WSI
-extension are available, otherwise GLES3; explicit Vulkan requests fail if
-that support is unavailable. This path compiles independently but has not yet
-been observed rendering a Roblox frame. `RBX_RUNTIME_PRESENT_MODE` accepts
-`auto`, `mailbox`, `uncapped`, `immediate`, `fifo`, `fifo-relaxed`, or `off`.
-After startup, `LoadedEngine::resize_surface` updates the Android window
-dimensions and delivers both app-bridge surface updates plus GameActivity's
-surface-changed callback.
+## Status
 
-Set `USE_EXPERIMENTAL_JNIVM=true` to select the in-progress Rust JNI backend.
-The runtime currently fails early with an explicit message because the Rust
-crate does not yet provide the JNI ABI tables; it never silently falls back to
-the C++ `libjnivm` when this variable is set. Leave the variable unset to use
-the working C++ backend.
+**Functional.**
 
-Build with a recent stable Rust toolchain, Clang/Clang++, CMake, GNU `patch`,
-and initialized Git submodules:
+The runtime is now capable of running the Roblox Android client natively on
+Linux through `rusty-blox`. The runtime has working paths for native library
+loading, Android compatibility, JNI/GameActivity integration, filesystem setup,
+threading primitives, graphics integration and the host-side services Roblox
+expects.
 
-```sh
-git submodule update --init --recursive
-cargo check --workspace
-```
+The runtime is designed as an embeddable component rather than a standalone
+launcher. It does not download or discover Roblox builds itself; the embedding
+application supplies the APKs and runtime directories through `RuntimeConfig`.
+
+The current working JNI path uses the native compatibility core in the runtime's
+native layer. A pure-Rust JNI VM (`jnivm`) is also present as an experimental
+backend and is selected explicitly with `USE_EXPERIMENTAL_JNIVM=true`.
+
+## Architecture
+
+    rusty-blox
+        │
+        │ application / integration layer
+        │
+        ├── APKs and extracted libraries
+        ├── data + cache directories
+        ├── settings / Fast Flags
+        └── host render surface
+                │
+                ▼
+          roblox-runtime
+                │
+                ├── ABI compatibility
+                ├── Android framework compatibility
+                ├── JNI / GameActivity bridge
+                ├── native linker + ELF loading
+                ├── pthread / bionic compatibility
+                ├── graphics integration
+                └── Roblox libroblox.so
+
+This keeps the runtime independent of the UI/application that embeds it while
+allowing the client to control paths, configuration and the host window.
+
+## Runtime components
+
+### ABI and Android compatibility
+
+The `abi` crate provides the Android/bionic ABI surface required by the client,
+including bionic pthread primitives and generated fallback symbols.
+
+The `android` crate supplies Android framework behavior that has to exist on the
+Linux host, including assets, storage, loopers, native windows and system APIs.
+
+### Native loading
+
+The `linker` crate exposes the AOSP-derived bionic linker integration and ELF
+inspection used to load `libroblox.so`.
+
+Engine imports are inspected from the actual ELF rather than maintained as a
+manually copied symbol list. Symbols are then supplied by runtime-owned
+implementations, selected host libraries, or explicit compatibility stubs.
+
+### JNI
+
+The `jni` crate provides the JNI and GameActivity bridge used by the Roblox
+client.
+
+The `jnivm` crate contains an in-progress pure-Rust JNI VM. It is opt-in and
+does not silently replace the working native compatibility path.
+
+### Graphics
+
+The runtime supports host-backed EGL/GLES and Vulkan integration.
+
+For Vulkan, `graphics-vulkan` loads the host Vulkan implementation and translates
+the Android surface requests made by Roblox into the host window-system surface.
+The Roblox renderer therefore submits through the host Vulkan driver rather than
+running inside an Android emulator or virtual machine.
+
+Vulkan presentation can be configured with:
+
+    auto
+    mailbox
+    uncapped
+    immediate
+    fifo
+    fifo-relaxed
+    off
+
+The `present_mode` option is supplied by the embedding application through
+`RuntimeOptions`.
+
+## Public integration surface
+
+The main runtime API is exposed through `RuntimeConfig` and `RuntimeOptions`.
+
+The embedding application supplies:
+
+- base and split APK paths
+- the extracted native-library directory
+- writable data and cache directories
+- Fast Flags
+- graphics and presentation settings
+- an optional login/session profile
+
+The runtime then prepares the Android environment, extracts required assets,
+sets up the engine working directory, prepares graphics, resolves native imports,
+loads `libroblox.so`, initializes the compatibility environment and exposes the
+loaded engine to the caller.
+
+The runtime deliberately does not own APK discovery or application UI.
+
+## Building
+
+Requirements:
+
+- recent stable Rust
+- Clang/Clang++
+- CMake
+- GNU `patch`
+- initialized Git submodules
+
+Initialize the native dependencies and check the workspace:
+
+    git submodule update --init --recursive
+    cargo check --workspace
+
+For a release build:
+
+    cargo build --release
+
+The release profile keeps debug information enabled because the runtime operates
+at the native/ABI boundary and is substantially easier to diagnose with symbols.
+
+## Runtime options
+
+The embedding application can configure:
+
+- `graphics_backend` — automatic, Vulkan or OpenGL ES
+- `present_mode` — Vulkan presentation preference
+- `vsync` — enable/disable synchronized presentation
+- `opengl_swap_interval` — EGL swap interval (`-1`, `0`, or `1`)
+- `host_libc` — explicitly enable the ABI-unsafe diagnostic host-libc path
+
+`host_libc` is intended for diagnostics and compatibility investigation, not as
+the normal execution mode. Structure-sensitive Android/bionic interfaces remain
+runtime-owned where the host ABI is not compatible.
+
+## Performance and diagnostics
+
+The runtime keeps the hot path small where possible and exposes diagnostic
+logging through `RUSTY_BLOX_LOG_LEVEL`.
+
+Because Roblox and the runtime execute in the same process, process-level memory
+and CPU measurements include both the compatibility runtime and the Roblox
+engine itself.
+
+For example:
+
+    ps aux | grep '[r]usty-blox'
+
+reports the combined process rather than a separate runtime-only figure.
+
+## Project goals
+
+`roblox-runtime` is intended to be a reusable runtime component, not a launcher
+that happens to contain a runtime.
+
+The long-term direction is:
+
+1. Keep the runtime boundary small and explicit.
+2. Move Android-specific behavior into dedicated compatibility crates.
+3. Keep ABI-sensitive native compatibility code isolated from higher-level Rust
+   code.
+4. Continue replacing compatibility dependencies with Rust implementations where
+   doing so preserves the required ABI and behavior.
+5. Keep `rusty-blox` responsible for application integration rather than making
+   the runtime depend on one particular frontend.
+
+## License
+
+GPL-3.0-or-later.
