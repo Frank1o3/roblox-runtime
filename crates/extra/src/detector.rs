@@ -270,6 +270,7 @@ impl Detector {
 
         let Some((_, detection)) = best else {
             self.previous_center = None;
+            self.smoothed_movement = None;
             return Ok(None);
         };
 
