@@ -62,6 +62,37 @@ struct CaptureSlot {
     pending: bool,
 }
 
+struct CaptureSlotBuilder<'a> {
+    device: &'a ash::Device,
+    command_pool: Option<vk::CommandPool>,
+    buffer: Option<vk::Buffer>,
+    memory: Option<vk::DeviceMemory>,
+    fence: Option<vk::Fence>,
+    present_semaphore: Option<vk::Semaphore>,
+}
+
+impl Drop for CaptureSlotBuilder<'_> {
+    fn drop(&mut self) {
+        unsafe {
+            if let Some(semaphore) = self.present_semaphore.take() {
+                self.device.destroy_semaphore(semaphore, None);
+            }
+            if let Some(fence) = self.fence.take() {
+                self.device.destroy_fence(fence, None);
+            }
+            if let Some(buffer) = self.buffer.take() {
+                self.device.destroy_buffer(buffer, None);
+            }
+            if let Some(memory) = self.memory.take() {
+                self.device.free_memory(memory, None);
+            }
+            if let Some(pool) = self.command_pool.take() {
+                self.device.destroy_command_pool(pool, None);
+            }
+        }
+    }
+}
+
 fn devices() -> &'static Mutex<HashMap<u64, DeviceCapture>> {
     DEVICES.get_or_init(|| Mutex::new(HashMap::new()))
 }
@@ -551,14 +582,23 @@ impl CaptureSlot {
             .checked_mul(extent.height as u64)
             .and_then(|pixels| pixels.checked_mul(4))
             .ok_or(vk::Result::ERROR_OUT_OF_HOST_MEMORY)?;
-        let command_pool = unsafe {
+        let mut builder = CaptureSlotBuilder {
+            device,
+            command_pool: None,
+            buffer: None,
+            memory: None,
+            fence: None,
+            present_semaphore: None,
+        };
+        builder.command_pool = Some(unsafe {
             device.create_command_pool(
                 &vk::CommandPoolCreateInfo::default()
                     .queue_family_index(family)
                     .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER),
                 None,
             )?
-        };
+        });
+        let command_pool = builder.command_pool.expect("capture command pool created");
         let command_buffer = unsafe {
             device.allocate_command_buffers(
                 &vk::CommandBufferAllocateInfo::default()
@@ -567,7 +607,7 @@ impl CaptureSlot {
                     .command_buffer_count(1),
             )?[0]
         };
-        let buffer = unsafe {
+        builder.buffer = Some(unsafe {
             device.create_buffer(
                 &vk::BufferCreateInfo::default()
                     .size(byte_len)
@@ -575,33 +615,42 @@ impl CaptureSlot {
                     .sharing_mode(vk::SharingMode::EXCLUSIVE),
                 None,
             )?
-        };
+        });
+        let buffer = builder.buffer.expect("capture buffer created");
         let requirements = unsafe { device.get_buffer_memory_requirements(buffer) };
         let (memory_type_index, coherent) =
             find_memory_type(memory_properties, requirements.memory_type_bits)
                 .ok_or(vk::Result::ERROR_FEATURE_NOT_PRESENT)?;
         let allocation_size = requirements.size;
-        let memory = unsafe {
+        builder.memory = Some(unsafe {
             device.allocate_memory(
                 &vk::MemoryAllocateInfo::default()
                     .allocation_size(allocation_size)
                     .memory_type_index(memory_type_index),
                 None,
             )?
-        };
+        });
+        let memory = builder.memory.expect("capture memory allocated");
         unsafe { device.bind_buffer_memory(buffer, memory, 0)? };
-        let fence = unsafe { device.create_fence(&vk::FenceCreateInfo::default(), None)? };
-        let present_semaphore =
-            unsafe { device.create_semaphore(&vk::SemaphoreCreateInfo::default(), None)? };
+        builder.fence =
+            Some(unsafe { device.create_fence(&vk::FenceCreateInfo::default(), None)? });
+        builder.present_semaphore =
+            Some(unsafe { device.create_semaphore(&vk::SemaphoreCreateInfo::default(), None)? });
         Ok(Self {
-            command_pool,
+            command_pool: builder
+                .command_pool
+                .take()
+                .expect("capture command pool created"),
             command_buffer,
-            buffer,
-            memory,
+            buffer: builder.buffer.take().expect("capture buffer created"),
+            memory: builder.memory.take().expect("capture memory allocated"),
             allocation_size,
             coherent,
-            fence,
-            present_semaphore,
+            fence: builder.fence.take().expect("capture fence created"),
+            present_semaphore: builder
+                .present_semaphore
+                .take()
+                .expect("capture semaphore created"),
             pending: false,
         })
     }
