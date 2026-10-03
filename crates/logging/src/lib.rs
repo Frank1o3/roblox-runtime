@@ -48,8 +48,8 @@ fn looks_like_error(message: &str) -> bool {
         "log-assert",
         "panic",
     ]
-        .iter()
-        .any(|marker| lower.contains(marker))
+    .iter()
+    .any(|marker| lower.contains(marker))
 }
 
 /// Emit a startup or runtime failure independently of the selected verbosity.

@@ -5,7 +5,7 @@
 //! the embedding client.
 
 use std::collections::{HashMap, VecDeque};
-use std::ffi::{c_char, c_int, c_void, CStr};
+use std::ffi::{CStr, c_char, c_int, c_void};
 use std::fs::{self, File};
 use std::io::{Read, Seek, SeekFrom};
 use std::os::unix::fs::FileExt;
@@ -428,7 +428,7 @@ pub fn overrides() -> Vec<(&'static str, *mut c_void)> {
 
 #[cfg(test)]
 mod tests {
-    use super::{extract_to, Apk, Manager};
+    use super::{Apk, Manager, extract_to};
     use std::fs::{self, File};
     use std::io::Write;
     use std::path::Path;
