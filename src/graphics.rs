@@ -12,7 +12,6 @@ static VSYNC: AtomicBool = AtomicBool::new(true);
 static OPENGL_SWAP_INTERVAL: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(1);
 
 pub use roblox_android::native_window::{HostSurface, SurfaceError};
-pub use roblox_graphics_vulkan::CapturedFrame;
 
 /// Requested graphics backend.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -93,16 +92,6 @@ pub fn resize_surface(width: u32, height: u32) -> Result<(), SurfaceError> {
     roblox_graphics_vulkan::resize_surface(width, height);
     roblox_jni::game_activity::set_display_size(width as i32, height as i32);
     Ok(())
-}
-
-/// Enable Vulkan swapchain readback for the installed client surface.
-pub fn set_capture_enabled(enabled: bool) {
-    roblox_graphics_vulkan::set_capture_enabled(enabled);
-}
-
-/// Return the oldest completed Vulkan readback frame, if one is available.
-pub fn take_captured_frame() -> Option<CapturedFrame> {
-    roblox_graphics_vulkan::take_captured_frame()
 }
 
 /// Whether the client has installed a renderable surface.

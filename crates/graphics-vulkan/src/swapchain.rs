@@ -167,16 +167,6 @@ pub(crate) extern "system" fn create_swapchain(
     // supported image usage and optional presentation settings. Chained
     // pointers remain valid for this synchronous Vulkan call.
     let result = unsafe { function(device, &rewritten, allocator, output) };
-    if result == vk::Result::SUCCESS && !output.is_null() {
-        // SAFETY: successful vkCreateSwapchainKHR wrote the created handle.
-        super::capture::register_swapchain(
-            device,
-            unsafe { *output },
-            info.image_format,
-            info.image_extent,
-            usage_supported,
-        );
-    }
     result
 }
 
