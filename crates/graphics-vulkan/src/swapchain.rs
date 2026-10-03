@@ -1,11 +1,96 @@
 use ash::vk::{self, Handle};
-use std::sync::atomic::{AtomicI32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64, Ordering};
 
 const MODE_UNCAPPED: i32 = -2;
 const MODE_ENGINE: i32 = -3;
 const MODE_AUTO: i32 = -4;
 static PRESENT_MODE: AtomicI32 = AtomicI32::new(MODE_AUTO);
 static LAST_PRESENT_REPORT: AtomicU64 = AtomicU64::new(u64::MAX);
+static NVIDIA_RETRY_ANNOUNCED: AtomicBool = AtomicBool::new(false);
+
+/// NVIDIA hybrid systems have been reported to fail the first surface-mode
+/// query after boot. The retry is INFERRED to help: it is only a bounded second
+/// ask, gated to NVIDIA and the reported transient errors. Other vendors retain
+/// the driver's original single-call behaviour.
+pub(crate) extern "system" fn get_surface_present_modes(
+    physical: vk::PhysicalDevice,
+    surface: vk::SurfaceKHR,
+    count: *mut u32,
+    modes: *mut vk::PresentModeKHR,
+) -> vk::Result {
+    let instance =
+        vk::Instance::from_raw(super::dispatch::INSTANCE.load(Ordering::Relaxed) as u64 as _);
+    let Some(address) =
+        super::loader::host_proc(instance, c"vkGetPhysicalDeviceSurfacePresentModesKHR")
+    else {
+        return vk::Result::ERROR_INITIALIZATION_FAILED;
+    };
+    let function: vk::PFN_vkGetPhysicalDeviceSurfacePresentModesKHR =
+        unsafe { std::mem::transmute(address) };
+
+    if !is_nvidia_device(instance, physical) {
+        // SAFETY: the host address was resolved for this Vulkan command and all
+        // pointers are forwarded unchanged under Vulkan's caller contract.
+        return unsafe { function(physical, surface, count, modes) };
+    }
+
+    let initial_count = if count.is_null() {
+        0
+    } else {
+        // SAFETY: Vulkan requires a valid count pointer for this command.
+        unsafe { *count }
+    };
+    // SAFETY: the host address was resolved for this Vulkan command; restoring
+    // count before each attempt preserves the caller's original input capacity.
+    let mut result = unsafe { function(physical, surface, count, modes) };
+    let mut attempts = 1;
+    for delay_ms in [100, 250, 500, 1000] {
+        if !matches!(
+            result,
+            vk::Result::ERROR_UNKNOWN
+                | vk::Result::ERROR_INITIALIZATION_FAILED
+                | vk::Result::ERROR_SURFACE_LOST_KHR
+        ) {
+            break;
+        }
+        if !NVIDIA_RETRY_ANNOUNCED.swap(true, Ordering::Relaxed) {
+            roblox_logging::emit(
+                "[runtime] NVIDIA surface present-mode query failed; retrying transient driver errors"
+                    .to_owned(),
+            );
+        }
+        std::thread::sleep(std::time::Duration::from_millis(delay_ms));
+        if !count.is_null() {
+            // SAFETY: same caller-owned count pointer used for the initial call.
+            unsafe { *count = initial_count };
+        }
+        // SAFETY: same resolved host command and live caller pointers.
+        result = unsafe { function(physical, surface, count, modes) };
+        attempts += 1;
+    }
+    if attempts > 1 {
+        let outcome = if result == vk::Result::SUCCESS {
+            "recovered"
+        } else {
+            "still failed"
+        };
+        roblox_logging::emit(format!(
+            "[runtime] NVIDIA present-mode query {outcome} after {attempts} attempts ({result:?})"
+        ));
+    }
+    result
+}
+
+fn is_nvidia_device(instance: vk::Instance, physical: vk::PhysicalDevice) -> bool {
+    let Some(address) = super::loader::host_proc(instance, c"vkGetPhysicalDeviceProperties") else {
+        return false;
+    };
+    let function: vk::PFN_vkGetPhysicalDeviceProperties = unsafe { std::mem::transmute(address) };
+    let mut properties = vk::PhysicalDeviceProperties::default();
+    // SAFETY: the host address and output struct use Vulkan's declared ABI.
+    unsafe { function(physical, &mut properties) };
+    properties.vendor_id == 0x10DE
+}
 
 fn present_mode_name(raw: i32) -> String {
     if raw == vk::PresentModeKHR::IMMEDIATE.as_raw() {
@@ -60,21 +145,14 @@ fn supported_modes(surface: vk::SurfaceKHR) -> Option<Vec<vk::PresentModeKHR>> {
     if instance.is_null() || physical.is_null() {
         return None;
     }
-    let function =
-        super::loader::host_proc(instance, c"vkGetPhysicalDeviceSurfacePresentModesKHR")?;
-    // SAFETY: this pointer was returned for vkGetPhysicalDeviceSurfacePresentModesKHR.
-    let function: vk::PFN_vkGetPhysicalDeviceSurfacePresentModesKHR =
-        unsafe { std::mem::transmute(function) };
     let mut count = 0;
-    // SAFETY: the two-call Vulkan enumeration idiom supplies a valid count pointer.
-    let result = unsafe { function(physical, surface, &mut count, std::ptr::null_mut()) };
+    let result = get_surface_present_modes(physical, surface, &mut count, std::ptr::null_mut());
     if result != vk::Result::SUCCESS {
         return None;
     }
     let mut modes = vec![vk::PresentModeKHR::IMMEDIATE; count as usize];
     if count > 0 {
-        // SAFETY: `modes` has `count` entries as reported by the driver above.
-        let result = unsafe { function(physical, surface, &mut count, modes.as_mut_ptr()) };
+        let result = get_surface_present_modes(physical, surface, &mut count, modes.as_mut_ptr());
         if result != vk::Result::SUCCESS {
             return None;
         }

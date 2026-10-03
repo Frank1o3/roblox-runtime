@@ -112,7 +112,7 @@ pub fn restore(engine: &crate::LoadedEngine, session_dir: &Path) -> Result<(), S
     let contents = match std::fs::read_to_string(&path) {
         Ok(contents) => contents,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            return restore_identity(session_dir);
+            return restore_identity(engine, session_dir);
         }
         Err(error) => return Err(format!("read saved Roblox cookies: {error}")),
     };
@@ -145,11 +145,11 @@ pub fn restore(engine: &crate::LoadedEngine, session_dir: &Path) -> Result<(), S
     if restored > 0 {
         eprintln!("[session] restored cookies for {restored} Roblox domains");
     }
-    restore_identity(session_dir)?;
+    restore_identity(engine, session_dir)?;
     Ok(())
 }
 
-fn restore_identity(session_dir: &Path) -> Result<(), String> {
+fn restore_identity(engine: &crate::LoadedEngine, session_dir: &Path) -> Result<(), String> {
     let path = session_dir.join(IDENTITY_FILE);
     let contents = match std::fs::read_to_string(path) {
         Ok(contents) => contents,
@@ -168,7 +168,22 @@ fn restore_identity(session_dir: &Path) -> Result<(), String> {
         identity.is_under13,
         identity.has_roblox_subscription,
     );
-    eprintln!("[session] restored saved account identity");
+    // The app-start parameters and NativeUserJavaInterface read the runtime's
+    // mirrors, but Roblox also keeps its own user id. Cordial measured that
+    // leaving this copy empty still routed a cookie-authenticated profile to
+    // Landing. Restore it after app-bridge init and before StartAppParams is
+    // built, which is the point at which this function is called.
+    let native = engine
+        .symbol("Java_com_roblox_engine_jni_NativeSettingsInterface_nativeSetUserId")
+        .ok_or_else(|| "engine has no NativeSettingsInterface.nativeSetUserId".to_owned())?;
+    let user_id = identity.user_id.to_string();
+    // SAFETY: the JNI export belongs to this mapped engine and startup has
+    // initialized JNI and app-bridge before session restoration.
+    unsafe {
+        crate::jni::game_activity::call_static_strings(native, SETTINGS, &[user_id.as_str()])
+    }
+    .map_err(|error| format!("restore Roblox native user id: {error}"))?;
+    eprintln!("[session] restored saved account identity and native user id");
     Ok(())
 }
 

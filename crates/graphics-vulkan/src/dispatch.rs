@@ -55,6 +55,9 @@ pub(crate) extern "system" fn get_instance_proc_addr(
             HOST_GET_SURFACE_CAPABILITIES.store(raw(function) as usize, Ordering::Relaxed);
             Some(super::swapchain::get_surface_capabilities as *const () as *mut c_void)
         }
+        b"vkGetPhysicalDeviceSurfacePresentModesKHR" => {
+            Some(super::swapchain::get_surface_present_modes as *const () as *mut c_void)
+        }
         _ => return super::loader::host_proc(instance, unsafe { CStr::from_ptr(name) }),
     };
     // SAFETY: every address in `wrapper` is a Vulkan system-ABI trampoline.
