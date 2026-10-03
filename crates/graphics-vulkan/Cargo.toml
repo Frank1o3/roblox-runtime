@@ -7,6 +7,7 @@
 
 [dependencies]
     ash={version="0.38.0", default-features=false, features=["loaded", "std"]}
+    roblox-logging={path="../logging"}
 
 [lints.rust]
     unsafe_code="allow"

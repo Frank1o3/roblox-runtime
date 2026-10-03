@@ -1,10 +1,34 @@
 use ash::vk::{self, Handle};
-use std::sync::atomic::{AtomicI32, Ordering};
+use std::sync::atomic::{AtomicI32, AtomicU64, Ordering};
 
 const MODE_UNCAPPED: i32 = -2;
 const MODE_ENGINE: i32 = -3;
 const MODE_AUTO: i32 = -4;
 static PRESENT_MODE: AtomicI32 = AtomicI32::new(MODE_AUTO);
+static LAST_PRESENT_REPORT: AtomicU64 = AtomicU64::new(u64::MAX);
+
+fn present_mode_name(raw: i32) -> String {
+    if raw == vk::PresentModeKHR::IMMEDIATE.as_raw() {
+        "immediate".to_owned()
+    } else if raw == vk::PresentModeKHR::MAILBOX.as_raw() {
+        "mailbox".to_owned()
+    } else if raw == vk::PresentModeKHR::FIFO.as_raw() {
+        "fifo".to_owned()
+    } else if raw == vk::PresentModeKHR::FIFO_RELAXED.as_raw() {
+        "fifo-relaxed".to_owned()
+    } else {
+        format!("unknown ({raw})")
+    }
+}
+
+fn requested_mode_name(raw: i32) -> String {
+    match raw {
+        MODE_UNCAPPED => "uncapped (immediate)".to_owned(),
+        MODE_ENGINE => "engine default".to_owned(),
+        MODE_AUTO => "auto (mailbox preferred)".to_owned(),
+        _ => present_mode_name(raw),
+    }
+}
 
 pub(super) fn set_present_mode(mode: Option<&str>, vsync: bool) {
     let selected = if !vsync {
@@ -129,38 +153,60 @@ pub(crate) extern "system" fn create_swapchain(
     }
 
     let setting = PRESENT_MODE.load(Ordering::Relaxed);
-    let present_rewrite = (setting != MODE_ENGINE)
+    let modes = (setting != MODE_ENGINE)
         .then(|| supported_modes(info.surface))
-        .flatten()
-        .and_then(|modes| {
-            let preferences = if setting == MODE_AUTO {
-                vec![vk::PresentModeKHR::MAILBOX]
-            } else if setting == MODE_UNCAPPED {
-                vec![vk::PresentModeKHR::IMMEDIATE]
-            } else {
-                vec![vk::PresentModeKHR::from_raw(setting)]
-            };
-            preferences
-                .into_iter()
-                .find(|mode| modes.contains(mode) && *mode != info.present_mode)
-                .map(|chosen| {
-                    let mut image_count = info.min_image_count;
-                    if matches!(
-                        chosen,
-                        vk::PresentModeKHR::MAILBOX | vk::PresentModeKHR::IMMEDIATE
-                    ) && image_count < 3
-                    {
-                        if let Some((_, max)) = image_count_limits(info.surface) {
-                            if max == 0 || max >= 3 {
-                                image_count = 3;
-                            }
-                        }
-                    }
-                    (chosen, image_count)
-                })
-        });
-    if let Some((present_mode, image_count)) = present_rewrite {
-        rewritten.present_mode = present_mode;
+        .flatten();
+    let preferred_mode = if setting == MODE_AUTO {
+        vk::PresentModeKHR::MAILBOX
+    } else if setting == MODE_UNCAPPED {
+        vk::PresentModeKHR::IMMEDIATE
+    } else if setting == MODE_ENGINE {
+        info.present_mode
+    } else {
+        vk::PresentModeKHR::from_raw(setting)
+    };
+    let chosen_mode = if setting == MODE_ENGINE
+        || modes
+            .as_ref()
+            .is_some_and(|available| available.contains(&preferred_mode))
+    {
+        preferred_mode
+    } else {
+        info.present_mode
+    };
+
+    let requested_name = requested_mode_name(setting);
+    let effective_name = present_mode_name(chosen_mode.as_raw());
+    let report_key = ((setting as u32 as u64) << 32) | chosen_mode.as_raw() as u32 as u64;
+    if LAST_PRESENT_REPORT.swap(report_key, Ordering::Relaxed) != report_key {
+        let fallback = if chosen_mode == preferred_mode {
+            ""
+        } else if setting == MODE_AUTO {
+            " (mailbox unavailable; keeping engine mode)"
+        } else if modes.is_none() {
+            " (could not query surface modes; keeping engine mode)"
+        } else {
+            " (requested mode is unsupported or unavailable; keeping engine mode)"
+        };
+        roblox_logging::emit(format!(
+            "[runtime] Vulkan requested presentation mode {requested_name}; effective mode {effective_name}{fallback}"
+        ));
+    }
+
+    if chosen_mode != info.present_mode {
+        let mut image_count = info.min_image_count;
+        if matches!(
+            chosen_mode,
+            vk::PresentModeKHR::MAILBOX | vk::PresentModeKHR::IMMEDIATE
+        ) && image_count < 3
+        {
+            if let Some((_, max)) = image_count_limits(info.surface) {
+                if max == 0 || max >= 3 {
+                    image_count = 3;
+                }
+            }
+        }
+        rewritten.present_mode = chosen_mode;
         rewritten.min_image_count = image_count;
     }
     // SAFETY: `rewritten` preserves the caller's struct and only adjusts
