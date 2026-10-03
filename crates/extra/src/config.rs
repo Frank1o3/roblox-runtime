@@ -176,10 +176,30 @@ impl DetectionConfig {
             ));
         }
         if !matches!(
-            self.steady_key.trim().to_ascii_lowercase().replace(['-', ' '], "_").as_str(),
-            "left_shift" | "lshift" | "shift" | "right_shift" | "rshift"
-                | "left_ctrl" | "lctrl" | "ctrl" | "control" | "right_ctrl" | "rctrl"
-                | "left_alt" | "lalt" | "alt" | "right_alt" | "ralt" | "space" | "spacebar"
+            self.steady_key
+                .trim()
+                .to_ascii_lowercase()
+                .replace('-', "_")
+                .replace(' ', "_")
+                .as_str(),
+            "left_shift"
+                | "lshift"
+                | "shift"
+                | "right_shift"
+                | "rshift"
+                | "left_ctrl"
+                | "lctrl"
+                | "ctrl"
+                | "control"
+                | "right_ctrl"
+                | "rctrl"
+                | "left_alt"
+                | "lalt"
+                | "alt"
+                | "right_alt"
+                | "ralt"
+                | "space"
+                | "spacebar"
         ) {
             return Err(DetectionConfigError::Invalid(
                 "steady_key must be a supported modifier key or space",
