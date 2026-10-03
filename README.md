@@ -168,6 +168,12 @@ runtime-owned where the host ABI is not compatible.
 The runtime keeps the hot path small where possible and exposes diagnostic
 logging through `RUSTY_BLOX_LOG_LEVEL`.
 
+Before startup, the runtime keeps the newest ten Roblox log files in its known
+`appData/logs` directories and the newest ten `memProfStorage*.json` files in
+`appData/LocalStorage`. It also removes empty directories under its data and
+cache roots, without traversing `rbx-storage` directories or deleting content
+blobs or database files. Cleanup failures are logged and do not block startup.
+
 Because Roblox and the runtime execute in the same process, process-level memory
 and CPU measurements include both the compatibility runtime and the Roblox
 engine itself.

@@ -22,6 +22,7 @@ pub use roblox_jni as jni;
 pub use roblox_linker::elf::{Binding as ImportBinding, Imports as EngineImports};
 pub mod graphics;
 pub mod session;
+mod storage_cleanup;
 mod symbols;
 pub mod webview;
 
@@ -179,6 +180,7 @@ impl RuntimeConfig {
     /// embedding client. Returns the host-backed `/system` tree.
     pub fn prepare_android_environment(&self) -> Result<PathBuf, ConfigError> {
         self.validate_paths()?;
+        storage_cleanup::run(&self.data_dir, &self.cache_dir);
         android::asset::set_apks(&self.apk_paths).map_err(ConfigError::AssetSetup)?;
         let files_dir = self.data_dir.join("files");
         let external_dir = self.data_dir.join("external");
