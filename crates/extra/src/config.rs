@@ -37,6 +37,12 @@ pub struct DetectionConfig {
     pub enabled: bool,
     /// Require the right mouse button to be held while aim assist is active.
     pub aimbot_requires_trigger: bool,
+    /// Whether steady aim starts enabled (F4 continues to toggle it at runtime).
+    pub steady_aim: bool,
+    /// Radius from screen centre in pixels at which steady aim holds its key.
+    pub steady_dist: f64,
+    /// Keyboard key held while a target is within steady_dist.
+    pub steady_key: String,
     /// Whether triggerbot starts enabled (F3 continues to toggle it at runtime).
     pub triggerbot: bool,
     /// Maximum distance from frame centre at which triggerbot may click.
@@ -67,6 +73,9 @@ impl Default for DetectionConfig {
             lead: 0.0,
             enabled: false,
             aimbot_requires_trigger: false,
+            steady_aim: false,
+            steady_dist: 24.0,
+            steady_key: "left_shift".into(),
             triggerbot: false,
             trigger_dist: 10.0,
             trigger_delay: 250,
@@ -140,6 +149,7 @@ impl DetectionConfig {
             ("min_strength", self.min_strength),
             ("max_strength", self.max_strength),
             ("trigger_dist", self.trigger_dist),
+            ("steady_dist", self.steady_dist),
         ] {
             if !value.is_finite() {
                 return Err(DetectionConfigError::InvalidField(name));
@@ -159,9 +169,20 @@ impl DetectionConfig {
             || self.max_strength < 0.0
             || self.max_strength < self.min_strength
             || self.trigger_dist < 0.0
+            || self.steady_dist < 0.0
         {
             return Err(DetectionConfigError::Invalid(
                 "tolerances and movement settings are out of range",
+            ));
+        }
+        if !matches!(
+            self.steady_key.trim().to_ascii_lowercase().replace(['-', ' '], "_").as_str(),
+            "left_shift" | "lshift" | "shift" | "right_shift" | "rshift"
+                | "left_ctrl" | "lctrl" | "ctrl" | "control" | "right_ctrl" | "rctrl"
+                | "left_alt" | "lalt" | "alt" | "right_alt" | "ralt" | "space" | "spacebar"
+        ) {
+            return Err(DetectionConfigError::Invalid(
+                "steady_key must be a supported modifier key or space",
             ));
         }
         if self.colors.is_empty() {
