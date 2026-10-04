@@ -486,8 +486,14 @@ mod tests {
             cache: Mutex::new(Default::default()),
         };
 
-        assert_eq!(manager.read("shared.txt"), Some(&b"base"[..]));
-        assert_eq!(manager.read("split.txt"), Some(&b"only-split"[..]));
+        assert_eq!(
+            manager.read("shared.txt").as_deref().map(Vec::as_slice),
+            Some(&b"base"[..])
+        );
+        assert_eq!(
+            manager.read("split.txt").as_deref().map(Vec::as_slice),
+            Some(&b"only-split"[..])
+        );
         assert_eq!(manager.read("missing.txt"), None);
         let _ = fs::remove_dir_all(root);
     }
