@@ -3,6 +3,7 @@
 #![allow(unsafe_code)]
 
 use std::ffi::c_void;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 mod dispatch;
 mod instance;
@@ -11,8 +12,23 @@ mod platform;
 mod surface;
 mod swapchain;
 
+static ENABLED: AtomicBool = AtomicBool::new(false);
+
 pub use loader::{LIBRARY_NAMES, available_for_surface, loader_symbol};
 pub use platform::Surface;
+
+/// Enable or disable exposing the host Vulkan loader to Roblox.
+///
+/// The runtime selects the backend before loading the engine. Keeping Vulkan
+/// disabled by default prevents a caller that has not prepared graphics from
+/// accidentally advertising a partially configured Vulkan implementation.
+pub fn set_enabled(enabled: bool) {
+    ENABLED.store(enabled, Ordering::Relaxed);
+}
+
+pub(crate) fn enabled() -> bool {
+    ENABLED.load(Ordering::Relaxed)
+}
 
 /// Set the preferred present mode for this process (`auto`, `mailbox`,
 /// `immediate`, `fifo`, `fifo-relaxed`, or `off`). Disabling VSync requests

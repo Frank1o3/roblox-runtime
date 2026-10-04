@@ -4,9 +4,9 @@
 //! Two opposite reasons to be in this file. A type whose layout differs between
 //! the libcs is *wrapped*: the bionic-sized object becomes a handle and the real
 //! glibc object lives on the heap behind it. A type that is laid out the same is
-//! *forwarded* straight to the host — those entry points are here only because
-//! the alternative was a generated stub, and for `pthread_once` and
-//! thread-specific data a stub is fatal.
+//! *forwarded* straight to the host. Bionic's `pthread_key_t` values are
+//! tagged, so they are translated to host keys in a bounded table rather than
+//! forwarded directly.
 //!
 //! Sizes in bytes, measured rather than read off. One probe translation unit
 //! declaring `char sz_x[sizeof(x)];` per type, compiled once per libc and the
@@ -107,6 +107,7 @@
 #[cfg(target_arch = "aarch64")]
 use std::ffi::c_ulong;
 use std::ffi::{c_int, c_uint, c_void};
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 /// Marks a wrapper whose backing object exists. Arbitrary, but distinctive in a
@@ -955,9 +956,24 @@ pub unsafe extern "C" fn once(control: *mut c_int, init_routine: Option<extern "
     unsafe { host_pthread_once(control, init_routine) }
 }
 
-/// `pthread_key_create`. bionic's `pthread_key_t` is signed, glibc's is not,
-/// hence the local rather than a cast of the caller's pointer — and nothing is
-/// written back unless the host says it succeeded, which is bionic's contract.
+const BIONIC_KEY_COUNT: usize = 128; // Bionic PTHREAD_KEYS_MAX.
+const BIONIC_KEY_VALID_FLAG: c_int = i32::MIN;
+
+// Bionic marks valid keys with bit 31. Without this translation, a Bionic
+// caller passing an invalid small key such as 4 to getspecific would read
+// glibc's unrelated key 4 and treat another library's TLS value as its own.
+static BIONIC_KEYS: Mutex<[Option<c_uint>; BIONIC_KEY_COUNT]> =
+    Mutex::new([None; BIONIC_KEY_COUNT]);
+
+fn bionic_key_index(key: c_int) -> Option<usize> {
+    if key & BIONIC_KEY_VALID_FLAG == 0 {
+        return None;
+    }
+    let index = (key & !BIONIC_KEY_VALID_FLAG) as usize;
+    (index < BIONIC_KEY_COUNT).then_some(index)
+}
+
+/// `pthread_key_create` translates a Bionic tagged key to a host key.
 ///
 /// # Safety
 ///
@@ -970,25 +986,49 @@ pub unsafe extern "C" fn key_create(
     if key.is_null() {
         return libc_einval();
     }
+    let mut keys = BIONIC_KEYS.lock().unwrap_or_else(|error| error.into_inner());
+    let Some(index) = keys.iter().position(Option::is_none) else {
+        return 11; // EAGAIN; Bionic's PTHREAD_KEYS_MAX is 128.
+    };
     let mut host_key: c_uint = 0;
-    // SAFETY: `host_key` is a live 4-byte slot; the destructor is passed through
-    // untouched and glibc calls it on the same thread bionic would have.
+    // SAFETY: `host_key` is a live 4-byte slot; glibc invokes the destructor
+    // with the thread's stored value, as Bionic does.
     let rc = unsafe { host_pthread_key_create(&mut host_key, destructor) };
     if rc == 0 {
-        // SAFETY: the caller's `pthread_key_t*`, 4 bytes in both libcs.
-        unsafe { *key = host_key as c_int };
+        keys[index] = Some(host_key);
+        // SAFETY: the caller's `pthread_key_t*` points to a writable Bionic
+        // key slot. Bionic keys carry KEY_VALID_FLAG in bit 31.
+        unsafe { *key = (index as c_int) | BIONIC_KEY_VALID_FLAG };
     }
     rc
 }
 
 pub extern "C" fn key_delete(key: c_int) -> c_int {
-    // SAFETY: a key is an opaque scalar; an invalid one is rejected by glibc.
-    unsafe { host_pthread_key_delete(key as c_uint) }
+    let Some(index) = bionic_key_index(key) else {
+        return libc_einval();
+    };
+    let mut keys = BIONIC_KEYS.lock().unwrap_or_else(|error| error.into_inner());
+    let Some(host_key) = keys[index] else {
+        return libc_einval();
+    };
+    // SAFETY: this host key was created by this module and is live in the map.
+    let rc = unsafe { host_pthread_key_delete(host_key) };
+    if rc == 0 {
+        keys[index] = None;
+    }
+    rc
 }
 
 pub extern "C" fn getspecific(key: c_int) -> *mut c_void {
-    // SAFETY: as above. A key never created returns null, as bionic's does.
-    unsafe { host_pthread_getspecific(key as c_uint) }
+    let Some(index) = bionic_key_index(key) else {
+        return std::ptr::null_mut();
+    };
+    let keys = BIONIC_KEYS.lock().unwrap_or_else(|error| error.into_inner());
+    let Some(host_key) = keys[index] else {
+        return std::ptr::null_mut();
+    };
+    // SAFETY: the key is a live host key created by this module.
+    unsafe { host_pthread_getspecific(host_key) }
 }
 
 /// # Safety
@@ -997,8 +1037,16 @@ pub extern "C" fn getspecific(key: c_int) -> *mut c_void {
 /// here, so this has no requirement on it beyond being a value the caller
 /// intends to get back; `key` is an opaque scalar glibc rejects if invalid.
 pub unsafe extern "C" fn setspecific(key: c_int, value: *const c_void) -> c_int {
-    // SAFETY: as above. `value` is stored, never dereferenced.
-    unsafe { host_pthread_setspecific(key as c_uint, value) }
+    let Some(index) = bionic_key_index(key) else {
+        return libc_einval();
+    };
+    let keys = BIONIC_KEYS.lock().unwrap_or_else(|error| error.into_inner());
+    let Some(host_key) = keys[index] else {
+        return libc_einval();
+    };
+    // SAFETY: the key is a live host key created by this module; `value` is
+    // stored and handed back, never dereferenced here.
+    unsafe { host_pthread_setspecific(host_key, value) }
 }
 
 fn libc_einval() -> c_int {
