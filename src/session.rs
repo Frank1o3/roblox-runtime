@@ -149,6 +149,7 @@ pub fn restore(engine: &crate::LoadedEngine, session_dir: &Path) -> Result<(), S
     Ok(())
 }
 
+#[allow(unsafe_code)]
 fn restore_identity(engine: &crate::LoadedEngine, session_dir: &Path) -> Result<(), String> {
     let path = session_dir.join(IDENTITY_FILE);
     let contents = match std::fs::read_to_string(path) {
@@ -324,7 +325,8 @@ fn write_private_json(path: &Path, value: &serde_json::Value) -> Result<(), Stri
     std::fs::rename(temp, path).map_err(|error| format!("publish saved identity: {error}"))
 }
 
-fn unescape(value: &str) -> String {
+/// Unescape tab, newline, and carriage return escape sequences stored in cookie records.
+pub fn unescape_cookies(value: &str) -> String {
     let mut out = String::with_capacity(value.len());
     let mut chars = value.chars();
     while let Some(ch) = chars.next() {
@@ -336,6 +338,7 @@ fn unescape(value: &str) -> String {
             Some('t') => out.push('\t'),
             Some('n') => out.push('\n'),
             Some('r') => out.push('\r'),
+            Some('\\') => out.push('\\'),
             Some(ch) => {
                 out.push('\\');
                 out.push(ch);
@@ -344,6 +347,10 @@ fn unescape(value: &str) -> String {
         }
     }
     out
+}
+
+fn unescape(value: &str) -> String {
+    unescape_cookies(value)
 }
 
 pub fn flush_if_due(engine: &crate::LoadedEngine, data_dir: &Path) {
@@ -429,4 +436,19 @@ pub fn save(engine: &crate::LoadedEngine, data_dir: &Path) -> Result<(), String>
     file.sync_all().map_err(|e| e.to_string())?;
     std::fs::rename(temp, path).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_unescape_cookies() {
+        assert_eq!(unescape_cookies(r"foo\tbar"), "foo\tbar");
+        assert_eq!(unescape_cookies(r"line1\nline2"), "line1\nline2");
+        assert_eq!(unescape_cookies(r"cr\rnl"), "cr\rnl");
+        assert_eq!(unescape_cookies(r"escaped\\backslash"), r"escaped\backslash");
+        assert_eq!(unescape_cookies("plain text"), "plain text");
+        assert_eq!(unescape_cookies(r"trailing\"), r"trailing\");
+    }
 }

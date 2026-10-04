@@ -100,17 +100,45 @@ fn host_address(library: &str, symbol: &str) -> Option<(&'static str, *mut c_voi
         return registered;
     }
 
-    // These functions have matching call/data ABIs on glibc and bionic. Keep
-    // this list explicit: resolving every libc import from glibc would silently
-    // cross incompatible structures such as bionic's `stat` and `sigaction`.
+    // These symbols have matching ABIs on glibc and bionic. Keep this list
+    // explicit: resolving every libc import from glibc would silently cross
+    // incompatible structures such as bionic's `stat` and `sigaction`.
     const HOST_LIBC_COMPATIBLE: &[&str] = &[
         "__cxa_atexit",
         "__ctype_get_mb_cur_max",
+        // Same scalar/pointer layouts in bionic and glibc. These are data
+        // symbols (not calls); leaving them as function stubs corrupts native
+        // constructor state when Roblox reads the variables directly.
+        "daylight",
+        // Both libcs expose `environ` as a pointer to a null-terminated array
+        // of `char *`. This is a data symbol; resolving it to the generated
+        // function stub makes Android code read the stub address as envp.
+        "environ",
+        "in6addr_any",
+        "in6addr_loopback",
         "mbtowc",
+        // Linux VM calls use the same pointer, size, protection, flag, fd and
+        // 64-bit offset ABI in bionic and glibc. Roblox's allocator uses these
+        // during static initialization; a zero-returning stub looks like an
+        // allocation failure and makes its constructor abort.
+        "madvise",
+        "mmap",
+        "mmap64",
+        "mprotect",
+        "munmap",
         "memset",
         "newlocale",
+        "optarg",
+        "opterr",
+        "optind",
+        "optopt",
         "strlen",
         "syscall",
+        "timezone",
+        "tzname",
+        "stdin",
+        "stdout",
+        "stderr",
         "uselocale",
     ];
     let host_pthread_mutex_compatible = cfg!(target_arch = "x86_64")
@@ -246,23 +274,46 @@ mod tests {
     }
 
     #[test]
-    fn observed_constructor_libc_calls_use_host_functions() {
-        let tables = build(&BTreeMap::new(), false);
-        for name in [
+    fn explicitly_compatible_libc_symbols_use_host_abi() {
+        let symbol_names = [
             "__cxa_atexit",
             "__ctype_get_mb_cur_max",
+            "daylight",
+            "environ",
+            "in6addr_any",
+            "in6addr_loopback",
+            "madvise",
+            "mmap",
+            "mmap64",
+            "mprotect",
+            "munmap",
             "mbtowc",
             "memset",
             "newlocale",
+            "optarg",
+            "optind",
             "strlen",
             "syscall",
+            "timezone",
+            "tzname",
+            "stdin",
+            "stdout",
+            "stderr",
             "uselocale",
-        ] {
+        ];
+        let imports: BTreeMap<String, Binding> = symbol_names
+            .iter()
+            .map(|&name| (name.to_owned(), Binding::Strong))
+            .collect();
+        let tables = build(&imports, false);
+        for name in symbol_names {
+            let host = roblox_linker::host_symbol("libc.so.6", name)
+                .unwrap_or_else(|| panic!("host libc must export {name}"));
             assert!(
                 tables.libraries["libc.so"]
                     .iter()
-                    .any(|(registered, address)| registered == name && !address.is_null()),
-                "{name} must resolve to the host libc function"
+                    .any(|(registered, address)| registered == name && *address == host),
+                "{name} must resolve to the matching host libc symbol"
             );
         }
 
