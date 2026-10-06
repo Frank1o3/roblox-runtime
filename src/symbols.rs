@@ -159,7 +159,6 @@ pub(crate) fn build(imports: &roblox_linker::elf::Imports, host_libc: bool) -> S
         .chain(roblox_android::overrides())
         .chain(crate::graphics::function_overrides())
         .collect();
-    let override_names: BTreeSet<&str> = overrides.keys().copied().collect();
 
     let mut known = BTreeSet::new();
     for (name, stub) in roblox_abi::stubs::SYMBOLS.iter() {
@@ -182,7 +181,7 @@ pub(crate) fn build(imports: &roblox_linker::elf::Imports, host_libc: bool) -> S
             .push(((*name).to_owned(), address));
     }
 
-    for (name, address) in overrides {
+    for (&name, &address) in &overrides {
         result
             .libraries
             .entry(library_for(name))
@@ -192,7 +191,7 @@ pub(crate) fn build(imports: &roblox_linker::elf::Imports, host_libc: bool) -> S
 
     for (name, binding) in imports {
         if known.contains(name.as_str())
-            || override_names.contains(name.as_str())
+            || overrides.contains_key(name.as_str())
             || is_linker_symbol(name)
         {
             continue;

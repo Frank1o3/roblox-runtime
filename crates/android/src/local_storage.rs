@@ -17,6 +17,7 @@ type Values = BTreeMap<String, UserValues>;
 
 static STORE_DIR: OnceLock<Mutex<Option<PathBuf>>> = OnceLock::new();
 static STORE_LOCK: Mutex<()> = Mutex::new(());
+static CACHED_VALUES: Mutex<Option<Values>> = Mutex::new(None);
 
 fn store_dir() -> &'static Mutex<Option<PathBuf>> {
     STORE_DIR.get_or_init(|| Mutex::new(None))
@@ -27,6 +28,9 @@ pub fn set_store_dir(path: &Path) {
     *store_dir()
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(path.to_path_buf());
+    *CACHED_VALUES
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
 }
 
 /// Keep the native bridge's Rust implementations in the final executable.
@@ -76,7 +80,23 @@ fn save(path: &Path, values: &Values) -> Result<(), String> {
     file.sync_all()
         .map_err(|error| format!("cannot flush private values: {error}"))?;
     drop(file);
-    fs::rename(&temporary, path).map_err(|error| format!("cannot publish private values: {error}"))
+    fs::rename(&temporary, path).map_err(|error| format!("cannot publish private values: {error}"))?;
+    *CACHED_VALUES
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(values.clone());
+    Ok(())
+}
+
+fn get_or_load_values(path: &Path) -> Result<Values, String> {
+    let mut cached = CACHED_VALUES
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if let Some(ref values) = *cached {
+        return Ok(values.clone());
+    }
+    let loaded = load(path)?;
+    *cached = Some(loaded.clone());
+    Ok(loaded)
 }
 
 fn key<'a>(key: *const c_char) -> Result<&'a str, ()> {
@@ -110,7 +130,7 @@ pub extern "C" fn roblox_local_storage_get(
     let _guard = STORE_LOCK
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let values = match load(&path) {
+    let values = match get_or_load_values(&path) {
         Ok(values) => values,
         Err(error) => {
             log_failure("read", &error);
@@ -165,7 +185,7 @@ pub extern "C" fn roblox_local_storage_set(
     let _guard = STORE_LOCK
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let mut values = match load(&path) {
+    let mut values = match get_or_load_values(&path) {
         Ok(values) => values,
         Err(error) => {
             log_failure("write", &error);
@@ -212,7 +232,7 @@ fn update(operation: &str, change: impl FnOnce(&mut Values)) -> c_int {
     let _guard = STORE_LOCK
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let mut values = match load(&path) {
+    let mut values = match get_or_load_values(&path) {
         Ok(values) => values,
         Err(error) => {
             log_failure(operation, &error);

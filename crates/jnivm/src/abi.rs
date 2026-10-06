@@ -128,6 +128,8 @@ fn env_table() -> *const jni::JNINativeInterface_ {
         slots.ThrowNew = throw_new;
         slots.ExceptionOccurred = exception_occurred;
         slots.ExceptionDescribe = exception_describe;
+        slots.PushLocalFrame = push_local_frame;
+        slots.PopLocalFrame = pop_local_frame;
         slots.NewLocalRef = new_local_ref;
         slots.DeleteLocalRef = delete_local_ref;
         slots.NewGlobalRef = new_global_ref;
@@ -790,6 +792,32 @@ unsafe extern "system" fn new_local_ref(
     }
 }
 
+unsafe extern "system" fn push_local_frame(
+    env: *mut jni::JNIEnv,
+    capacity: jni::jint,
+) -> jni::jint {
+    let Some(vm) = vm() else { return jni::JNI_ERR; };
+    let Some(env) = env_token(vm, env) else { return jni::JNI_ERR; };
+    match vm.push_local_frame(&env, capacity) {
+        Ok(()) => jni::JNI_OK,
+        Err(_) => jni::JNI_ERR,
+    }
+}
+
+unsafe extern "system" fn pop_local_frame(
+    env: *mut jni::JNIEnv,
+    result: jni::jobject,
+) -> jni::jobject {
+    let Some(vm) = vm() else { return result; };
+    let Some(env) = env_token(vm, env) else { return result; };
+    let res_id = (!result.is_null()).then_some(crate::ObjectId(result as usize as u64));
+    match vm.pop_local_frame(&env, res_id) {
+        Ok(Some(id)) => id.0 as usize as jni::jobject,
+        Ok(None) => ptr::null_mut(),
+        Err(_) => result,
+    }
+}
+
 unsafe extern "system" fn delete_local_ref(env: *mut jni::JNIEnv, object: jni::jobject) {
     if object.is_null() {
         return;
@@ -801,7 +829,9 @@ unsafe extern "system" fn delete_local_ref(env: *mut jni::JNIEnv, object: jni::j
     let Some(env) = env_token(vm, env) else {
         return;
     };
-    if let Err(error) = vm.delete_local_ref(&env, crate::ObjectId(object as usize as u64)) {
+    let id = crate::ObjectId(object as usize as u64);
+    remove_cpp_reference(id);
+    if let Err(error) = vm.delete_local_ref(&env, id) {
         eprintln!("[jnivm] DeleteLocalRef failed: {error}");
     }
 }
@@ -900,6 +930,7 @@ unsafe extern "system" fn delete_global_ref(_env: *mut jni::JNIEnv, object: jni:
             return;
         }
         let id = crate::ObjectId(object as usize as u64);
+        remove_cpp_reference(id);
         if let Some(env) = vm.get_env() {
             if let Ok(crate::ObjectValue::CppObject(reference)) = vm.object_value(&env, id) {
                 // SAFETY: imported C++ references own a matching C++ global
@@ -1093,14 +1124,24 @@ unsafe extern "system" fn get_env(
     {
         return jni::JNI_EVERSION;
     }
-    let Some(env) = THREAD_ENV
-        .with(|slot| slot.0.get())
-        .checked_sub(0)
-        .filter(|value| *value != 0)
-    else {
+    let env = THREAD_ENV.with(|slot| slot.0.get());
+    if env == 0 {
         return jni::JNI_EDETACHED;
-    };
+    }
     // SAFETY: JavaVM specifies a writable output pointer on JNI_OK.
     unsafe { *output = env as *mut c_void };
     jni::JNI_OK
+}
+
+/// Run a garbage collection cycle on the active pure Rust JavaVM if one exists.
+pub fn gc() -> crate::GcStats {
+    let Some(vm) = vm() else {
+        return crate::GcStats::default();
+    };
+    let (stats, collected_ids) = vm.gc();
+    for id in collected_ids {
+        remove_cpp_reference(id);
+    }
+    prune_string_buffers();
+    stats
 }

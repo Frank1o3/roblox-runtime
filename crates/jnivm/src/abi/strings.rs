@@ -102,6 +102,26 @@ unsafe extern "system" fn release_string_utf_chars(_env: *mut jni::JNIEnv, _stri
     }
 }
 
+pub(crate) fn prune_string_buffers() {
+    const MAX_UNRELEASED_BUFFERS: usize = 512;
+    if let Some(buffers) = UTF8_BUFFERS.get() {
+        let mut map = buffers.lock().unwrap_or_else(|p| p.into_inner());
+        if map.len() > MAX_UNRELEASED_BUFFERS {
+            eprintln!("[jnivm] warning: UTF-8 buffer pool exceeded {} entries; pruning stale unreleased buffers", MAX_UNRELEASED_BUFFERS);
+            map.clear();
+            map.shrink_to_fit();
+        }
+    }
+    if let Some(buffers) = UTF16_BUFFERS.get() {
+        let mut map = buffers.lock().unwrap_or_else(|p| p.into_inner());
+        if map.len() > MAX_UNRELEASED_BUFFERS {
+            eprintln!("[jnivm] warning: UTF-16 buffer pool exceeded {} entries; pruning stale unreleased buffers", MAX_UNRELEASED_BUFFERS);
+            map.clear();
+            map.shrink_to_fit();
+        }
+    }
+}
+
 fn string_units(env: *mut jni::JNIEnv, string: jni::jstring) -> Option<Vec<u16>> {
     let vm = vm()?;
     let env = env_token(vm, env)?;

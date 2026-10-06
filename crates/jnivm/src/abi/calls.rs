@@ -657,6 +657,17 @@ fn cpp_reference_for(vm: &Vm, object: crate::ObjectId, class_name: &str) -> Opti
     Some(reference)
 }
 
+fn remove_cpp_reference(object: crate::ObjectId) {
+    let Some(cache) = CPP_FALLBACK_OBJECTS.get() else { return };
+    if let Some(reference) = cache.lock().unwrap_or_else(|p| p.into_inner()).remove(&object.0) {
+        if reference != 0 {
+            // SAFETY: this mirror was created via roblox_jni_fallback_new_object or
+            // roblox_jni_fallback_new_string and is released when the Rust object dies.
+            unsafe { roblox_jni_fallback_release_ref(reference as *mut std::ffi::c_void) };
+        }
+    }
+}
+
 fn from_cpp_jvalue(vm: &Vm, ty: &crate::Type, value: jni::jvalue) -> Option<JniValue> {
     // SAFETY: the method descriptor selects the active union member.
     Some(unsafe {

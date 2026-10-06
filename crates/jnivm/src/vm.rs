@@ -54,11 +54,13 @@ impl Vm {
         if !removed {
             return Err(JniError::NotAttached);
         }
-        self.state
-            .write()
-            .unwrap_or_else(|p| p.into_inner())
-            .locals
-            .remove(&owner);
+        let mut state = self.state.write().unwrap_or_else(|p| p.into_inner());
+        if let Some(locals) = state.locals.remove(&owner) {
+            for id in locals {
+                state.objects.remove(&id);
+            }
+        }
+        state.local_frames.remove(&owner);
         Ok(())
     }
 
@@ -154,8 +156,19 @@ impl Vm {
         {
             return Ok(*id);
         }
+        let class_name = state.class_records.get(&class).unwrap().name.clone();
         let id = MethodId(state.id());
         state.method_descriptors.insert(id, parsed);
+        state.method_metadata.insert(
+            id,
+            MethodMeta {
+                class_id: class,
+                class_name,
+                name: name.to_owned(),
+                descriptor: descriptor.to_owned(),
+                is_static,
+            },
+        );
         state
             .class_records
             .get_mut(&class)
@@ -242,20 +255,16 @@ impl Vm {
                 .ok_or_else(|| JniError::UnknownMethod(format!("method id {}", method.0)))?;
             let handler = state.method_handlers.get(&method).copied();
             let method_name = state
-                .class_records
-                .values()
-                .find_map(|class| {
-                    class.methods.iter().find_map(|(key, id)| {
-                        (*id == method).then(|| {
-                            format!(
-                                "{}.{}`{}{}",
-                                class.name,
-                                if key.is_static { "static " } else { "" },
-                                key.name,
-                                key.descriptor
-                            )
-                        })
-                    })
+                .method_metadata
+                .get(&method)
+                .map(|m| {
+                    format!(
+                        "{}.{}`{}{}",
+                        m.class_name,
+                        if m.is_static { "static " } else { "" },
+                        m.name,
+                        m.descriptor
+                    )
                 })
                 .unwrap_or_else(|| format!("method id {}", method.0));
             (descriptor, handler, method_name)
@@ -312,19 +321,15 @@ impl Vm {
     /// Rust handler is installed for this method ID.
     pub fn method_info(&self, method: MethodId) -> Option<(String, String, String, bool, bool)> {
         let state = self.state.read().unwrap_or_else(|p| p.into_inner());
-        state.class_records.iter().find_map(|(_class_id, class)| {
-            class.methods.iter().find_map(|(key, id)| {
-                (*id == method).then(|| {
-                    (
-                        class.name.clone(),
-                        key.name.clone(),
-                        key.descriptor.clone(),
-                        key.is_static,
-                        state.method_handlers.contains_key(&method),
-                    )
-                })
-            })
-        })
+        let meta = state.method_metadata.get(&method)?;
+        let has_handler = state.method_handlers.contains_key(&method);
+        Some((
+            meta.class_name.clone(),
+            meta.name.clone(),
+            meta.descriptor.clone(),
+            meta.is_static,
+            has_handler,
+        ))
     }
 
     /// Record a JNI `RegisterNatives` entry. Function addresses are opaque
@@ -387,8 +392,19 @@ impl Vm {
         {
             return Ok(*id);
         }
+        let class_name = state.class_records.get(&class).unwrap().name.clone();
         let id = FieldId(state.id());
         state.field_types.insert(id, ty);
+        state.field_metadata.insert(
+            id,
+            FieldMeta {
+                class_id: class,
+                class_name,
+                name: name.to_owned(),
+                descriptor: descriptor.to_owned(),
+                is_static,
+            },
+        );
         state
             .class_records
             .get_mut(&class)
@@ -454,18 +470,13 @@ impl Vm {
 
     pub fn field_info(&self, field: FieldId) -> Option<(String, String, String, bool)> {
         let state = self.state.read().unwrap_or_else(|p| p.into_inner());
-        state.class_records.iter().find_map(|(_class_id, class)| {
-            class.fields.iter().find_map(|(key, id)| {
-                (*id == field).then(|| {
-                    (
-                        class.name.clone(),
-                        key.name.clone(),
-                        key.descriptor.clone(),
-                        key.is_static,
-                    )
-                })
-            })
-        })
+        let meta = state.field_metadata.get(&field)?;
+        Some((
+            meta.class_name.clone(),
+            meta.name.clone(),
+            meta.descriptor.clone(),
+            meta.is_static,
+        ))
     }
 
     pub fn field_value_is_set(&self, field: FieldId, receiver: Option<ObjectId>) -> bool {
@@ -530,6 +541,11 @@ impl Vm {
             },
         );
         state.locals.entry(env.owner).or_default().insert(id);
+        if let Some(frames) = state.local_frames.get_mut(&env.owner) {
+            if let Some(top) = frames.last_mut() {
+                top.insert(id);
+            }
+        }
         Ok(id)
     }
 
@@ -823,7 +839,179 @@ impl Vm {
             },
         );
         state.locals.entry(env.owner).or_default().insert(local);
+        if let Some(frames) = state.local_frames.get_mut(&env.owner) {
+            if let Some(top) = frames.last_mut() {
+                top.insert(local);
+            }
+        }
         Ok(local)
+    }
+
+    pub fn push_local_frame(&self, env: &ThreadEnv, _capacity: i32) -> Result<(), JniError> {
+        self.check_env(env)?;
+        let mut state = self.state.write().unwrap_or_else(|p| p.into_inner());
+        state
+            .local_frames
+            .entry(env.owner)
+            .or_default()
+            .push(HashSet::new());
+        Ok(())
+    }
+
+    pub fn pop_local_frame(
+        &self,
+        env: &ThreadEnv,
+        result: Option<ObjectId>,
+    ) -> Result<Option<ObjectId>, JniError> {
+        self.check_env(env)?;
+        let mut state = self.state.write().unwrap_or_else(|p| p.into_inner());
+        let frame = state
+            .local_frames
+            .get_mut(&env.owner)
+            .and_then(|frames| frames.pop());
+        let Some(frame) = frame else {
+            return Ok(result);
+        };
+        let mut preserved_id = None;
+        let mut to_remove = Vec::new();
+        for id in frame {
+            if Some(id) == result {
+                preserved_id = Some(id);
+                if let Some(top) = state
+                    .local_frames
+                    .get_mut(&env.owner)
+                    .and_then(|f| f.last_mut())
+                {
+                    top.insert(id);
+                }
+            } else {
+                to_remove.push(id);
+            }
+        }
+        if let Some(locals) = state.locals.get_mut(&env.owner) {
+            for id in &to_remove {
+                locals.remove(id);
+            }
+        }
+        for id in to_remove {
+            state.objects.remove(&id);
+        }
+        Ok(preserved_id.or(result))
+    }
+
+    /// Run a mark-and-sweep garbage collection cycle over the VM state.
+    /// Collects unrooted objects, prunes detached thread locals, and sweeps
+    /// abandoned instance field values.
+    pub fn gc(&self) -> (crate::GcStats, Vec<ObjectId>) {
+        let mut state = self.state.write().unwrap_or_else(|p| p.into_inner());
+        let attached = self.attached.lock().unwrap_or_else(|p| p.into_inner());
+
+        // 1. Prune dead threads from locals and local_frames
+        let dead_threads: Vec<ThreadId> = state
+            .locals
+            .keys()
+            .copied()
+            .filter(|tid| !attached.contains(tid))
+            .collect();
+        for tid in dead_threads {
+            if let Some(unattached_locals) = state.locals.remove(&tid) {
+                for id in unattached_locals {
+                    state.objects.remove(&id);
+                }
+            }
+            state.local_frames.remove(&tid);
+        }
+
+        // 2. Mark phase: identify all reachable ObjectIds
+        let mut reachable = HashSet::new();
+        let mut worklist = Vec::new();
+
+        // Roots: all globals
+        for (&id, record) in &state.objects {
+            if record.global && reachable.insert(id) {
+                worklist.push(id);
+            }
+        }
+
+        // Roots: all locals from currently attached threads
+        for (&tid, thread_locals) in &state.locals {
+            if attached.contains(&tid) {
+                for &id in thread_locals {
+                    if reachable.insert(id) {
+                        worklist.push(id);
+                    }
+                }
+            }
+        }
+
+        // Roots: static field values
+        for ((_field_id, receiver), val) in &state.field_values {
+            if receiver.is_none() {
+                if let JniValue::Object(Some(id)) = val {
+                    if reachable.insert(*id) {
+                        worklist.push(*id);
+                    }
+                }
+            }
+        }
+
+        // Traverse object graph
+        while let Some(current_id) = worklist.pop() {
+            if let Some(record) = state.objects.get(&current_id) {
+                if let ObjectValue::ObjectArray(ref elements) = record.value {
+                    for elem in elements.iter().flatten() {
+                        if reachable.insert(*elem) {
+                            worklist.push(*elem);
+                        }
+                    }
+                }
+            }
+
+            for ((_field_id, receiver), val) in &state.field_values {
+                if *receiver == Some(current_id) {
+                    if let JniValue::Object(Some(target_id)) = val {
+                        if reachable.insert(*target_id) {
+                            worklist.push(*target_id);
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. Sweep dead objects
+        let mut collected_ids = Vec::new();
+        let total_before = state.objects.len();
+        state.objects.retain(|&id, _| {
+            let keep = reachable.contains(&id);
+            if !keep {
+                collected_ids.push(id);
+            }
+            keep
+        });
+
+        // 4. Sweep dead instance field values (receiver is not live)
+        let fields_before = state.field_values.len();
+        state.field_values.retain(|(_, receiver), _| {
+            match receiver {
+                None => true, // static field
+                Some(rec_id) => reachable.contains(rec_id),
+            }
+        });
+        let collected_fields = fields_before.saturating_sub(state.field_values.len());
+
+        // 5. Shrink allocations if significant garbage was reclaimed (> 25%)
+        if collected_ids.len() > 100 && collected_ids.len() * 4 > total_before {
+            state.objects.shrink_to_fit();
+            state.field_values.shrink_to_fit();
+        }
+
+        let stats = crate::GcStats {
+            collected_objects: collected_ids.len(),
+            collected_fields,
+            live_objects: state.objects.len(),
+        };
+
+        (stats, collected_ids)
     }
 
     fn check_env(&self, env: &ThreadEnv) -> Result<(), JniError> {
@@ -861,4 +1049,105 @@ fn validate_member_name(name: &str) -> Result<(), JniError> {
         return Err(JniError::InvalidMemberName);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_method_and_field_metadata() {
+        let vm = Vm::new();
+        let class = vm.find_or_define_class("com/test/Sample").unwrap();
+        let method = vm.register_method(class, "testMethod", "()V", false).unwrap();
+        let field = vm.register_field(class, "count", "I", false).unwrap();
+
+        let info = vm.method_info(method).unwrap();
+        assert_eq!(info.0, "com/test/Sample");
+        assert_eq!(info.1, "testMethod");
+        assert_eq!(info.2, "()V");
+        assert!(!info.3);
+
+        let finfo = vm.field_info(field).unwrap();
+        assert_eq!(finfo.0, "com/test/Sample");
+        assert_eq!(finfo.1, "count");
+        assert_eq!(finfo.2, "I");
+    }
+
+    #[test]
+    fn test_push_pop_local_frame() {
+        let vm = Vm::new();
+        let env = vm.attach_current_thread();
+        let class = vm.find_or_define_class("java/lang/String").unwrap();
+
+        vm.push_local_frame(&env, 16).unwrap();
+        let obj1 = vm.new_local_object(&env, class, ObjectValue::Opaque).unwrap();
+        let obj2 = vm.new_local_object(&env, class, ObjectValue::Opaque).unwrap();
+
+        assert!(vm.object_value(&env, obj1).is_ok());
+        assert!(vm.object_value(&env, obj2).is_ok());
+
+        // Pop frame while preserving obj2
+        let preserved = vm.pop_local_frame(&env, Some(obj2)).unwrap();
+        assert_eq!(preserved, Some(obj2));
+
+        // obj1 should have been dropped with the popped frame
+        assert!(vm.object_value(&env, obj1).is_err());
+        // obj2 was preserved and remains valid in parent frame
+        assert!(vm.object_value(&env, obj2).is_ok());
+    }
+
+    #[test]
+    fn test_detach_cleans_locals() {
+        let vm = std::sync::Arc::new(Vm::new());
+        let vm_clone = vm.clone();
+
+        let (obj, class_id) = std::thread::spawn(move || {
+            let env = vm_clone.attach_current_thread();
+            let class = vm_clone.find_or_define_class("java/lang/Object").unwrap();
+            let obj = vm_clone.new_local_object(&env, class, ObjectValue::Opaque).unwrap();
+            vm_clone.detach_current_thread().unwrap();
+            (obj, class)
+        }).join().unwrap();
+
+        // The detached thread's local object should be removed from objects map
+        let main_env = vm.attach_current_thread();
+        assert!(vm.object_value(&main_env, obj).is_err());
+        assert_eq!(vm.class_name(class_id).as_deref(), Some("java/lang/Object"));
+    }
+
+    #[test]
+    fn test_gc_collects_unreachable_and_orphaned_fields() {
+        let vm = Vm::new();
+        let env = vm.attach_current_thread();
+        let class = vm.find_or_define_class("com/test/Data").unwrap();
+        let field = vm.register_field(class, "tag", "I", false).unwrap();
+
+        // Create a local object
+        let local_obj = vm.new_local_object(&env, class, ObjectValue::Opaque).unwrap();
+
+        // Create a global object and set field value on it
+        let global_obj = vm.new_global_ref(&env, local_obj).unwrap();
+        vm.set_field_value(field, Some(global_obj), JniValue::Int(42)).unwrap();
+
+        // Delete local reference
+        vm.delete_local_ref(&env, local_obj).unwrap();
+
+        // Run GC; global_obj is rooted, so field on it should be preserved
+        let (stats, collected) = vm.gc();
+        assert_eq!(stats.live_objects, 1);
+        assert_eq!(collected.len(), 0);
+        assert!(vm.field_value_is_set(field, Some(global_obj)));
+        assert_eq!(vm.field_value(field, Some(global_obj)), Ok(JniValue::Int(42)));
+
+        // Now delete global ref
+        vm.delete_global_ref(global_obj).unwrap();
+
+        // Run GC again; the orphaned field value should be swept
+        let (stats, collected) = vm.gc();
+        assert_eq!(stats.collected_fields, 1);
+        assert_eq!(stats.live_objects, 0);
+        assert!(collected.is_empty()); // already deleted via delete_global_ref
+        assert!(!vm.field_value_is_set(field, Some(global_obj)));
+    }
 }

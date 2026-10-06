@@ -149,6 +149,33 @@ impl JniValue {
 /// converts raw `jvalue`s before entering this function.
 pub type MethodHandler = fn(&Vm, Option<ObjectId>, &[JniValue]) -> JniValue;
 
+#[derive(Clone, Debug)]
+pub struct MethodMeta {
+    #[allow(dead_code)]
+    pub class_id: ClassId,
+    pub class_name: String,
+    pub name: String,
+    pub descriptor: String,
+    pub is_static: bool,
+}
+
+#[derive(Clone, Debug)]
+pub struct FieldMeta {
+    #[allow(dead_code)]
+    pub class_id: ClassId,
+    pub class_name: String,
+    pub name: String,
+    pub descriptor: String,
+    pub is_static: bool,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct GcStats {
+    pub collected_objects: usize,
+    pub collected_fields: usize,
+    pub live_objects: usize,
+}
+
 #[derive(Debug)]
 struct ObjectRecord {
     class: ClassId,
@@ -168,6 +195,9 @@ struct State {
     field_values: HashMap<(FieldId, Option<ObjectId>), JniValue>,
     objects: HashMap<ObjectId, ObjectRecord>,
     locals: HashMap<ThreadId, HashSet<ObjectId>>,
+    local_frames: HashMap<ThreadId, Vec<HashSet<ObjectId>>>,
+    method_metadata: HashMap<MethodId, MethodMeta>,
+    field_metadata: HashMap<FieldId, FieldMeta>,
 }
 
 impl State {

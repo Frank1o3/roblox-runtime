@@ -11,7 +11,7 @@
 #![allow(unsafe_code)]
 
 use std::ffi::{CStr, CString, c_char, c_int, c_void};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Mutex, OnceLock, RwLock};
 
 /// ELF inspection used to enumerate native-library imports before loading.
 pub mod elf;
@@ -58,13 +58,13 @@ pub const RTLD_LAZY: c_int = 1;
 pub fn host_symbol(library: &str, symbol: &str) -> Option<*mut c_void> {
     static LIBRARIES: OnceLock<Mutex<std::collections::BTreeMap<String, usize>>> = OnceLock::new();
     static SYMBOLS: OnceLock<
-        Mutex<
+        RwLock<
             std::collections::BTreeMap<String, std::collections::BTreeMap<String, Option<usize>>>,
         >,
     > = OnceLock::new();
-    let symbols = SYMBOLS.get_or_init(|| Mutex::new(std::collections::BTreeMap::new()));
+    let symbols = SYMBOLS.get_or_init(|| RwLock::new(std::collections::BTreeMap::new()));
     if let Some(address) = symbols
-        .lock()
+        .read()
         .unwrap_or_else(|p| p.into_inner())
         .get(library)
         .and_then(|entries| entries.get(symbol))
@@ -123,7 +123,7 @@ pub fn host_symbol(library: &str, symbol: &str) -> Option<*mut c_void> {
         }
     };
     symbols
-        .lock()
+        .write()
         .unwrap_or_else(|p| p.into_inner())
         .entry(library.to_owned())
         .or_default()

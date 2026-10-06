@@ -885,3 +885,31 @@ impl std::error::Error for ConfigError {}
 pub fn supplied_path_exists(path: &Path) -> bool {
     path.exists()
 }
+
+pub use jnivm::{GcStats, set_selected_from_environment};
+
+static LAST_GC: OnceLock<std::sync::Mutex<std::time::Instant>> = OnceLock::new();
+const GC_INTERVAL: std::time::Duration = std::time::Duration::from_secs(20);
+
+/// Run a runtime garbage collection cycle over JNIVM and platform caches.
+pub fn gc() -> jnivm::GcStats {
+    let stats = jnivm::gc();
+    if stats.collected_objects > 0 || stats.collected_fields > 0 {
+        eprintln!(
+            "[runtime:gc] collected {} dead objects, {} dead fields ({} live objects remain)",
+            stats.collected_objects, stats.collected_fields, stats.live_objects
+        );
+    }
+    stats
+}
+
+/// Run runtime garbage collection if at least 20 seconds have elapsed since the last cycle.
+pub fn gc_if_due() {
+    let mutex = LAST_GC.get_or_init(|| std::sync::Mutex::new(std::time::Instant::now()));
+    let mut last = mutex.lock().unwrap_or_else(|p| p.into_inner());
+    if last.elapsed() >= GC_INTERVAL {
+        *last = std::time::Instant::now();
+        drop(last);
+        gc();
+    }
+}
