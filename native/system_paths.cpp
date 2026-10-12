@@ -205,6 +205,40 @@ int s_open(const char* path, int flags, ...) {
     return r;
 }
 
+/// Fortified two-argument `open`. glibc emits this entry point when the call
+/// does not pass a creation mode; route it through the same `/system` mapper.
+int s_open_2(const char* path, int flags) {
+    if (flags & (O_CREAT | O_TMPFILE)) {
+        errno = EINVAL;
+        return -1;
+    }
+    return s_open(path, flags);
+}
+
+int s_mkdir(const char* path, mode_t mode) {
+    REMAP(path);
+    return ::mkdir(real, mode);
+}
+
+int s_unlink(const char* path) {
+    REMAP(path);
+    return ::unlink(real);
+}
+
+int s_rename(const char* old_path, const char* new_path) {
+    char old_buf[PATH_MAX];
+    char new_buf[PATH_MAX];
+    const char* old_real = remap(old_path, old_buf, sizeof old_buf);
+    const char* new_real = remap(new_path, new_buf, sizeof new_buf);
+    int r = ::rename(old_real ? old_real : old_path, new_real ? new_real : new_path);
+    if (g_trace) {
+        std::fprintf(stderr, "[paths] tid=%ld rename(\"%s\", \"%s\") = %d\n",
+                     (long)::syscall(SYS_gettid), old_real ? old_real : old_path,
+                     new_real ? new_real : new_path, r);
+    }
+    return r;
+}
+
 /// `statvfs`, which the engine imports and roblox-runtime had never intercepted.
 ///
 /// Two separate defects, and the second is why this is not just a redirect.
@@ -306,6 +340,10 @@ extern "C" const RuntimeSystemSymbol* roblox_system_symbols(size_t* count) {
         {"fopen", (void*)&s_fopen},
         {"statvfs", (void*)&s_statvfs},
         {"open", (void*)&s_open},
+        {"__open_2", (void*)&s_open_2},
+        {"mkdir", (void*)&s_mkdir},
+        {"unlink", (void*)&s_unlink},
+        {"rename", (void*)&s_rename},
     };
     *count = sizeof(table) / sizeof(table[0]);
     return table;

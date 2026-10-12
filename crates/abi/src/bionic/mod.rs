@@ -31,6 +31,10 @@ pub fn function_overrides() -> Vec<(&'static str, *mut c_void)> {
     }
     let mut v = vec![
         f!("__errno", bionic_errno),
+        // Never let Android code launch commands through the host shell.
+        // This is a safe, explicit failure instead of an ABI-unsafe glibc
+        // forwarding or an unresolved import that prevents the engine loading.
+        f!("system", bionic_system),
         f!("__assert", bionic_assert),
         f!("__assert2", bionic_assert2),
         f!("__gnu_strerror_r", gnu_strerror_r),
@@ -43,6 +47,8 @@ pub fn function_overrides() -> Vec<(&'static str, *mut c_void)> {
         f!("__poll_chk", poll_chk),
         f!("__readlink_chk", readlink_chk),
         f!("__fread_chk", fread_chk),
+        f!("__fwrite_chk", fwrite_chk),
+        f!("__vsnprintf_chk", vsnprintf_chk),
         // Android system properties. Desktop values, so Roblox stops believing
         // it is on a phone. Framework-layer policy, implemented here because the
         // native side reads it through libc.
@@ -224,6 +230,12 @@ unsafe extern "C" {
     fn poll(fds: *mut c_void, nfds: u64, timeout: c_int) -> c_int;
     fn readlink(path: *const c_char, buf: *mut c_char, bufsize: usize) -> isize;
     fn fread(ptr: *mut c_void, size: usize, n: usize, stream: *mut c_void) -> usize;
+    fn vsnprintf(
+        dst: *mut c_char,
+        size: usize,
+        format: *const c_char,
+        args: *mut c_void,
+    ) -> c_int;
     #[link_name = "dlsym"]
     fn libc_dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
     #[link_name = "__cxa_thread_atexit_impl"]
@@ -331,6 +343,24 @@ extern "C" fn bionic_errno() -> *mut c_int {
     unsafe { __errno_location() }
 }
 
+fn set_errno(value: c_int) {
+    // SAFETY: this writes the current thread's glibc errno slot, which is the
+    // slot returned by bionic's `__errno` override above.
+    unsafe { *__errno_location() = value };
+}
+
+extern "C" fn bionic_system(command: *const c_char) -> c_int {
+    // A null command asks whether a command processor is available. This
+    // runtime intentionally provides none; a real command request fails with
+    // ENOSYS rather than reaching the host shell.
+    if command.is_null() {
+        return 0;
+    }
+    // ENOSYS is the standard result for this disabled operation.
+    set_errno(38);
+    -1
+}
+
 /// SAFETY: `p` is either null or a NUL-terminated C string.
 unsafe fn cstr(p: *const c_char) -> String {
     if p.is_null() {
@@ -421,9 +451,55 @@ extern "C" fn fread_chk(
     size: usize,
     n: usize,
     stream: *mut c_void,
-    _bound: usize,
+    bound: usize,
 ) -> usize {
+    let Some(bytes) = size.checked_mul(n) else {
+        set_errno(75);
+        return 0;
+    };
+    if bytes > bound {
+        set_errno(75);
+        return 0;
+    }
     unsafe { fread(ptr, size, n, stream) }
+}
+
+extern "C" fn fwrite_chk(
+    ptr: *const c_void,
+    size: usize,
+    n: usize,
+    stream: *mut c_void,
+    bound: usize,
+) -> usize {
+    let Some(bytes) = size.checked_mul(n) else {
+        set_errno(75);
+        return 0;
+    };
+    if bytes > bound {
+        set_errno(75);
+        return 0;
+    }
+    // SAFETY: the fortified source-size check passed, and this compatibility
+    // bridge translates bionic's FILE representation before calling glibc.
+    unsafe { legacy_fwrite(ptr, size, n, stream) }
+}
+
+extern "C" fn vsnprintf_chk(
+    dst: *mut c_char,
+    supplied_size: usize,
+    _flags: c_int,
+    bound: usize,
+    format: *const c_char,
+    args: *mut c_void,
+) -> c_int {
+    if supplied_size > bound {
+        // EOVERFLOW has the same Linux value in bionic and glibc.
+        set_errno(75);
+        return -1;
+    }
+    // SAFETY: supplied_size fits the compiler-reported destination size and
+    // the va_list belongs to the caller for this synchronous formatting call.
+    unsafe { vsnprintf(dst, supplied_size, format, args) }
 }
 
 /// What roblox-runtime reports for `ro.*` system properties.

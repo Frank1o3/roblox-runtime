@@ -106,6 +106,16 @@ fn host_address(library: &str, symbol: &str) -> Option<(&'static str, *mut c_voi
     const HOST_LIBC_COMPATIBLE: &[&str] = &[
         "__cxa_atexit",
         "__ctype_get_mb_cur_max",
+        "arc4random_buf",
+        "atoi",
+        "clock",
+        "closedir",
+        // Descriptor close has the same integer argument and result.
+        "close",
+        // On the supported 64-bit Linux hosts, clockid_t and the two-long
+        // timespec layout match bionic. Engine constructors require this
+        // before JNI_OnLoad, so keep it available without broad libc fallback.
+        "clock_gettime",
         // Same scalar/pointer layouts in bionic and glibc. These are data
         // symbols (not calls); leaving them as function stubs corrupts native
         // constructor state when Roblox reads the variables directly.
@@ -114,6 +124,21 @@ fn host_address(library: &str, symbol: &str) -> Option<(&'static str, *mut c_voi
         // of `char *`. This is a data symbol; resolving it to the generated
         // function stub makes Android code read the stub address as envp.
         "environ",
+        "eventfd",
+        "feof",
+        "fgets",
+        "fileno",
+        "fscanf",
+        "fseeko",
+        "ftello",
+        "fstat",
+        "getauxval",
+        "getcwd",
+        "getenv",
+        "getpid",
+        "getpagesize",
+        "gmtime",
+        "gmtime_r",
         "in6addr_any",
         "in6addr_loopback",
         "mbtowc",
@@ -126,14 +151,66 @@ fn host_address(library: &str, symbol: &str) -> Option<(&'static str, *mut c_voi
         "mmap64",
         "mprotect",
         "munmap",
+        "memchr",
+        "memcpy",
+        "memcmp",
+        "memmove",
         "memset",
         "newlocale",
         "optarg",
         "opterr",
         "optind",
         "optopt",
+        // File-descriptor I/O has the same scalar and pointer ABI in both
+        // libcs. Path policy is applied when the descriptor is opened.
+        "read",
+        "rand",
+        "sched_getcpu",
+        "sched_get_priority_max",
+        "sched_setscheduler",
+        "sched_yield",
+        "socket",
+        "strcasecmp",
+        "strchr",
+        "strcpy",
+        "strerror",
+        "strncpy",
+        "strncasecmp",
+        "strncmp",
+        "strnlen",
+        "strstr",
+        "strtoll",
+        "snprintf",
         "strlen",
+        "vsnprintf",
+        "pipe",
+        "fcntl",
+        "epoll_create1",
+        "epoll_ctl",
+        "mktime",
+        "pread",
+        "posix_fallocate",
+        "readdir",
+        "srand",
+        "write",
+        "clearerr",
+        "qsort",
+        "strftime",
+        "strftime_l",
+        "strrchr",
+        "strtoull_l",
+        "localtime_r",
+        "timerfd_create",
+        "poll",
+        "strtod",
+        "sscanf",
+        "localeconv",
+        "__memcpy_chk",
+        // Linux's kernel sysinfo layout is the same in bionic and glibc on
+        // the 64-bit host, and the call only reads system resource totals.
+        "sysinfo",
         "syscall",
+        "strcmp",
         "timezone",
         "tzname",
         "stdin",
@@ -141,10 +218,46 @@ fn host_address(library: &str, symbol: &str) -> Option<(&'static str, *mut c_voi
         "stderr",
         "uselocale",
     ];
-    let host_pthread_mutex_compatible = cfg!(target_arch = "x86_64")
-        && matches!(symbol, "pthread_mutex_lock" | "pthread_mutex_unlock");
+    let host_pthread_compatible = cfg!(target_arch = "x86_64")
+        && matches!(
+            symbol,
+            "pthread_mutex_init"
+                | "pthread_mutex_destroy"
+                | "pthread_mutex_lock"
+                | "pthread_mutex_trylock"
+                | "pthread_mutex_unlock"
+                | "pthread_mutex_timedlock"
+                | "pthread_mutexattr_init"
+                | "pthread_mutexattr_destroy"
+                | "pthread_mutexattr_gettype"
+                | "pthread_mutexattr_settype"
+                | "pthread_self"
+                | "pthread_setname_np"
+                | "pthread_attr_init"
+                | "pthread_attr_destroy"
+                | "pthread_attr_setstacksize"
+                | "pthread_attr_getstacksize"
+                | "pthread_attr_setdetachstate"
+                | "pthread_attr_getdetachstate"
+                | "pthread_attr_setguardsize"
+                | "pthread_attr_getguardsize"
+                | "pthread_attr_setschedparam"
+                | "pthread_attr_getschedparam"
+                | "pthread_attr_setstack"
+                | "pthread_attr_getstack"
+                | "pthread_getattr_np"
+                | "pthread_rwlock_init"
+                | "pthread_rwlock_destroy"
+                | "pthread_rwlock_rdlock"
+                | "pthread_rwlock_tryrdlock"
+                | "pthread_rwlock_timedrdlock"
+                | "pthread_rwlock_wrlock"
+                | "pthread_rwlock_trywrlock"
+                | "pthread_rwlock_timedwrlock"
+                | "pthread_rwlock_unlock"
+        );
     if library == "libc.so"
-        && (HOST_LIBC_COMPATIBLE.contains(&symbol) || host_pthread_mutex_compatible)
+        && (HOST_LIBC_COMPATIBLE.contains(&symbol) || host_pthread_compatible)
     {
         return roblox_linker::host_symbol("libc.so.6", symbol).map(|address| ("libc.so", address));
     }

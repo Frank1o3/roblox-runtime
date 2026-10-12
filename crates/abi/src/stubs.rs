@@ -5,7 +5,8 @@
 //! considerably more useful than a list of everything Roblox references.
 //!
 //! `RBX_RUNTIME_STUB_ABORT=1` aborts on the first hit instead, for bisecting a
-//! specific failure.
+//! specific failure. `RBX_RUNTIME_STUB_TRACE=1` prints first-hit symbol names
+//! directly to stderr even when the selected log level would hide them.
 
 use std::sync::Mutex;
 
@@ -26,6 +27,10 @@ fn abort_on_hit() -> bool {
 
 fn quiet() -> bool {
     std::env::var_os("RBX_RUNTIME_STUB_QUIET").is_some()
+}
+
+fn trace_hits() -> bool {
+    std::env::var_os("RBX_RUNTIME_STUB_TRACE").is_some()
 }
 
 /// Called by every generated stub.
@@ -57,10 +62,17 @@ pub fn hit(index: usize) -> i64 {
         crate::unimplemented::record(crate::unimplemented::Kind::LibcStub, SYMBOLS[index].0);
     }
     if first && !quiet() {
-        eprintln!("[stub] {}", SYMBOLS[index].0);
+        if trace_hits() {
+            // Explicit diagnostic opt-in; bypass the runtime log filter.
+            std::eprintln!("[stub] {}", SYMBOLS[index].0);
+        } else {
+            eprintln!("[stub] {}", SYMBOLS[index].0);
+        }
     }
     if abort_on_hit() {
-        eprintln!(
+        // This is an opt-in debugger switch; bypass the configurable runtime
+        // log filter so the symbol that triggered the abort is always visible.
+        std::eprintln!(
             "[stub] RBX_RUNTIME_STUB_ABORT set — aborting on {}",
             SYMBOLS[index].0
         );
