@@ -320,27 +320,6 @@ public:
     }
 };
 
-/// `org.webrtc.voiceengine.WebRtcAudioTrack`
-///
-/// Registered only. This is WebRTC's playback path -- an `AudioTrack`, a
-/// dedicated `AudioTrackThread`, an enum of start-error codes and two error
-/// callback interfaces. Implementing it would mean standing up a second audio
-/// output alongside the FMOD/OpenSL ES path that already works, driven by a
-/// thread whose contract nothing here has observed.
-///
-/// Nothing is hooked. There is no honest partial version of an audio track:
-/// one that accepts buffers and drops them would report playing audio that
-/// nobody can hear, which is the failure mode `native/opensles.cpp`'s comment
-/// exists to warn about. If voice chat ever reaches this class the unresolved
-/// methods will say so by name, which is a better starting point for whoever
-/// picks it up than a silent sink.
-class WebRtcAudioTrack : public Object {
-public:
-    static void Register(ENV* env) {
-        env->GetClass<WebRtcAudioTrack>("org/webrtc/voiceengine/WebRtcAudioTrack");
-    }
-};
-
 } // namespace
 
 /// Registered from `register_platform_classes`, which already runs at the
@@ -359,7 +338,6 @@ void register_unanswered_classes(ENV* env) {
     AppRtcDeviceWrapper::Register(env);
     MemStorageConnection::Register(env);
     WebRtcBuildInfo::Register(env);
-    WebRtcAudioTrack::Register(env);
 }
 
 } // namespace roblox_runtime
