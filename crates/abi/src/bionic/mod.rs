@@ -230,12 +230,7 @@ unsafe extern "C" {
     fn poll(fds: *mut c_void, nfds: u64, timeout: c_int) -> c_int;
     fn readlink(path: *const c_char, buf: *mut c_char, bufsize: usize) -> isize;
     fn fread(ptr: *mut c_void, size: usize, n: usize, stream: *mut c_void) -> usize;
-    fn vsnprintf(
-        dst: *mut c_char,
-        size: usize,
-        format: *const c_char,
-        args: *mut c_void,
-    ) -> c_int;
+    fn vsnprintf(dst: *mut c_char, size: usize, format: *const c_char, args: *mut c_void) -> c_int;
     #[link_name = "dlsym"]
     fn libc_dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
     #[link_name = "__cxa_thread_atexit_impl"]

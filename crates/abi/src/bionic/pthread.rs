@@ -986,7 +986,9 @@ pub unsafe extern "C" fn key_create(
     if key.is_null() {
         return libc_einval();
     }
-    let mut keys = BIONIC_KEYS.lock().unwrap_or_else(|error| error.into_inner());
+    let mut keys = BIONIC_KEYS
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     let Some(index) = keys.iter().position(Option::is_none) else {
         return 11; // EAGAIN; Bionic's PTHREAD_KEYS_MAX is 128.
     };
@@ -1007,7 +1009,9 @@ pub extern "C" fn key_delete(key: c_int) -> c_int {
     let Some(index) = bionic_key_index(key) else {
         return libc_einval();
     };
-    let mut keys = BIONIC_KEYS.lock().unwrap_or_else(|error| error.into_inner());
+    let mut keys = BIONIC_KEYS
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     let Some(host_key) = keys[index] else {
         return libc_einval();
     };
@@ -1023,7 +1027,9 @@ pub extern "C" fn getspecific(key: c_int) -> *mut c_void {
     let Some(index) = bionic_key_index(key) else {
         return std::ptr::null_mut();
     };
-    let keys = BIONIC_KEYS.lock().unwrap_or_else(|error| error.into_inner());
+    let keys = BIONIC_KEYS
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     let Some(host_key) = keys[index] else {
         return std::ptr::null_mut();
     };
@@ -1040,7 +1046,9 @@ pub unsafe extern "C" fn setspecific(key: c_int, value: *const c_void) -> c_int 
     let Some(index) = bionic_key_index(key) else {
         return libc_einval();
     };
-    let keys = BIONIC_KEYS.lock().unwrap_or_else(|error| error.into_inner());
+    let keys = BIONIC_KEYS
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     let Some(host_key) = keys[index] else {
         return libc_einval();
     };

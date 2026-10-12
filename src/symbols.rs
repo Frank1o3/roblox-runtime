@@ -256,9 +256,7 @@ fn host_address(library: &str, symbol: &str) -> Option<(&'static str, *mut c_voi
                 | "pthread_rwlock_timedwrlock"
                 | "pthread_rwlock_unlock"
         );
-    if library == "libc.so"
-        && (HOST_LIBC_COMPATIBLE.contains(&symbol) || host_pthread_compatible)
-    {
+    if library == "libc.so" && (HOST_LIBC_COMPATIBLE.contains(&symbol) || host_pthread_compatible) {
         return roblox_linker::host_symbol("libc.so.6", symbol).map(|address| ("libc.so", address));
     }
     None

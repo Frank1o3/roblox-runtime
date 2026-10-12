@@ -447,7 +447,10 @@ mod tests {
         assert_eq!(unescape_cookies(r"foo\tbar"), "foo\tbar");
         assert_eq!(unescape_cookies(r"line1\nline2"), "line1\nline2");
         assert_eq!(unescape_cookies(r"cr\rnl"), "cr\rnl");
-        assert_eq!(unescape_cookies(r"escaped\\backslash"), r"escaped\backslash");
+        assert_eq!(
+            unescape_cookies(r"escaped\\backslash"),
+            r"escaped\backslash"
+        );
         assert_eq!(unescape_cookies("plain text"), "plain text");
         assert_eq!(unescape_cookies(r"trailing\"), r"trailing\");
     }

@@ -1059,7 +1059,9 @@ mod tests {
     fn test_method_and_field_metadata() {
         let vm = Vm::new();
         let class = vm.find_or_define_class("com/test/Sample").unwrap();
-        let method = vm.register_method(class, "testMethod", "()V", false).unwrap();
+        let method = vm
+            .register_method(class, "testMethod", "()V", false)
+            .unwrap();
         let field = vm.register_field(class, "count", "I", false).unwrap();
 
         let info = vm.method_info(method).unwrap();
@@ -1081,8 +1083,12 @@ mod tests {
         let class = vm.find_or_define_class("java/lang/String").unwrap();
 
         vm.push_local_frame(&env, 16).unwrap();
-        let obj1 = vm.new_local_object(&env, class, ObjectValue::Opaque).unwrap();
-        let obj2 = vm.new_local_object(&env, class, ObjectValue::Opaque).unwrap();
+        let obj1 = vm
+            .new_local_object(&env, class, ObjectValue::Opaque)
+            .unwrap();
+        let obj2 = vm
+            .new_local_object(&env, class, ObjectValue::Opaque)
+            .unwrap();
 
         assert!(vm.object_value(&env, obj1).is_ok());
         assert!(vm.object_value(&env, obj2).is_ok());
@@ -1105,10 +1111,14 @@ mod tests {
         let (obj, class_id) = std::thread::spawn(move || {
             let env = vm_clone.attach_current_thread();
             let class = vm_clone.find_or_define_class("java/lang/Object").unwrap();
-            let obj = vm_clone.new_local_object(&env, class, ObjectValue::Opaque).unwrap();
+            let obj = vm_clone
+                .new_local_object(&env, class, ObjectValue::Opaque)
+                .unwrap();
             vm_clone.detach_current_thread().unwrap();
             (obj, class)
-        }).join().unwrap();
+        })
+        .join()
+        .unwrap();
 
         // The detached thread's local object should be removed from objects map
         let main_env = vm.attach_current_thread();
@@ -1124,11 +1134,14 @@ mod tests {
         let field = vm.register_field(class, "tag", "I", false).unwrap();
 
         // Create a local object
-        let local_obj = vm.new_local_object(&env, class, ObjectValue::Opaque).unwrap();
+        let local_obj = vm
+            .new_local_object(&env, class, ObjectValue::Opaque)
+            .unwrap();
 
         // Create a global object and set field value on it
         let global_obj = vm.new_global_ref(&env, local_obj).unwrap();
-        vm.set_field_value(field, Some(global_obj), JniValue::Int(42)).unwrap();
+        vm.set_field_value(field, Some(global_obj), JniValue::Int(42))
+            .unwrap();
 
         // Delete local reference
         vm.delete_local_ref(&env, local_obj).unwrap();
@@ -1138,7 +1151,10 @@ mod tests {
         assert_eq!(stats.live_objects, 1);
         assert_eq!(collected.len(), 0);
         assert!(vm.field_value_is_set(field, Some(global_obj)));
-        assert_eq!(vm.field_value(field, Some(global_obj)), Ok(JniValue::Int(42)));
+        assert_eq!(
+            vm.field_value(field, Some(global_obj)),
+            Ok(JniValue::Int(42))
+        );
 
         // Now delete global ref
         vm.delete_global_ref(global_obj).unwrap();

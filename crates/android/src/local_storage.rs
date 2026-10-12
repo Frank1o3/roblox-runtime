@@ -80,7 +80,8 @@ fn save(path: &Path, values: &Values) -> Result<(), String> {
     file.sync_all()
         .map_err(|error| format!("cannot flush private values: {error}"))?;
     drop(file);
-    fs::rename(&temporary, path).map_err(|error| format!("cannot publish private values: {error}"))?;
+    fs::rename(&temporary, path)
+        .map_err(|error| format!("cannot publish private values: {error}"))?;
     *CACHED_VALUES
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(values.clone());

@@ -13,6 +13,24 @@
 #include <string>
 #include <unordered_map>
 
+static bool log_category_enabled(const char* category) {
+    const char* configured = std::getenv("RUSTY_BLOX_LOG_CATEGORIES");
+    if (configured == nullptr) {
+        return std::string(category) == "base" || std::string(category) == "runtime";
+    }
+    const std::string categories(configured);
+    const std::string needle = std::string(category);
+    size_t start = 0;
+    while (start <= categories.size()) {
+        const size_t end = categories.find(',', start);
+        const std::string item = categories.substr(start, end - start);
+        if (item == needle) return true;
+        if (end == std::string::npos) break;
+        start = end + 1;
+    }
+    return false;
+}
+
 extern "C" {
 
 void roblox_linker_init() {
@@ -85,7 +103,9 @@ void roblox_linker_defer_next_ctors(int defer) {
         mcpelauncher_defer_next_ctors(defer);
         return;
     }
-    fprintf(stderr, "[linker] constructor deferral unavailable: patches/0003 is not applied\n");
+    if (log_category_enabled("linker")) {
+        fprintf(stderr, "[linker] constructor deferral unavailable: patches/0003 is not applied\n");
+    }
 }
 
 void roblox_linker_run_deferred_ctors(void* handle) {
@@ -109,7 +129,9 @@ void roblox_linker_set_realpath(void* handle, const char* path) {
         mcpelauncher_set_realpath(handle, path);
         return;
     }
-    fprintf(stderr, "[linker] realpath override unavailable: patches/0004 is not applied\n");
+    if (log_category_enabled("linker")) {
+        fprintf(stderr, "[linker] realpath override unavailable: patches/0004 is not applied\n");
+    }
 }
 
 void* roblox_linker_dlsym(void* handle, const char* symbol) {

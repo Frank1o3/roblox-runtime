@@ -1,34 +1,41 @@
 //! Small process-wide logging policy shared by the launcher and runtime.
 
-/// Emit an existing log message when its category is enabled by the selected
-/// level. Messages with a recognized prefix are assigned to their tier;
-/// unclassified diagnostics are shown at level 4.
+/// Emit a message when its category is enabled in RUSTY_BLOX_LOG_CATEGORIES.
 pub fn emit(message: String) {
-    let required = if message.starts_with("[input]") {
-        4
-    } else if message.starts_with("[jnivm") {
-        3
-    } else if message.starts_with("[runtime") || message.starts_with("[android]") {
-        2
-    } else if message.starts_with("[roblox]") || message.starts_with("[session]") {
-        1
-    } else {
-        4
-    };
-
-    if current_level() >= required || looks_like_error(&message) {
+    let has_category = message.starts_with('[') && message.contains(']');
+    if category_enabled(&message) || (!has_category && looks_like_error(&message)) {
         std::eprintln!("{message}");
     }
 }
 
-/// Read dynamically so the settings-selected value is visible to runtime
-/// threads and libraries initialized after the launcher starts.
-fn current_level() -> u8 {
-    std::env::var("RUSTY_BLOX_LOG_LEVEL")
-        .ok()
-        .and_then(|value| value.parse::<u8>().ok())
-        .filter(|level| (1..=4).contains(level))
-        .unwrap_or(1)
+fn category_enabled(message: &str) -> bool {
+    let category = message
+        .strip_prefix('[')
+        .and_then(|value| value.split(']').next())
+        .unwrap_or("base");
+    let category = if category == "input" {
+        "input"
+    } else if category.starts_with("jnivm") || category == "jni" {
+        "jnivm"
+    } else if category.starts_with("linker") {
+        "linker"
+    } else if category.starts_with("stub") {
+        "stubs"
+    } else if category.starts_with("runtime-webview") || category == "webview" {
+        "webview"
+    } else if category == "session" {
+        "session"
+    } else if category == "roblox" {
+        "base"
+    } else if category.starts_with("runtime") || category == "android" {
+        "runtime"
+    } else {
+        "base"
+    };
+    std::env::var("RUSTY_BLOX_LOG_CATEGORIES")
+        .unwrap_or_else(|_| "base,runtime".to_owned())
+        .split(',')
+        .any(|enabled| enabled.trim() == category)
 }
 
 fn looks_like_error(message: &str) -> bool {

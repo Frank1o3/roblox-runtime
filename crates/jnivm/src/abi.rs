@@ -796,8 +796,12 @@ unsafe extern "system" fn push_local_frame(
     env: *mut jni::JNIEnv,
     capacity: jni::jint,
 ) -> jni::jint {
-    let Some(vm) = vm() else { return jni::JNI_ERR; };
-    let Some(env) = env_token(vm, env) else { return jni::JNI_ERR; };
+    let Some(vm) = vm() else {
+        return jni::JNI_ERR;
+    };
+    let Some(env) = env_token(vm, env) else {
+        return jni::JNI_ERR;
+    };
     match vm.push_local_frame(&env, capacity) {
         Ok(()) => jni::JNI_OK,
         Err(_) => jni::JNI_ERR,
@@ -808,8 +812,12 @@ unsafe extern "system" fn pop_local_frame(
     env: *mut jni::JNIEnv,
     result: jni::jobject,
 ) -> jni::jobject {
-    let Some(vm) = vm() else { return result; };
-    let Some(env) = env_token(vm, env) else { return result; };
+    let Some(vm) = vm() else {
+        return result;
+    };
+    let Some(env) = env_token(vm, env) else {
+        return result;
+    };
     let res_id = (!result.is_null()).then_some(crate::ObjectId(result as usize as u64));
     match vm.pop_local_frame(&env, res_id) {
         Ok(Some(id)) => id.0 as usize as jni::jobject,
