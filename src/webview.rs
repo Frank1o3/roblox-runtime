@@ -30,6 +30,8 @@ pub struct WebViewRequest {
 pub enum WebViewEvent {
     Open(WebViewRequest),
     Close,
+    /// The Roblox website asked its custom URL handler to join a game.
+    Join(String),
 }
 
 const WEBVIEW_PROTOCOL: &str = "com/roblox/protocols/webview/WebViewProtocol";
@@ -59,11 +61,11 @@ fn event_slot() -> &'static Mutex<Option<WebViewEvent>> {
 pub fn take_request() -> Option<WebViewRequest> {
     match take_event()? {
         WebViewEvent::Open(request) => Some(request),
-        WebViewEvent::Close => None,
+        WebViewEvent::Close | WebViewEvent::Join(_) => None,
     }
 }
 
-/// Take the latest pending open or close command from Roblox.
+/// Take the latest pending web view or game launch command from Roblox.
 pub fn take_event() -> Option<WebViewEvent> {
     event_slot()
         .lock()
@@ -77,6 +79,14 @@ pub fn clear_pending_request() {
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
         .take();
+}
+
+/// Queue a launch URL intercepted from Roblox's WebView. The application
+/// validates it again before passing it to the engine.
+pub fn request_join(url: String) {
+    *event_slot()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(WebViewEvent::Join(url));
 }
 
 /// Subscribe to Roblox's current `WebViewProtocol` transport.

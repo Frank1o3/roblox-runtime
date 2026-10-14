@@ -20,6 +20,7 @@ pub use roblox_abi as abi;
 pub use roblox_android as android;
 pub use roblox_jni as jni;
 pub use roblox_linker::elf::{Binding as ImportBinding, Imports as EngineImports};
+pub mod deeplink;
 pub mod graphics;
 pub mod session;
 mod storage_cleanup;
