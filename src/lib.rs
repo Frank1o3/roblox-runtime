@@ -22,6 +22,7 @@ pub use roblox_jni as jni;
 pub use roblox_linker::elf::{Binding as ImportBinding, Imports as EngineImports};
 pub mod deeplink;
 pub mod graphics;
+pub mod permissions;
 pub mod session;
 mod storage_cleanup;
 mod symbols;
