@@ -53,10 +53,7 @@ extern "C" fn reader_acquire_next_image(_reader: *mut c_void, image: *mut *mut c
 
 extern "C" fn image_delete(_image: *mut c_void) {}
 
-extern "C" fn image_get_hardware_buffer(
-    _image: *const c_void,
-    buffer: *mut *mut c_void,
-) -> i32 {
+extern "C" fn image_get_hardware_buffer(_image: *const c_void, buffer: *mut *mut c_void) -> i32 {
     if !buffer.is_null() {
         // SAFETY: the NDK contract supplies a writable buffer out-pointer.
         unsafe { *buffer = std::ptr::null_mut() };

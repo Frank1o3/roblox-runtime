@@ -1,6 +1,6 @@
 /// Re-drive `onSurfaceChangedNative` after the host window is resized.
 pub fn surface_resized(handle: i64, format: i32, width: i32, height: i32) -> Result<(), String> {
-    let mut err = vec![0u8; 512];
+    let mut err = [0u8; 512];
     // SAFETY: `err` outlives the call.
     let rc = unsafe {
         roblox_game_activity_surface_resized(
@@ -12,7 +12,7 @@ pub fn surface_resized(handle: i64, format: i32, width: i32, height: i32) -> Res
             err.len(),
         )
     };
-    if rc == 0 { Ok(()) } else { Err(take_err(err)) }
+    if rc == 0 { Ok(()) } else { Err(take_err_buf(&err)) }
 }
 
 /// `NativeGLInterface.updateKeyboardSize` — tells the engine an editor is
@@ -35,7 +35,7 @@ pub unsafe fn update_keyboard_size(
     w: i32,
     h: i32,
 ) -> Result<(), String> {
-    let mut err = vec![0u8; 512];
+    let mut err = [0u8; 512];
     // SAFETY: `err` outlives the call.
     let rc = unsafe {
         roblox_input_update_keyboard_size(
@@ -49,7 +49,7 @@ pub unsafe fn update_keyboard_size(
             err.len(),
         )
     };
-    if rc == 0 { Ok(()) } else { Err(take_err(err)) }
+    if rc == 0 { Ok(()) } else { Err(take_err_buf(&err)) }
 }
 
 /// `NativeGLInterface.syncTextboxTextAndCursorPosition2` — the per-keystroke
@@ -66,7 +66,7 @@ pub unsafe fn update_keyboard_size(
 /// is that resolved export and not a stale, null-masked, or wrong pointer.
 pub unsafe fn sync_textbox(native: *mut c_void, text: &str, cursor: i32) -> Result<(), String> {
     let t = CString::new(text).map_err(|e| e.to_string())?;
-    let mut err = vec![0u8; 512];
+    let mut err = [0u8; 512];
     // SAFETY: `t` and `err` outlive the call.
     let rc = unsafe {
         roblox_input_sync_textbox(
@@ -77,7 +77,7 @@ pub unsafe fn sync_textbox(native: *mut c_void, text: &str, cursor: i32) -> Resu
             err.len(),
         )
     };
-    if rc == 0 { Ok(()) } else { Err(take_err(err)) }
+    if rc == 0 { Ok(()) } else { Err(take_err_buf(&err)) }
 }
 
 /// `NativeGLInterface.nativePassText` — text entered into a focused box.
@@ -102,7 +102,7 @@ pub unsafe fn pass_text(
     cursor: i32,
 ) -> Result<(), String> {
     let t = CString::new(text).map_err(|e| e.to_string())?;
-    let mut err = vec![0u8; 512];
+    let mut err = [0u8; 512];
     // SAFETY: `t` and `err` outlive the call.
     let rc = unsafe {
         roblox_input_pass_text(
@@ -115,7 +115,7 @@ pub unsafe fn pass_text(
             err.len(),
         )
     };
-    if rc == 0 { Ok(()) } else { Err(take_err(err)) }
+    if rc == 0 { Ok(()) } else { Err(take_err_buf(&err)) }
 }
 
 /// `NativeInputInterface.nativePassMouseMove` — the path Roblox's interface
@@ -137,7 +137,7 @@ pub unsafe fn pass_mouse_move(
     dx: f32,
     dy: f32,
 ) -> Result<(), String> {
-    let mut err = vec![0u8; 512];
+    let mut err = [0u8; 512];
     // SAFETY: `native` is the exported JNI native; `err` outlives the call.
     let rc = unsafe {
         roblox_input_mouse_move(
@@ -150,7 +150,7 @@ pub unsafe fn pass_mouse_move(
             err.len(),
         )
     };
-    if rc == 0 { Ok(()) } else { Err(take_err(err)) }
+    if rc == 0 { Ok(()) } else { Err(take_err_buf(&err)) }
 }
 
 /// `NativeInputInterface.nativePassMouseButton`.
@@ -171,7 +171,7 @@ pub unsafe fn pass_mouse_button(
     down: bool,
     button: i32,
 ) -> Result<(), String> {
-    let mut err = vec![0u8; 512];
+    let mut err = [0u8; 512];
     // SAFETY: as above.
     let rc = unsafe {
         roblox_input_mouse_button(
@@ -184,7 +184,7 @@ pub unsafe fn pass_mouse_button(
             err.len(),
         )
     };
-    if rc == 0 { Ok(()) } else { Err(take_err(err)) }
+    if rc == 0 { Ok(()) } else { Err(take_err_buf(&err)) }
 }
 
 /// `NativeInputInterface.nativePassMouseWheel(F,F,F)` — the wheel's
@@ -206,7 +206,7 @@ pub unsafe fn pass_mouse_wheel(
     y: f32,
     delta: f32,
 ) -> Result<(), String> {
-    let mut err = vec![0u8; 512];
+    let mut err = [0u8; 512];
     // SAFETY: as above.
     let rc = unsafe {
         roblox_input_mouse_wheel(
@@ -218,7 +218,7 @@ pub unsafe fn pass_mouse_wheel(
             err.len(),
         )
     };
-    if rc == 0 { Ok(()) } else { Err(take_err(err)) }
+    if rc == 0 { Ok(()) } else { Err(take_err_buf(&err)) }
 }
 
 /// Tell `PlatformParams`/`Configuration` whether this host has a
@@ -261,7 +261,7 @@ pub unsafe fn pass_input(
     width: i32,
     height: i32,
 ) -> Result<(), String> {
-    let mut err = vec![0u8; 512];
+    let mut err = [0u8; 512];
     // SAFETY: as above.
     let rc = unsafe {
         roblox_input_pass_input(
@@ -276,7 +276,7 @@ pub unsafe fn pass_input(
             err.len(),
         )
     };
-    if rc == 0 { Ok(()) } else { Err(take_err(err)) }
+    if rc == 0 { Ok(()) } else { Err(take_err_buf(&err)) }
 }
 
 // `NativeInputInterface`'s six gamepad natives. Descriptors read from the
@@ -306,7 +306,7 @@ pub unsafe fn gamepad_connect(
     id: i32,
     gamepad_type: i32,
 ) -> Result<(), String> {
-    let mut err = vec![0u8; 512];
+    let mut err = [0u8; 512];
     // SAFETY: `native` is the exported JNI native; `err` outlives the call.
     let rc = unsafe {
         roblox_input_gamepad_connect(
@@ -317,7 +317,7 @@ pub unsafe fn gamepad_connect(
             err.len(),
         )
     };
-    if rc == 0 { Ok(()) } else { Err(take_err(err)) }
+    if rc == 0 { Ok(()) } else { Err(take_err_buf(&err)) }
 }
 
 /// `nativeGamepadDisconnectEvent(I id)` — no type, because the engine kept
@@ -333,12 +333,12 @@ pub unsafe fn gamepad_connect(
 /// here -- so the one thing this call cannot check is that `native` really
 /// is that resolved export and not a stale, null-masked, or wrong pointer.
 pub unsafe fn gamepad_disconnect(native: *mut c_void, id: i32) -> Result<(), String> {
-    let mut err = vec![0u8; 512];
+    let mut err = [0u8; 512];
     // SAFETY: as above.
     let rc = unsafe {
         roblox_input_gamepad_disconnect(native, id, err.as_mut_ptr() as *mut c_char, err.len())
     };
-    if rc == 0 { Ok(()) } else { Err(take_err(err)) }
+    if rc == 0 { Ok(()) } else { Err(take_err_buf(&err)) }
 }
 
 /// `nativeGamepadButtonEvent(I id, I keyCode, I action)`.
@@ -362,7 +362,7 @@ pub unsafe fn gamepad_button(
     key_code: i32,
     action: i32,
 ) -> Result<(), String> {
-    let mut err = vec![0u8; 512];
+    let mut err = [0u8; 512];
     // SAFETY: as above.
     let rc = unsafe {
         roblox_input_gamepad_button(
@@ -374,7 +374,7 @@ pub unsafe fn gamepad_button(
             err.len(),
         )
     };
-    if rc == 0 { Ok(()) } else { Err(take_err(err)) }
+    if rc == 0 { Ok(()) } else { Err(take_err_buf(&err)) }
 }
 
 /// `nativeGamepadAxisEvent(I id, I axis, F x, F y, F z)`.
@@ -400,7 +400,7 @@ pub unsafe fn gamepad_axis(
     y: f32,
     z: f32,
 ) -> Result<(), String> {
-    let mut err = vec![0u8; 512];
+    let mut err = [0u8; 512];
     // SAFETY: as above.
     let rc = unsafe {
         roblox_input_gamepad_axis(
@@ -414,7 +414,7 @@ pub unsafe fn gamepad_axis(
             err.len(),
         )
     };
-    if rc == 0 { Ok(()) } else { Err(take_err(err)) }
+    if rc == 0 { Ok(()) } else { Err(take_err_buf(&err)) }
 }
 
 /// `nativeSetGamepadSupportedKeyWithGamepadType(I id, I keyCode, Z supported, I gamepadType)`
@@ -436,7 +436,7 @@ pub unsafe fn gamepad_supported_key(
     supported: bool,
     gamepad_type: i32,
 ) -> Result<(), String> {
-    let mut err = vec![0u8; 512];
+    let mut err = [0u8; 512];
     // SAFETY: as above.
     let rc = unsafe {
         roblox_input_gamepad_supported_key(
@@ -449,7 +449,7 @@ pub unsafe fn gamepad_supported_key(
             err.len(),
         )
     };
-    if rc == 0 { Ok(()) } else { Err(take_err(err)) }
+    if rc == 0 { Ok(()) } else { Err(take_err_buf(&err)) }
 }
 
 /// `nativeSetGamepadSupportedMotionWithGamepadType(I id, I axis, I source, Z supported, I gamepadType)`.
@@ -475,7 +475,7 @@ pub unsafe fn gamepad_supported_motion(
     supported: bool,
     gamepad_type: i32,
 ) -> Result<(), String> {
-    let mut err = vec![0u8; 512];
+    let mut err = [0u8; 512];
     // SAFETY: as above.
     let rc = unsafe {
         roblox_input_gamepad_supported_motion(
@@ -489,11 +489,11 @@ pub unsafe fn gamepad_supported_motion(
             err.len(),
         )
     };
-    if rc == 0 { Ok(()) } else { Err(take_err(err)) }
+    if rc == 0 { Ok(()) } else { Err(take_err_buf(&err)) }
 }
 
 pub fn window_focus(handle: i64, focused: bool) -> Result<Option<()>, String> {
-    let mut err = vec![0u8; 512];
+    let mut err = [0u8; 512];
     // SAFETY: `handle` came from `initialize`; `err` is a live buffer.
     let rc = unsafe {
         roblox_game_activity_window_focus(
@@ -506,14 +506,14 @@ pub fn window_focus(handle: i64, focused: bool) -> Result<Option<()>, String> {
     match rc {
         0 => Ok(Some(())),
         -2 => Ok(None),
-        _ => Err(take_err(err)),
+        _ => Err(take_err_buf(&err)),
     }
 }
 
 /// `onSurfaceRedrawNeededNative` — the "repaint now" nudge, driven from
 /// X11 `Expose`.
 pub fn surface_redraw_needed(handle: i64) -> Result<Option<()>, String> {
-    let mut err = vec![0u8; 512];
+    let mut err = [0u8; 512];
     // SAFETY: as above.
     let rc = unsafe {
         roblox_game_activity_surface_redraw_needed(
@@ -525,7 +525,7 @@ pub fn surface_redraw_needed(handle: i64) -> Result<Option<()>, String> {
     match rc {
         0 => Ok(Some(())),
         -2 => Ok(None),
-        _ => Err(take_err(err)),
+        _ => Err(take_err_buf(&err)),
     }
 }
 
@@ -537,7 +537,7 @@ pub fn surface_redraw_needed(handle: i64) -> Result<Option<()>, String> {
 /// whichever one it saw first, so nothing after the first call would ever
 /// be reached anyway.
 pub fn set_input_connection(handle: i64) -> Result<Option<()>, String> {
-    let mut err = vec![0u8; 512];
+    let mut err = [0u8; 512];
     // SAFETY: `err` outlives the call.
     let rc = unsafe {
         roblox_game_activity_set_input_connection(
@@ -549,7 +549,7 @@ pub fn set_input_connection(handle: i64) -> Result<Option<()>, String> {
     match rc {
         0 => Ok(Some(())),
         -2 => Ok(None),
-        _ => Err(take_err(err)),
+        _ => Err(take_err_buf(&err)),
     }
 }
 

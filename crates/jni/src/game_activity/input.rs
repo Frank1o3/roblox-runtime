@@ -17,7 +17,7 @@ pub fn touch(
     event_time_ms: i64,
     down_time_ms: i64,
 ) -> Result<Option<bool>, String> {
-    let mut err = vec![0u8; 512];
+    let mut err = [0u8; 512];
     let mut consumed: c_int = 0;
     // SAFETY: `handle` came from `initialize`; `err`/`consumed` are live.
     let rc = unsafe {
@@ -38,7 +38,7 @@ pub fn touch(
     match rc {
         0 => Ok(Some(consumed != 0)),
         -2 => Ok(None),
-        _ => Err(take_err(err)),
+        _ => Err(take_err_buf(&err)),
     }
 }
 
@@ -76,7 +76,7 @@ pub fn touch_multi(
     if contacts.is_empty() {
         return Err("a touch event with no contacts".into());
     }
-    let mut err = vec![0u8; 512];
+    let mut err = [0u8; 512];
     let mut consumed: c_int = 0;
     // SAFETY: `handle` came from `initialize`; `contacts` is a live slice
     // borrowed for the duration of the call and the C side neither keeps
@@ -97,7 +97,7 @@ pub fn touch_multi(
     match rc {
         0 => Ok(Some(consumed != 0)),
         -2 => Ok(None),
-        _ => Err(take_err(err)),
+        _ => Err(take_err_buf(&err)),
     }
 }
 
@@ -114,7 +114,7 @@ pub fn scroll(
     vscroll: f32,
     event_time_ms: i64,
 ) -> Result<Option<bool>, String> {
-    let mut err = vec![0u8; 512];
+    let mut err = [0u8; 512];
     let mut consumed: c_int = 0;
     // SAFETY: `handle` came from `initialize`; `err`/`consumed` are live.
     let rc = unsafe {
@@ -133,7 +133,7 @@ pub fn scroll(
     match rc {
         0 => Ok(Some(consumed != 0)),
         -2 => Ok(None),
-        _ => Err(take_err(err)),
+        _ => Err(take_err_buf(&err)),
     }
 }
 
@@ -152,7 +152,7 @@ pub fn key(
     event_time_ms: i64,
     down_time_ms: i64,
 ) -> Result<Option<bool>, String> {
-    let mut err = vec![0u8; 512];
+    let mut err = [0u8; 512];
     let mut consumed: c_int = 0;
     // SAFETY: as above.
     let rc = unsafe {
@@ -174,7 +174,7 @@ pub fn key(
     match rc {
         0 => Ok(Some(consumed != 0)),
         -2 => Ok(None),
-        _ => Err(take_err(err)),
+        _ => Err(take_err_buf(&err)),
     }
 }
 

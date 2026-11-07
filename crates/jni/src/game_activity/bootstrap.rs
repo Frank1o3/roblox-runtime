@@ -342,6 +342,10 @@ unsafe extern "C" {
 }
 
 fn take_err(err: Vec<u8>) -> String {
+    take_err_buf(&err)
+}
+
+fn take_err_buf(err: &[u8]) -> String {
     let end = err.iter().position(|&b| b == 0).unwrap_or(err.len());
     String::from_utf8_lossy(&err[..end]).into_owned()
 }

@@ -5,7 +5,7 @@
 /// `touch`/`key`'s convention.
 pub fn lifecycle(handle: i64, native_name: &str) -> Result<Option<()>, String> {
     let name = CString::new(native_name).map_err(|e| e.to_string())?;
-    let mut err = vec![0u8; 512];
+    let mut err = [0u8; 512];
     // SAFETY: `handle` came from `initialize`; `name`/`err` outlive the call.
     let rc = unsafe {
         roblox_game_activity_lifecycle(
@@ -18,7 +18,7 @@ pub fn lifecycle(handle: i64, native_name: &str) -> Result<Option<()>, String> {
     match rc {
         0 => Ok(Some(())),
         -2 => Ok(None),
-        _ => Err(take_err(err)),
+        _ => Err(take_err_buf(&err)),
     }
 }
 
@@ -31,7 +31,7 @@ pub fn lifecycle(handle: i64, native_name: &str) -> Result<Option<()>, String> {
 /// alone left the login form's boxes empty.
 pub fn text_input(handle: i64, text: &str, sel_start: i32, sel_end: i32) -> Result<(), String> {
     let t = CString::new(text).map_err(|e| e.to_string())?;
-    let mut err = vec![0u8; 512];
+    let mut err = [0u8; 512];
     // SAFETY: `t` and `err` outlive the call.
     let rc = unsafe {
         roblox_game_activity_text_input(
@@ -43,7 +43,7 @@ pub fn text_input(handle: i64, text: &str, sel_start: i32, sel_end: i32) -> Resu
             err.len(),
         )
     };
-    if rc == 0 { Ok(()) } else { Err(take_err(err)) }
+    if rc == 0 { Ok(()) } else { Err(take_err_buf(&err)) }
 }
 
 /// `NativeGLInterface.nativePassKeyEvent` — Roblox's own keyboard path.
@@ -64,7 +64,7 @@ pub unsafe fn pass_key_event(
     modifiers: i32,
     is_repeat: bool,
 ) -> Result<(), String> {
-    let mut err = vec![0u8; 512];
+    let mut err = [0u8; 512];
     // SAFETY: `err` outlives the call.
     let rc = unsafe {
         roblox_input_key_event(
@@ -77,7 +77,7 @@ pub unsafe fn pass_key_event(
             err.len(),
         )
     };
-    if rc == 0 { Ok(()) } else { Err(take_err(err)) }
+    if rc == 0 { Ok(()) } else { Err(take_err_buf(&err)) }
 }
 
 /// Which text box the engine has focus in, learned from `showKeyboard`.
@@ -258,7 +258,7 @@ pub fn last_place() -> i64 {
 /// is that resolved export and not a stale, null-masked, or wrong pointer.
 pub unsafe fn textbox_info_now(native: *mut c_void) -> Result<Option<RawTextBoxInfo>, String> {
     let mut info = RawTextBoxInfo::default();
-    let mut err = vec![0u8; 512];
+    let mut err = [0u8; 512];
     // SAFETY: `info` is a live, fully initialised mirror of the C++ struct
     // and `err` outlives the call; both are only written into.
     let rc = unsafe {
@@ -272,7 +272,7 @@ pub unsafe fn textbox_info_now(native: *mut c_void) -> Result<Option<RawTextBoxI
     match rc {
         1 => Ok(Some(info)),
         0 => Ok(None),
-        _ => Err(take_err(err)),
+        _ => Err(take_err_buf(&err)),
     }
 }
 
