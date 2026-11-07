@@ -23,7 +23,7 @@
     roblox-jni={path="crates/jni"}
     roblox-linker={path="crates/linker"}
     roblox-logging={path="crates/logging"}
-    serde_json="1.0.151"
+    serde_json="1.0.154"
 
 [lints.rust]
     unsafe_code="deny"

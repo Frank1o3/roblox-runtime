@@ -9,8 +9,8 @@
 [dependencies]
 roblox-logging = { path = "../logging" }
     roblox-linker={path="../linker"}
-    serde_json="1.0.151"
-    zip={version="8.6.0", default-features=false, features=["deflate"]}
+    serde_json="1.0.154"
+    zip={version="9.4.1", default-features=false, features=["deflate"]}
 
 [lints.rust]
     unsafe_code="allow"
