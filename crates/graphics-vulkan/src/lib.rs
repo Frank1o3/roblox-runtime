@@ -33,8 +33,8 @@ pub(crate) fn enabled() -> bool {
 /// Set the preferred present mode for this process (`auto`, `mailbox`,
 /// `immediate`, `fifo`, `fifo-relaxed`, or `off`). Disabling VSync requests
 /// immediate presentation. Unsupported modes are left to the engine's mode.
-pub fn set_present_mode(mode: Option<&str>, vsync: bool) {
-    swapchain::set_present_mode(mode, vsync);
+pub fn set_present_mode(mode: Option<&str>, vsync: bool, fps_limit: Option<u32>) {
+    swapchain::set_present_mode(mode, vsync, fps_limit);
 }
 
 pub fn set_surface(surface: Option<Surface>) {

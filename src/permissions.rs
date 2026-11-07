@@ -61,7 +61,12 @@ fn answer(method: &str, raw: *const c_char, out: *mut c_char, len: usize) -> c_i
             serde_json::json!({ "permissions": supported })
         }
         "ShouldShowPermissionUpsell" | "ShouldShowRequestPermissionRationale" => {
-            serde_json::json!({ "upsellStatus": "HIDE", "hiddenUpsellPermissions": names })
+            let hidden = if permissions.is_some() {
+                names
+            } else {
+                vec![MICROPHONE]
+            };
+            serde_json::json!({ "upsellStatus": "HIDE", "hiddenUpsellPermissions": hidden })
         }
         "HasPermissions" | "PermissionsRequest" => {
             let missing: Vec<&str> = names
@@ -69,7 +74,9 @@ fn answer(method: &str, raw: *const c_char, out: *mut c_char, len: usize) -> c_i
                 .copied()
                 .filter(|name| !SUPPORTED.contains(name))
                 .collect();
-            let allowed = permissions.is_some() && missing.is_empty();
+            let valid_list =
+                permissions.is_some_and(|items| items.iter().all(serde_json::Value::is_string));
+            let allowed = valid_list && missing.is_empty();
             serde_json::json!({
                 "status": if allowed { "AUTHORIZED" } else { "DENIED" },
                 "missingPermissions": missing
@@ -77,7 +84,9 @@ fn answer(method: &str, raw: *const c_char, out: *mut c_char, len: usize) -> c_i
         }
         _ => serde_json::json!({ "status": "DENIED", "missingPermissions": [MICROPHONE] }),
     };
-    let Ok(response) = CString::new(response.to_string()) else { return 0 };
+    let Ok(response) = CString::new(response.to_string()) else {
+        return 0;
+    };
     if response.as_bytes_with_nul().len() > len {
         return 0;
     }
@@ -94,22 +103,31 @@ pub fn arm(mut symbol: impl FnMut(&str) -> Option<*mut c_void>) {
         symbol("Java_com_roblox_universalapp_messagebus_MessageBus_setRequestHandlerAsyncRaw"),
         symbol("Java_com_roblox_universalapp_messagebus_MessageBus_callResponseHandlerRaw"),
     ) else {
-        eprintln!("[runtime-permissions] message bus request natives are unavailable; voice permission requests cannot be answered");
+        eprintln!(
+            "[runtime-permissions] message bus request natives are unavailable; voice permission requests cannot be answered"
+        );
         return;
     };
-    let dual = std::env::var_os("RBX_RUNTIME_PERMISSIONS_DUAL_RESPONSE")
-        .is_none_or(|value| value != "0");
+    let dual =
+        std::env::var_os("RBX_RUNTIME_PERMISSIONS_DUAL_RESPONSE").is_none_or(|value| value != "0");
     let publish = if dual {
-        symbol("Java_com_roblox_universalapp_messagebus_MessageBus_publishProtocolMethodResponseRaw")
+        symbol(
+            "Java_com_roblox_universalapp_messagebus_MessageBus_publishProtocolMethodResponseRaw",
+        )
     } else {
         None
     };
     if dual && publish.is_none() {
-        eprintln!("[runtime-permissions] protocol response native unavailable; permission handlers were not bound");
+        eprintln!(
+            "[runtime-permissions] protocol response native unavailable; permission handlers were not bound"
+        );
         return;
     }
     let protocol = CString::new(PROTOCOL).expect("literal");
-    let handlers: [(&str, extern "C" fn(*const c_char, *mut c_char, usize) -> c_int); 5] = [
+    let handlers: [(
+        &str,
+        extern "C" fn(*const c_char, *mut c_char, usize) -> c_int,
+    ); 5] = [
         ("PermissionsRequest", request),
         ("HasPermissions", has),
         ("SupportsPermissions", supports),

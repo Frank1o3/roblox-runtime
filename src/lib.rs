@@ -133,6 +133,8 @@ pub struct RuntimeOptions {
     pub graphics_backend: graphics::BackendPreference,
     /// Requested Vulkan presentation mode (`fifo`, `fifo-relaxed`, `mailbox`, `immediate`, `auto`).
     pub present_mode: Option<String>,
+    /// Optional Vulkan frame submission rate cap. `None` adds no software cap.
+    pub vulkan_fps_limit: Option<u32>,
     /// Disable synchronized presentation (Vulkan immediate mode or EGL interval 0).
     pub vsync: bool,
     /// EGL swap interval when OpenGL ES is selected: -1 adaptive, 0 off, 1 on.
@@ -149,6 +151,7 @@ impl Default for RuntimeOptions {
             client_settings: None,
             graphics_backend: graphics::BackendPreference::default(),
             present_mode: None,
+            vulkan_fps_limit: None,
             vsync: true,
             opengl_swap_interval: 1,
             host_libc: false,
@@ -252,6 +255,7 @@ impl RuntimeConfig {
             self.options.present_mode.as_deref(),
             self.options.vsync,
             self.options.opengl_swap_interval,
+            self.options.vulkan_fps_limit,
         )
     }
 

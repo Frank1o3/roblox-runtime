@@ -1,10 +1,14 @@
 use ash::vk::{self, Handle};
-use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, AtomicU64, Ordering};
 
 const MODE_UNCAPPED: i32 = -2;
 const MODE_ENGINE: i32 = -3;
 const MODE_AUTO: i32 = -4;
 static PRESENT_MODE: AtomicI32 = AtomicI32::new(MODE_AUTO);
+static PRESENT_FPS_LIMIT: AtomicU32 = AtomicU32::new(0);
+static EFFECTIVE_PRESENT_MODE: AtomicI32 = AtomicI32::new(vk::PresentModeKHR::FIFO.as_raw());
+static NEXT_PRESENT_NS: AtomicU64 = AtomicU64::new(0);
+static PRESENT_CLOCK: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
 static LAST_PRESENT_REPORT: AtomicU64 = AtomicU64::new(u64::MAX);
 static NVIDIA_RETRY_ANNOUNCED: AtomicBool = AtomicBool::new(false);
 
@@ -115,7 +119,12 @@ fn requested_mode_name(raw: i32) -> String {
     }
 }
 
-pub(super) fn set_present_mode(mode: Option<&str>, vsync: bool) {
+pub(super) fn set_present_mode(mode: Option<&str>, vsync: bool, fps_limit: Option<u32>) {
+    PRESENT_FPS_LIMIT.store(
+        fps_limit.map(|limit| limit.clamp(1, 500)).unwrap_or(0),
+        Ordering::Relaxed,
+    );
+    NEXT_PRESENT_NS.store(0, Ordering::Relaxed);
     let selected = if !vsync {
         vk::PresentModeKHR::IMMEDIATE.as_raw()
     } else {
@@ -252,6 +261,7 @@ pub(crate) extern "system" fn create_swapchain(
     } else {
         info.present_mode
     };
+    EFFECTIVE_PRESENT_MODE.store(chosen_mode.as_raw(), Ordering::Relaxed);
 
     let requested_name = requested_mode_name(setting);
     let effective_name = present_mode_name(chosen_mode.as_raw());
@@ -292,6 +302,54 @@ pub(crate) extern "system" fn create_swapchain(
     // pointers remain valid for this synchronous Vulkan call.
     let result = unsafe { function(device, &rewritten, allocator, output) };
     result
+}
+
+/// Pace Vulkan presentation submissions independently of Roblox's FastFlag
+/// target. This runs at the present boundary, so it may pace the engine's
+/// rendering thread when Roblox uses a single render/update loop.
+pub(crate) extern "system" fn queue_present(
+    queue: vk::Queue,
+    present_info: *const vk::PresentInfoKHR<'_>,
+) -> vk::Result {
+    let address = super::dispatch::HOST_QUEUE_PRESENT.load(Ordering::Relaxed);
+    if address == 0 {
+        return vk::Result::ERROR_INITIALIZATION_FAILED;
+    }
+    let function: vk::PFN_vkQueuePresentKHR = unsafe { std::mem::transmute(address) };
+    if !present_info.is_null() {
+        pace_present();
+    }
+    unsafe { function(queue, present_info) }
+}
+
+fn pace_present() {
+    let limit = PRESENT_FPS_LIMIT.load(Ordering::Relaxed);
+    let mode = EFFECTIVE_PRESENT_MODE.load(Ordering::Relaxed);
+    if limit == 0
+        || !matches!(mode, value if value == vk::PresentModeKHR::MAILBOX.as_raw()
+            || value == vk::PresentModeKHR::IMMEDIATE.as_raw())
+    {
+        return;
+    }
+    let interval_ns = 1_000_000_000u64 / u64::from(limit);
+    let clock = PRESENT_CLOCK.get_or_init(std::time::Instant::now);
+    let now_ns = clock.elapsed().as_nanos().min(u64::MAX as u128) as u64;
+    let mut previous = NEXT_PRESENT_NS.load(Ordering::Relaxed);
+    let deadline = loop {
+        let deadline = now_ns.max(previous.saturating_add(interval_ns));
+        match NEXT_PRESENT_NS.compare_exchange_weak(
+            previous,
+            deadline,
+            Ordering::Relaxed,
+            Ordering::Relaxed,
+        ) {
+            Ok(_) => break deadline,
+            Err(actual) => previous = actual,
+        }
+    };
+    if deadline > now_ns {
+        std::thread::sleep(std::time::Duration::from_nanos(deadline - now_ns));
+    }
 }
 
 pub(crate) extern "system" fn get_surface_capabilities(

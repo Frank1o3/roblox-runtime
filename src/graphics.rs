@@ -116,7 +116,7 @@ pub fn prepare(
     present_mode: Option<&str>,
     vsync: bool,
 ) -> Result<Backend, BackendUnavailable> {
-    prepare_with_swap_interval(preference, present_mode, vsync, 1)
+    prepare_with_swap_interval(preference, present_mode, vsync, 1, None)
 }
 
 /// Prepare the selected renderer with an explicit EGL swap interval. Valid
@@ -126,6 +126,7 @@ pub fn prepare_with_swap_interval(
     present_mode: Option<&str>,
     vsync: bool,
     opengl_swap_interval: i32,
+    vulkan_fps_limit: Option<u32>,
 ) -> Result<Backend, BackendUnavailable> {
     if !has_surface() {
         return Err(BackendUnavailable::NoSurface);
@@ -135,7 +136,7 @@ pub fn prepare_with_swap_interval(
     roblox_graphics_vulkan::set_enabled(selected == Backend::Vulkan);
     VSYNC.store(vsync, Ordering::Relaxed);
     OPENGL_SWAP_INTERVAL.store(opengl_swap_interval.clamp(-1, 1), Ordering::Relaxed);
-    roblox_graphics_vulkan::set_present_mode(present_mode, vsync);
+    roblox_graphics_vulkan::set_present_mode(present_mode, vsync, vulkan_fps_limit);
     if selected == Backend::OpenGlEs && !host_egl_available() {
         return Err(BackendUnavailable::OpenGlEs);
     }
