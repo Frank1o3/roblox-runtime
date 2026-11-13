@@ -155,6 +155,13 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
     install_builtin(
         vm,
         native_gl,
+        "promptNativePurchaseWithContext",
+        "(JLjava/lang/String;Lcom/roblox/engine/jni/autovalue/NativePurchaseContext;)V",
+        native_purchase_unavailable,
+    )?;
+    install_builtin(
+        vm,
+        native_gl,
         "gameLoadedCallback",
         "(J)V",
         native_helper_game_loaded,
@@ -555,6 +562,7 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
     install_system_theme(vm)?;
     install_build_manufacturer(vm)?;
     install_quote_interface(vm)?;
+    install_native_purchase_context(vm)?;
 
     // Startup resolves these Java types but the observed path makes no member
     // calls on them. Register their identities; method behavior remains
@@ -598,6 +606,36 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
     )?;
 
     Ok(())
+}
+
+fn install_native_purchase_context(vm: &Vm) -> Result<(), String> {
+    let class = vm
+        .register_class("com/roblox/engine/jni/autovalue/NativePurchaseContext")
+        .map_err(|error| error.to_string())?;
+    install_builtin(
+        vm,
+        class,
+        "create",
+        "(Ljava/lang/String;Ljava/lang/String;Z)Lcom/roblox/engine/jni/autovalue/NativePurchaseContext;",
+        native_purchase_context_create,
+    )
+}
+
+fn native_purchase_context_create(
+    vm: &Vm,
+    _receiver: Option<crate::ObjectId>,
+    _args: &[JniValue],
+) -> JniValue {
+    new_opaque_local(vm, "com/roblox/engine/jni/autovalue/NativePurchaseContext")
+}
+
+fn native_purchase_unavailable(
+    _vm: &Vm,
+    _receiver: Option<crate::ObjectId>,
+    _args: &[JniValue],
+) -> JniValue {
+    eprintln!("[jnivm] native purchase requested, but no purchase provider is configured");
+    JniValue::Void
 }
 
 fn messagebus_connection_init(
