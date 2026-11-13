@@ -74,8 +74,8 @@ fn main() {
     println!("cargo:warning=generated {} stubs", symbols.len());
 
     let native = PathBuf::from(
-        std::env::var_os("DEP_ROBLOX_LINKER_SHIM_ROOT")
-            .expect("roblox-linker must expose its native build directory"),
+        std::env::var_os("DEP_ROBLOX_LINKER_SYS_SHIM_ROOT")
+            .expect("roblox-linker-sys must expose its native build directory"),
     );
     println!("cargo:rustc-link-search=native={}/lib", native.display());
     println!("cargo:rustc-link-lib=static=roblox_liblog");

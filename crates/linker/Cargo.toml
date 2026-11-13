@@ -1,0 +1,10 @@
+[package]
+    description="Rust API for the Android bionic linker used by the Roblox runtime"
+    edition.workspace=true
+    license.workspace=true
+    name="roblox-linker"
+    version.workspace=true
+
+[lints.rust]
+    unsafe_code="deny"
+

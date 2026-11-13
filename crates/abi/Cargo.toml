@@ -8,7 +8,7 @@
 
 [dependencies]
 roblox-logging = { path = "../logging" }
-    roblox-linker={path="../linker"}
+    roblox-linker-sys={path="../linker-sys"}
 
 [lints.rust]
     unsafe_code="allow"

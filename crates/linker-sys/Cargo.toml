@@ -3,7 +3,7 @@
     description="AOSP bionic linker-sys compatibility bindings for Roblox runtime"
     edition.workspace=true
     license.workspace=true
-    links="roblox_linker-sys_shim"
+    links="roblox_linker_sys_shim"
     name="roblox-linker-sys"
     version.workspace=true
 

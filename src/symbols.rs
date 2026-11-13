@@ -4,7 +4,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::c_void;
 
-use roblox_linker::elf::Binding;
+use roblox_linker_sys::elf::Binding;
 
 const ANDROID_PREFIXES: &[(&str, &str)] = &[
     ("AMedia", "libmediandk.so"),
@@ -94,7 +94,8 @@ fn host_address(library: &str, symbol: &str) -> Option<(&'static str, *mut c_voi
     let registered = host_candidates(library)
         .iter()
         .find_map(|(candidate, android_library)| {
-            roblox_linker::host_symbol(candidate, symbol).map(|address| (*android_library, address))
+            roblox_linker_sys::host_symbol(candidate, symbol)
+                .map(|address| (*android_library, address))
         });
     if registered.is_some() {
         return registered;
@@ -257,12 +258,13 @@ fn host_address(library: &str, symbol: &str) -> Option<(&'static str, *mut c_voi
                 | "pthread_rwlock_unlock"
         );
     if library == "libc.so" && (HOST_LIBC_COMPATIBLE.contains(&symbol) || host_pthread_compatible) {
-        return roblox_linker::host_symbol("libc.so.6", symbol).map(|address| ("libc.so", address));
+        return roblox_linker_sys::host_symbol("libc.so.6", symbol)
+            .map(|address| ("libc.so", address));
     }
     None
 }
 
-pub(crate) fn build(imports: &roblox_linker::elf::Imports, host_libc: bool) -> SymbolTables {
+pub(crate) fn build(imports: &roblox_linker_sys::elf::Imports, host_libc: bool) -> SymbolTables {
     let mut result = SymbolTables::default();
     let overrides: BTreeMap<&str, *mut c_void> = roblox_abi::bionic::function_overrides()
         .into_iter()
@@ -280,7 +282,7 @@ pub(crate) fn build(imports: &roblox_linker::elf::Imports, host_libc: bool) -> S
         let library = library_for(name);
         let host = host_address(library, name).or_else(|| {
             (host_libc && library == "libc.so")
-                .then(|| roblox_linker::host_symbol("libc.so.6", name))
+                .then(|| roblox_linker_sys::host_symbol("libc.so.6", name))
                 .flatten()
                 .map(|address| ("libc.so", address))
         });
@@ -310,7 +312,7 @@ pub(crate) fn build(imports: &roblox_linker::elf::Imports, host_libc: bool) -> S
         let library = library_for(name);
         let host = host_address(library, name).or_else(|| {
             (host_libc && library == "libc.so")
-                .then(|| roblox_linker::host_symbol("libc.so.6", name))
+                .then(|| roblox_linker_sys::host_symbol("libc.so.6", name))
                 .flatten()
                 .map(|address| ("libc.so", address))
         });
@@ -341,7 +343,7 @@ fn is_linker_symbol(name: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use roblox_linker::elf::Binding;
+    use roblox_linker_sys::elf::Binding;
 
     #[test]
     fn host_imports_are_selected_and_unknown_strong_imports_are_reported() {
@@ -417,7 +419,7 @@ mod tests {
             .collect();
         let tables = build(&imports, false);
         for name in symbol_names {
-            let host = roblox_linker::host_symbol("libc.so.6", name)
+            let host = roblox_linker_sys::host_symbol("libc.so.6", name)
                 .unwrap_or_else(|| panic!("host libc must export {name}"));
             assert!(
                 tables.libraries["libc.so"]
@@ -429,7 +431,7 @@ mod tests {
 
         #[cfg(target_arch = "x86_64")]
         for name in ["pthread_mutex_lock", "pthread_mutex_unlock"] {
-            let host = roblox_linker::host_symbol("libc.so.6", name).unwrap();
+            let host = roblox_linker_sys::host_symbol("libc.so.6", name).unwrap();
             assert!(
                 tables.libraries["libc.so"]
                     .iter()

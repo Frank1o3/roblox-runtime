@@ -1,13 +1,13 @@
 [package]
     build="build.rs"
-    description="JNI/JVM compatibility API for the Roblox Android runtime"
+    description="JNI/JVM compatibility bindings for the Roblox Android runtime"
     edition.workspace=true
     license.workspace=true
-    name="roblox-jni"
+    name="roblox-jni-sys"
     version.workspace=true
 
 [dependencies]
-    roblox-linker={path="../linker"}
+    roblox-linker-sys={path="../linker-sys"}
 
 [lints.rust]
     unsafe_code="allow"

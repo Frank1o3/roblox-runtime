@@ -76,7 +76,7 @@ pub fn install_surface(surface: HostSurface) {
     };
     roblox_graphics_vulkan::set_surface(Some(vulkan_surface));
     roblox_android::native_window::install(surface);
-    roblox_jni::game_activity::set_display_size(width as i32, height as i32);
+    roblox_jni_sys::game_activity::set_display_size(width as i32, height as i32);
 }
 
 /// Release the process-wide host-surface descriptor after the engine stops.
@@ -90,7 +90,7 @@ pub fn clear_surface() {
 pub fn resize_surface(width: u32, height: u32) -> Result<(), SurfaceError> {
     roblox_android::native_window::resize(width, height)?;
     roblox_graphics_vulkan::resize_surface(width, height);
-    roblox_jni::game_activity::set_display_size(width as i32, height as i32);
+    roblox_jni_sys::game_activity::set_display_size(width as i32, height as i32);
     Ok(())
 }
 
@@ -102,9 +102,9 @@ pub fn has_surface() -> bool {
 /// Whether the host loaders needed by the initial EGL path can be found.
 /// This checks loader symbols only; it does not create a context or present.
 pub fn host_egl_available() -> bool {
-    roblox_linker::host_symbol("libEGL.so.1", "eglGetDisplay").is_some()
-        && roblox_linker::host_symbol("libEGL.so.1", "eglCreateWindowSurface").is_some()
-        && roblox_linker::host_symbol("libGLESv2.so.2", "glGetString").is_some()
+    roblox_linker_sys::host_symbol("libEGL.so.1", "eglGetDisplay").is_some()
+        && roblox_linker_sys::host_symbol("libEGL.so.1", "eglCreateWindowSurface").is_some()
+        && roblox_linker_sys::host_symbol("libGLESv2.so.2", "glGetString").is_some()
 }
 
 /// Check the installed host surface and renderer support before constructors.
@@ -146,7 +146,7 @@ pub fn prepare_with_swap_interval(
 /// Apply the user's VSync setting to the engine's EGL swap interval request.
 #[allow(unsafe_code)]
 extern "C" fn egl_swap_interval(display: *mut c_void, interval: c_int) -> c_int {
-    let Some(address) = roblox_linker::host_symbol("libEGL.so.1", "eglSwapInterval") else {
+    let Some(address) = roblox_linker_sys::host_symbol("libEGL.so.1", "eglSwapInterval") else {
         return 0;
     };
     type Function = extern "C" fn(*mut c_void, c_int) -> c_int;
@@ -176,7 +176,8 @@ extern "C" fn egl_create_window_surface(
     let Some(surface) = roblox_android::native_window::current() else {
         return std::ptr::null_mut();
     };
-    let Some(address) = roblox_linker::host_symbol("libEGL.so.1", "eglCreateWindowSurface") else {
+    let Some(address) = roblox_linker_sys::host_symbol("libEGL.so.1", "eglCreateWindowSurface")
+    else {
         return std::ptr::null_mut();
     };
     type Function =
@@ -197,7 +198,7 @@ extern "C" fn egl_create_window_surface(
 extern "C" fn egl_get_display(native_display: *mut c_void) -> *mut c_void {
     if let Some(display) = roblox_android::native_window::wayland_display() {
         for name in ["eglGetPlatformDisplay", "eglGetPlatformDisplayEXT"] {
-            if let Some(address) = roblox_linker::host_symbol("libEGL.so.1", name) {
+            if let Some(address) = roblox_linker_sys::host_symbol("libEGL.so.1", name) {
                 type Function = extern "C" fn(u32, *mut c_void, *const c_int) -> *mut c_void;
                 // SAFETY: the selected host export has the EGL platform-display
                 // signature, and the platform enum identifies Wayland.
@@ -211,7 +212,7 @@ extern "C" fn egl_get_display(native_display: *mut c_void) -> *mut c_void {
         return std::ptr::null_mut();
     }
 
-    let Some(address) = roblox_linker::host_symbol("libEGL.so.1", "eglGetDisplay") else {
+    let Some(address) = roblox_linker_sys::host_symbol("libEGL.so.1", "eglGetDisplay") else {
         return std::ptr::null_mut();
     };
     type Function = extern "C" fn(*mut c_void) -> *mut c_void;
