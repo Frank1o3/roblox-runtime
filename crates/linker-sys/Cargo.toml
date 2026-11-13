@@ -1,10 +1,10 @@
 [package]
     build="build.rs"
-    description="AOSP bionic linker compatibility bindings for Roblox runtime"
+    description="AOSP bionic linker-sys compatibility bindings for Roblox runtime"
     edition.workspace=true
     license.workspace=true
-    links="roblox_linker_shim"
-    name="roblox-linker"
+    links="roblox_linker-sys_shim"
+    name="roblox-linker-sys"
     version.workspace=true
 
 [lints.rust]
