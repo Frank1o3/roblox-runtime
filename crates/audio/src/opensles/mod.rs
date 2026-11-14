@@ -244,7 +244,7 @@ impl EngineObject {
     }
 
     pub fn get_interface(&self, iid: SlIid) -> Result<(), SLresult> {
-        if iid == SlIid::engine() {
+        if iid == engine() {
             Ok(())
         } else {
             Err(SL_RESULT_FEATURE_UNSUPPORTED)
@@ -338,10 +338,10 @@ impl EngineObject {
         }
 
         for request in interfaces {
-            let known = request.iid == SlIid::play()
-                || request.iid == SlIid::android_simple_buffer_queue()
-                || request.iid == SlIid::volume()
-                || request.iid == SlIid::android_configuration();
+            let known = request.iid == play()
+                || request.iid == android_simple_buffer_queue()
+                || request.iid == volume()
+                || request.iid == android_configuration();
             if request.required && !known {
                 return SL_RESULT_FEATURE_UNSUPPORTED;
             }
@@ -434,9 +434,9 @@ impl EngineObject {
         }
 
         for request in interfaces {
-            let known = request.iid == SlIid::record()
-                || request.iid == SlIid::android_simple_buffer_queue()
-                || request.iid == SlIid::android_configuration();
+            let known = request.iid == record()
+                || request.iid == android_simple_buffer_queue()
+                || request.iid == android_configuration();
             if request.required && !known {
                 return SL_RESULT_FEATURE_UNSUPPORTED;
             }
@@ -474,7 +474,7 @@ impl EngineObject {
         };
         *out = None;
         for request in interfaces {
-            if request.required && request.iid != SlIid::output_mix() {
+            if request.required && request.iid != output_mix() {
                 return SL_RESULT_FEATURE_UNSUPPORTED;
             }
         }
@@ -585,7 +585,7 @@ impl MixObject {
     }
 
     pub fn get_interface(&self, iid: SlIid) -> Result<(), SLresult> {
-        if iid == SlIid::output_mix() {
+        if iid == output_mix() {
             Ok(())
         } else {
             Err(SL_RESULT_FEATURE_UNSUPPORTED)
@@ -642,7 +642,7 @@ impl MixObject {
 /// synchronised unconditionally (every mutable object is behind an atomic or
 /// a mutex), so there is no laxer mode for these to opt out of.
 pub fn sl_create_engine(
-    out: Option<&mut Option<EngineHandle>>,
+    mut out: Option<&mut Option<EngineHandle>>,
     num_options: u32,
     interfaces: &[SlInterfaceRequest],
 ) -> SLresult {
@@ -659,12 +659,12 @@ pub fn sl_create_engine(
         ),
     );
 
-    if let Some(out) = out {
+    if let Some(out) = out.as_deref_mut() {
         *out = None;
     }
 
     for request in interfaces {
-        if request.required && request.iid != SlIid::engine() {
+        if request.required && request.iid != engine() {
             return SL_RESULT_FEATURE_UNSUPPORTED;
         }
     }
@@ -693,10 +693,23 @@ pub fn get_mix(handle: MixHandle) -> Option<Arc<MixObject>> {
     mix_for(handle)
 }
 
-pub fn get_player(handle: PlayerHandle) -> Option<Arc<player::PlayerShared>> {
+pub(crate) fn get_player(handle: PlayerHandle) -> Option<Arc<player::PlayerShared>> {
     player_for(handle)
 }
 
-pub fn get_recorder(handle: RecorderHandle) -> Option<Arc<recorder::RecorderShared>> {
+pub(crate) fn get_recorder(handle: RecorderHandle) -> Option<Arc<recorder::RecorderShared>> {
     recorder_for(handle)
 }
+
+/// Tests construct objects directly so object-lifecycle coverage does not
+/// depend on the test host having an audio device (only `slCreateEngine`'s
+/// availability gate does, and its test tolerates either answer).
+#[cfg(test)]
+pub(crate) fn test_engine() -> EngineHandle {
+    insert(engines(), Arc::new(EngineObject {
+        state: AtomicU32::new(SL_OBJECT_STATE_UNREALIZED),
+    }))
+}
+
+#[cfg(test)]
+mod tests;

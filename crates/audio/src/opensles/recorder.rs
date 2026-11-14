@@ -167,11 +167,11 @@ impl RecorderShared {
     }
 
     pub fn get_interface(&self, iid: super::SlIid) -> Result<RecorderIid, SLresult> {
-        if iid == super::SlIid::record() {
+        if iid == super::record() {
             Ok(RecorderIid::Record)
-        } else if iid == super::SlIid::android_simple_buffer_queue() {
+        } else if iid == super::android_simple_buffer_queue() {
             Ok(RecorderIid::AndroidSimpleBufferQueue)
-        } else if iid == super::SlIid::android_configuration() {
+        } else if iid == super::android_configuration() {
             Ok(RecorderIid::AndroidConfiguration)
         } else {
             Err(SL_RESULT_FEATURE_UNSUPPORTED)
@@ -206,7 +206,7 @@ impl RecorderShared {
 
     // --------------------------------------------------------------- record
 
-    pub fn set_record_state(&self, state: SLuint32) -> SLresult {
+    pub fn set_record_state(self: &Arc<Self>, state: SLuint32) -> SLresult {
         match state {
             SL_RECORDSTATE_RECORDING => {
                 if !self.start_capture() {
@@ -337,7 +337,7 @@ impl RecorderShared {
             return SL_RESULT_PARAMETER_INVALID;
         }
         let mut inner = lock(&self.inner);
-        if inner.pending.len() >= self.num_buffers {
+        if inner.pending.len() >= self.num_buffers as usize {
             return SL_RESULT_BUFFER_INSUFFICIENT;
         }
         inner.pending.push_back(RecordBuffer { data, size, filled: 0 });
@@ -464,7 +464,10 @@ fn run_pump(shared: Arc<RecorderShared>) {
 
     while shared.pumping.load(Ordering::Acquire) {
         let mut completed = false;
-        let (callback, context, token) = {
+        let mut got = 0usize;
+        let mut callback: Option<SlBufferQueueCallback> = None;
+        let mut context: *mut c_void = std::ptr::null_mut();
+        {
             let mut inner = lock(&shared.inner);
             let mut capture = lock(&shared.capture);
             if let Some(front) = inner.pending.front_mut() {
@@ -477,19 +480,22 @@ fn run_pump(shared: Arc<RecorderShared>) {
                         (front.size - front.filled) as usize,
                     )
                 };
-                let got = capture.as_mut().map_or(0, |c| c.read(dst));
+                got = capture.as_mut().map_or(0, |c| c.read(dst));
                 front.filled += got as u32;
-                if shared.bytes_per_frame != 0 {
-                    inner.frames_recorded += u64::from(got / shared.bytes_per_frame);
-                }
                 if front.filled >= front.size {
-                    inner.pending.pop_front();
                     completed = true;
                 }
             }
-            let token = Arc::as_ptr(&shared) as usize;
-            (inner.callback, inner.context, token)
-        };
+            if completed {
+                inner.pending.pop_front();
+            }
+            if shared.bytes_per_frame != 0 {
+                inner.frames_recorded += (got as u32 / shared.bytes_per_frame) as u64;
+            }
+            callback = inner.callback;
+            context = inner.context;
+        }
+        let token = Arc::as_ptr(&shared) as usize;
         // Outside the lock, for the same reason the playback side does it:
         // the ordinary buffer-queue pattern is to re-enqueue from inside
         // this callback, which would deadlock against its own mutex.

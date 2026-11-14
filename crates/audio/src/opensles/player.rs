@@ -59,6 +59,50 @@ unsafe impl Send for DrainCallback {}
 // this type; the engine owns what it points at.
 unsafe impl Sync for DrainCallback {}
 
+/// Newtype so the caller-owned buffer pointers can cross threads under the
+/// lock: `PendingBuffer` holds raw pointers whose validity is the buffer-
+/// queue contract (valid and unmodified until the drain callback fires).
+#[derive(Default)]
+struct PendingQueue(VecDeque<PendingBuffer>);
+
+// SAFETY: the pointers are engine-owned enqueue buffers; they are read in
+// place under the queue mutex and never dereferenced on this file's own
+// authority, which is exactly the contract the engine signed up to.
+unsafe impl Send for PendingQueue {}
+// SAFETY: same reasoning — all access is mutex-protected.
+unsafe impl Sync for PendingQueue {}
+
+/// The drain contexts reported by one fill.
+#[derive(Default)]
+struct DrainedBuffers(Vec<*mut c_void>);
+
+// SAFETY: engine-owned context pointers, collected under the queue mutex and
+// handed back verbatim to the engine's own callback.
+unsafe impl Send for DrainedBuffers {}
+// SAFETY: same reasoning.
+unsafe impl Sync for DrainedBuffers {}
+
+/// State the fill closure owns exclusively once the audio thread runs it.
+/// Everything shared with the engine-facing surface lives behind an `Arc`
+/// inside it.
+struct PlayerFillState {
+    queue: Arc<Mutex<PendingQueue>>,
+    callback: Arc<Mutex<DrainCallback>>,
+    volume_linear: Arc<AtomicU32>,
+    muted: Arc<AtomicBool>,
+    /// Preallocated: drains reported in one call can never exceed the queue
+    /// depth, so this never grows after the first fill.
+    drained: DrainedBuffers,
+    /// Caller-format bytes staged between `fill_pcm` and conversion.
+    /// Preallocated on the first call; every later resize stays within
+    /// capacity, so the steady-state fill allocates nothing.
+    scratch: Vec<u8>,
+    container_bytes: usize,
+    bits_per_sample: u32,
+    big_endian: bool,
+    token: usize,
+}
+
 pub(crate) struct PlayerShared {
     state: AtomicU32,
     play_state: AtomicU32,
@@ -70,7 +114,7 @@ pub(crate) struct PlayerShared {
     big_endian: bool,
     num_buffers: u32,
     /// The pending queue, shared with the fill closure the audio thread runs.
-    queue: Arc<Mutex<VecDeque<PendingBuffer>>>,
+    queue: Arc<Mutex<PendingQueue>>,
     enqueued_index: AtomicU32,
     callback: Arc<Mutex<DrainCallback>>,
     volume_linear: Arc<AtomicU32>,
@@ -111,7 +155,7 @@ impl PlayerShared {
             container_bits,
             big_endian,
             num_buffers,
-            queue: Arc::new(Mutex::new(VecDeque::new())),
+            queue: Arc::new(Mutex::new(PendingQueue::default())),
             enqueued_index: AtomicU32::new(0),
             callback: Arc::new(Mutex::new(DrainCallback {
                 callback: None,
@@ -173,12 +217,12 @@ impl PlayerShared {
         }
 
         let mut output = output_factory().make_output();
-        let fill: FillCallback = Box::new(PlayerFill {
+        let mut fill_state = PlayerFillState {
             queue: Arc::clone(&self.queue),
             callback: Arc::clone(&self.callback),
             volume_linear: Arc::clone(&self.volume_linear),
             muted: Arc::clone(&self.muted),
-            drained: Vec::with_capacity(self.num_buffers.max(1) as usize),
+            drained: DrainedBuffers(Vec::with_capacity(self.num_buffers.max(1) as usize)),
             scratch: Vec::new(),
             container_bytes: (self.container_bits / 8) as usize,
             bits_per_sample: self.bits_per_sample,
@@ -187,6 +231,9 @@ impl PlayerShared {
             // registry key, which the FFI wrapper hands out as the
             // buffer-queue interface pointer.
             token: Arc::as_ptr(self) as usize,
+        };
+        let fill: FillCallback = Box::new(move |dst: &mut [f32], frames: u32| {
+            fill_state.render(dst, frames)
         });
         if !output.open(
             self.bits_per_sample,
@@ -213,13 +260,13 @@ impl PlayerShared {
     }
 
     pub fn get_interface(&self, iid: super::SlIid) -> Result<PlayerIid, SLresult> {
-        if iid == super::SlIid::play() {
+        if iid == super::play() {
             Ok(PlayerIid::Play)
-        } else if iid == super::SlIid::android_simple_buffer_queue() {
+        } else if iid == super::android_simple_buffer_queue() {
             Ok(PlayerIid::AndroidSimpleBufferQueue)
-        } else if iid == super::SlIid::volume() {
+        } else if iid == super::volume() {
             Ok(PlayerIid::Volume)
-        } else if iid == super::SlIid::android_configuration() {
+        } else if iid == super::android_configuration() {
             Ok(PlayerIid::AndroidConfiguration)
         } else {
             // Includes SL_IID_BUFFERQUEUE deliberately: the engine links
@@ -234,7 +281,7 @@ impl PlayerShared {
     pub(crate) fn destroy(self: Arc<Self>) -> SLresult {
         lock(&self.output).take();
         self.play_state.store(SL_PLAYSTATE_STOPPED, Ordering::Release);
-        lock(&self.queue).clear();
+        lock(&self.queue).0.clear();
         self.state.store(SL_OBJECT_STATE_UNREALIZED, Ordering::Release);
         super::remove_player(Arc::as_ptr(&self) as usize);
         SL_RESULT_SUCCESS
@@ -261,7 +308,7 @@ impl PlayerShared {
                 }
                 // STOPPED also empties the queue: a stopped player resumes
                 // from silence, not from audio it was told to abandon.
-                lock(&self.queue).clear();
+                lock(&self.queue).0.clear();
             }
             _ => return SL_RESULT_PARAMETER_INVALID,
         }
@@ -378,10 +425,10 @@ impl PlayerShared {
         }
         {
             let mut queue = lock(&self.queue);
-            if queue.len() >= self.num_buffers {
+            if queue.0.len() >= self.num_buffers as usize {
                 return SL_RESULT_BUFFER_INSUFFICIENT;
             }
-            queue.push_back(PendingBuffer {
+            queue.0.push_back(PendingBuffer {
                 data,
                 size,
                 offset: 0,
@@ -393,7 +440,7 @@ impl PlayerShared {
     }
 
     pub fn absq_clear(&self) -> SLresult {
-        lock(&self.queue).clear();
+        lock(&self.queue).0.clear();
         SL_RESULT_SUCCESS
     }
 
@@ -404,7 +451,7 @@ impl PlayerShared {
     ) -> SLresult {
         let queue = lock(&self.queue);
         if let Some(count) = count {
-            *count = queue.len() as SLuint32;
+            *count = queue.0.len() as SLuint32;
         }
         if let Some(index) = index {
             *index = self.enqueued_index.load(Ordering::Acquire);
@@ -563,25 +610,7 @@ impl PlayerShared {
 
 /// The fill closure the audio thread runs. Converts the caller's queued PCM
 /// bytes to f32, applies volume and mute, and reports drains.
-struct PlayerFill {
-    queue: Arc<Mutex<VecDeque<PendingBuffer>>>,
-    callback: Arc<Mutex<DrainCallback>>,
-    volume_linear: Arc<AtomicU32>,
-    muted: Arc<AtomicBool>,
-    /// Preallocated: drains reported in one call can never exceed the queue
-    /// depth, so this never grows after the first fill.
-    drained: Vec<*mut c_void>,
-    /// Caller-format bytes staged between `fill_pcm` and conversion.
-    /// Preallocated on the first call; every later resize stays within
-    /// capacity, so the steady-state fill allocates nothing.
-    scratch: Vec<u8>,
-    container_bytes: usize,
-    bits_per_sample: u32,
-    big_endian: bool,
-    token: usize,
-}
-
-impl PlayerFill {
+impl PlayerFillState {
     fn convert_sample(&self, bytes: &[u8]) -> f32 {
         match (self.bits_per_sample, self.big_endian) {
             (8, _) => i8::from_le_bytes([bytes[0]]) as f32 / 128.0,
@@ -615,10 +644,10 @@ impl PlayerFill {
         if self.scratch.len() < want_bytes {
             self.scratch.resize(want_bytes, 0);
         }
-        self.drained.clear();
+        self.drained.0.clear();
         {
             let mut queue = lock(&self.queue);
-            fill_pcm(&mut queue, &mut self.scratch[..want_bytes], &mut self.drained);
+            fill_pcm(&mut queue.0, &mut self.scratch[..want_bytes], &mut self.drained.0);
         }
         let linear = f32::from_bits(self.volume_linear.load(Ordering::Relaxed));
         for (sample, out) in dst.iter_mut().enumerate() {
@@ -637,7 +666,7 @@ impl PlayerFill {
             (drain.callback, drain.context)
         };
         if let Some(callback) = callback {
-            for _ in self.drained.drain(..) {
+            for _ in self.drained.0.drain(..) {
                 // SAFETY: the engine's own callback, invoked with the queue
                 // token it opened this player through and the context it
                 // registered, per the buffer-queue contract.
