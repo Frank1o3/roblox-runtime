@@ -1,7 +1,9 @@
 //! Host audio backend interfaces (PipeWire, PulseAudio, ALSA, fallback).
 
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::collections::HashSet;
+use std::sync::atomic::AtomicBool;
+
+use cpal::traits::{DeviceTrait, HostTrait};
 
 pub static VOICE_MUTED: AtomicBool = AtomicBool::new(false);
 
@@ -59,7 +61,9 @@ pub fn host_backend_kind() -> HostBackendKind {
 
 pub fn pipewire_available() -> bool {
     // Check if PipeWire runtime socket exists or libpipewire can be opened
-    if std::env::var_os("PIPEWIRE_RUNTIME_DIR").is_some() || std::env::var_os("XDG_RUNTIME_DIR").is_some() {
+    if std::env::var_os("PIPEWIRE_RUNTIME_DIR").is_some()
+        || std::env::var_os("XDG_RUNTIME_DIR").is_some()
+    {
         unsafe {
             let lib = libc::dlopen(b"libpipewire-0.3.so.0\0".as_ptr().cast(), libc::RTLD_LAZY);
             if !lib.is_null() {
@@ -105,26 +109,96 @@ pub fn host_backend_name() -> String {
     std::env::var("RBX_RUNTIME_AUDIO_HOST").unwrap_or_else(|_| "auto".to_owned())
 }
 
-pub fn enumerate_devices() -> Vec<DeviceInfo> {
-    // Returns default mock or discovered devices
-    vec![
-        DeviceInfo {
-            id: 1,
-            node_name: "default_playback".into(),
-            description: "Default Audio Output".into(),
-            nick: "Speaker".into(),
-            object_path: "alsa:default".into(),
-            is_source: false,
-            is_default: true,
-        },
-        DeviceInfo {
-            id: 2,
-            node_name: "default_capture".into(),
-            description: "Default Audio Input".into(),
-            nick: "Microphone".into(),
-            object_path: "alsa:capture".into(),
-            is_source: true,
-            is_default: true,
-        },
-    ]
+pub fn enumerate_devices() -> Result<Vec<DeviceInfo>, cpal::Error> {
+    let host = cpal::default_host();
+    let default_input_id = host
+        .default_input_device()
+        .map(|device| device.id())
+        .transpose()?
+        .map(|id| id.to_string());
+    let default_output_id = host
+        .default_output_device()
+        .map(|device| device.id())
+        .transpose()?
+        .map(|id| id.to_string());
+
+    let mut devices = Vec::new();
+    let mut ids = HashSet::new();
+    for device in host.devices()? {
+        let device_id = device.id()?.to_string();
+        let description = device.description()?.name().to_owned();
+
+        if device.supports_output() {
+            devices.push(device_info(
+                &device_id,
+                &description,
+                false,
+                default_output_id.as_deref() == Some(&device_id),
+                &mut ids,
+            ));
+        }
+        if device.supports_input() {
+            devices.push(device_info(
+                &device_id,
+                &description,
+                true,
+                default_input_id.as_deref() == Some(&device_id),
+                &mut ids,
+            ));
+        }
+    }
+
+    Ok(devices)
+}
+
+fn device_info(
+    device_id: &str,
+    description: &str,
+    is_source: bool,
+    is_default: bool,
+    ids: &mut HashSet<u32>,
+) -> DeviceInfo {
+    let id = unique_device_id(device_id, is_source, ids);
+    DeviceInfo {
+        id,
+        node_name: device_id.to_owned(),
+        description: description.to_owned(),
+        nick: description.to_owned(),
+        object_path: String::new(),
+        is_source,
+        is_default,
+    }
+}
+
+fn unique_device_id(device_id: &str, is_source: bool, ids: &mut HashSet<u32>) -> u32 {
+    let direction: &[u8] = if is_source { b"input:" } else { b"output:" };
+    let mut hash = 0x811c_9dc5_u32;
+    for byte in direction.iter().copied().chain(device_id.bytes()) {
+        hash = (hash ^ u32::from(byte)).wrapping_mul(0x0100_0193);
+    }
+    hash = hash.max(1);
+
+    while !ids.insert(hash) {
+        hash = hash.wrapping_add(1).max(1);
+    }
+    hash
+}
+
+#[cfg(test)]
+mod tests {
+    use super::unique_device_id;
+    use std::collections::HashSet;
+
+    #[test]
+    fn device_ids_are_stable_and_distinguish_directions() {
+        let mut ids = HashSet::new();
+        let output = unique_device_id("alsa:device-1", false, &mut ids);
+        let input = unique_device_id("alsa:device-1", true, &mut ids);
+
+        assert_ne!(output, input);
+        assert_eq!(
+            unique_device_id("alsa:device-1", false, &mut HashSet::new()),
+            output
+        );
+    }
 }

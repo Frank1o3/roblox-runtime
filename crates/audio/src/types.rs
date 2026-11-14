@@ -1,7 +1,5 @@
 //! Common types and constants for Android Audio APIs (AAudio and OpenSL ES).
 
-use std::os::raw::c_int;
-
 // ----------------------------------------------------------------------------
 // AAudio Constants & Types
 // ----------------------------------------------------------------------------
