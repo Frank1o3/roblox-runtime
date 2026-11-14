@@ -53,39 +53,43 @@ impl OpenSlCapture for RealCapture {
             return 0;
         }
         let want_samples = dst.len() / 2;
+        let granted = usize::from(self.granted_channels).max(1);
         let mut scratch = [0f32; 512];
         let mut written = 0usize;
         while written < want_samples {
-            // Whole frames only, so a chunk boundary never splits a frame.
-            let chunk = scratch.len() / usize::from(self.granted_channels)
-                * usize::from(self.granted_channels);
-            let got = self.stream.read(&mut scratch[..chunk]);
+            // Ask the ring for exactly what the caller still has room for:
+            // one output sample per granted frame, so the read is capped at
+            // the remaining need and can never overrun `dst` — the ring read
+            // consumes what it returns, so over-reading would drop samples
+            // on the floor as well as panicking.
+            let need = want_samples - written;
+            let read_frames = (scratch.len() / granted).min(need);
+            if read_frames == 0 {
+                break;
+            }
+            let got = self.stream.read(&mut scratch[..read_frames * granted]);
             if got == 0 {
                 break;
             }
-            let frames = got / usize::from(self.granted_channels);
+            let frames = got / granted;
             for frame in 0..frames {
-                let base = frame * usize::from(self.granted_channels);
-                let value = if self.granted_channels == self.requested_channels {
+                let base = frame * granted;
+                let value = if granted == usize::from(self.requested_channels) {
                     scratch[base]
-                } else if self.granted_channels > self.requested_channels {
+                } else if granted > usize::from(self.requested_channels) {
                     // Plain mono downmix per output channel group.
-                    let group = usize::from(self.granted_channels)
-                        / usize::from(self.requested_channels);
+                    let group = granted / usize::from(self.requested_channels).max(1);
                     scratch[base..base + group].iter().sum::<f32>() / group as f32
                 } else {
                     // Fewer granted channels than asked: repeat, rather than
                     // hand back a half-filled frame the caller reads as noise.
-                    scratch[base..base + usize::from(self.granted_channels)]
-                        .last()
-                        .copied()
-                        .unwrap_or(0.0)
+                    scratch[base..base + granted].last().copied().unwrap_or(0.0)
                 };
                 let sample = (value * 32767.0).clamp(-32768.0, 32767.0) as i16;
                 dst[written * 2..written * 2 + 2].copy_from_slice(&sample.to_le_bytes());
                 written += 1;
             }
-            if got < chunk {
+            if got < read_frames * granted {
                 break; // the device has caught up
             }
         }

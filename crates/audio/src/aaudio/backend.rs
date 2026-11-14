@@ -72,27 +72,33 @@ impl Capture for RealCapture {
             return 0;
         }
         let want_samples = dst.len() / 2;
+        let granted = usize::from(self.channels).max(1);
         let mut scratch = [0f32; 512];
         let mut written = 0usize;
         while written < want_samples {
-            // Whole frames only, so a chunk boundary never splits a frame.
-            let chunk = scratch.len() / usize::from(self.channels) * usize::from(self.channels);
-            let got = self.stream.read(&mut scratch[..chunk]);
+            // Ask the ring for exactly what the caller still has room for:
+            // one output sample per granted frame, so the read is capped at
+            // the remaining need and can never overrun `dst` — the ring read
+            // consumes what it returns, so over-reading would drop samples
+            // on the floor as well as panicking.
+            let need = want_samples - written;
+            let read_frames = (scratch.len() / granted).min(need);
+            if read_frames == 0 {
+                break;
+            }
+            let got = self.stream.read(&mut scratch[..read_frames * granted]);
             if got == 0 {
                 break;
             }
-            let frames = got / usize::from(self.channels);
+            let frames = got / granted;
             for frame in 0..frames {
-                let base = frame * usize::from(self.channels);
-                let mix = scratch[base..base + usize::from(self.channels)]
-                    .iter()
-                    .sum::<f32>()
-                    / self.channels as f32;
+                let base = frame * granted;
+                let mix = scratch[base..base + granted].iter().sum::<f32>() / granted as f32;
                 let value = (mix * 32767.0).clamp(-32768.0, 32767.0) as i16;
                 dst[written * 2..written * 2 + 2].copy_from_slice(&value.to_le_bytes());
                 written += 1;
             }
-            if got < chunk {
+            if got < read_frames * granted {
                 break; // the device has caught up
             }
         }

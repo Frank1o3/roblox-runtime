@@ -20,7 +20,7 @@ use std::sync::{mpsc, Arc};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use cpal::traits::{DeviceTrait, HostTrait};
+use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{BufferSize, FromSample, Sample, SizedSample, StreamConfig};
 
 use super::host::{effective_backend_name, host_by_name};
@@ -30,6 +30,19 @@ use crate::logline::{log, Priority, AUDIO_TAG};
 /// Every capture path in the runtime must hold one of these; the refusal at
 /// this one chokepoint is what keeps a second stream from ever existing.
 static CAPTURE_LIVE: AtomicBool = AtomicBool::new(false);
+
+/// How many capture streams exist in this process right now. Either 0 or 1:
+/// the chokepoint above refuses a second, so a number above 1 can never be
+/// true and this is 1 only while a caller is actively recording.
+///
+/// Public because the probes annotate every state transition with it — the
+/// microphone-lifetime rule ("the device exists only while recording") is
+/// what an outside `pw-dump` sampler checks against these timestamps, and an
+/// example that cannot read the counter cannot make the marks it exists to
+/// produce. Diagnostic only: policy enforcement stays in `open`.
+pub fn live_capture_streams() -> u32 {
+    u32::from(CAPTURE_LIVE.load(Ordering::Acquire))
+}
 
 /// The consumer's request. `None` rate or channels means "what the device
 /// prefers"; granted values are always reported back exactly.
@@ -401,6 +414,10 @@ where
             None,
         )
         .map_err(|e| e.to_string())
+        // cpal streams are built paused; the callback delivers nothing until
+        // play(). Same as the output path: a stream that silently records
+        // nothing is worse than an open that fails.
+        .and_then(|stream| stream.play().map_err(|e| e.to_string()).map(|()| stream))
 }
 
 /// Test-only construction of the ring, so the overwrite policy can be checked

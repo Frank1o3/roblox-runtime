@@ -117,6 +117,7 @@ pub const SL_ANDROID_DATAFORMAT_PCM_EX: SLuint32 = 0x00000004;
 pub const SL_ANDROID_PCM_REPRESENTATION_SIGNED_INT: SLuint32 = 0x00000001;
 
 pub const SL_BYTEORDER_BIGENDIAN: SLuint32 = 0x00000001;
+pub const SL_BYTEORDER_LITTLEENDIAN: SLuint32 = 0x00000002;
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
