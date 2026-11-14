@@ -15,7 +15,6 @@ use super::backend::{self, CaptureOpener, OpenSlCapture, OutputFactory};
 use super::*;
 use crate::backend::capture::CaptureOpenError;
 use crate::backend::output::{FillCallback, OutputStream};
-use crate::types::*;
 
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|p| p.into_inner())
@@ -179,7 +178,8 @@ fn install_fakes() {
     let _ = backend::set_capture_opener(Arc::new(FakeOpener {
         shared: Arc::clone(capture_shared()),
     }));
-    let _ = backend::set_output_factory(Arc::clone(output_factory_shared()));
+    let factory: Arc<dyn OutputFactory> = Arc::clone(output_factory_shared());
+    let _ = backend::set_output_factory(factory);
 }
 
 fn live_captures() -> u32 {
@@ -284,13 +284,13 @@ fn run_fill(fill: &mut FillCallback, dst: &mut [f32], frames: u32) -> bool {
 #[test]
 fn interface_ids_are_distinct_and_compared_by_identity() {
     let _g = lock(&TEST_LOCK);
-    assert_eq!(SlIid::engine(), SlIid::engine());
-    assert_ne!(SlIid::engine(), SlIid::play());
+    assert_eq!(engine(), engine());
+    assert_ne!(engine(), play());
     for (a, b) in [
-        (SlIid::engine(), SlIid::record()),
-        (SlIid::play(), SlIid::volume()),
-        (SlIid::buffer_queue(), SlIid::android_simple_buffer_queue()),
-        (SlIid::android_configuration(), SlIid::output_mix()),
+        (engine(), record()),
+        (play(), volume()),
+        (buffer_queue(), android_simple_buffer_queue()),
+        (android_configuration(), output_mix()),
     ] {
         assert_ne!(a, b, "every ID object is distinct");
     }
@@ -305,7 +305,7 @@ fn sl_create_engine_refuses_or_serves_depending_on_the_host_and_validates_reques
         sl_create_engine(
             Some(&mut out),
             0,
-            &[SlInterfaceRequest { iid: SlIid::volume(), required: true }],
+            &[SlInterfaceRequest { iid: volume(), required: true }],
         ),
         SL_RESULT_FEATURE_UNSUPPORTED
     );
@@ -330,9 +330,9 @@ fn sl_create_engine_refuses_or_serves_depending_on_the_host_and_validates_reques
         assert_eq!(object.realize(SL_BOOLEAN_FALSE), SL_RESULT_SUCCESS);
         assert_eq!(object.get_state(Some(&mut state)), SL_RESULT_SUCCESS);
         assert_eq!(state, SL_OBJECT_STATE_REALIZED);
-        assert_eq!(object.get_interface(SlIid::engine()), Ok(()));
+        assert_eq!(object.get_interface(engine()), Ok(()));
         assert_eq!(
-            object.get_interface(SlIid::play()),
+            object.get_interface(play()),
             Err(SL_RESULT_FEATURE_UNSUPPORTED)
         );
         assert_eq!(object.destroy(engine), SL_RESULT_SUCCESS);
@@ -400,7 +400,7 @@ fn output_mix_lifecycle_and_its_three_methods() {
     assert_eq!(
         object.create_output_mix(
             Some(&mut mix),
-            &[SlInterfaceRequest { iid: SlIid::play(), required: true }],
+            &[SlInterfaceRequest { iid: play(), required: true }],
         ),
         SL_RESULT_FEATURE_UNSUPPORTED
     );
@@ -411,7 +411,7 @@ fn output_mix_lifecycle_and_its_three_methods() {
     assert_eq!(
         object.create_output_mix(
             Some(&mut mix),
-            &[SlInterfaceRequest { iid: SlIid::play(), required: false }],
+            &[SlInterfaceRequest { iid: play(), required: false }],
         ),
         SL_RESULT_SUCCESS
     );
@@ -421,9 +421,9 @@ fn output_mix_lifecycle_and_its_three_methods() {
     assert_eq!(mix_object.get_state(Some(&mut state)), SL_RESULT_SUCCESS);
     assert_eq!(state, SL_OBJECT_STATE_UNREALIZED);
     assert_eq!(mix_object.realize(SL_BOOLEAN_FALSE), SL_RESULT_SUCCESS);
-    assert_eq!(mix_object.get_interface(SlIid::output_mix()), Ok(()));
+    assert_eq!(mix_object.get_interface(output_mix()), Ok(()));
     assert_eq!(
-        mix_object.get_interface(SlIid::volume()),
+        mix_object.get_interface(volume()),
         Err(SL_RESULT_FEATURE_UNSUPPORTED)
     );
 
@@ -527,7 +527,7 @@ fn create_audio_player_validates_its_arguments() {
             &absq_src(2),
             &pcm_16_stereo(48_000_000),
             &mix_sink(Some(0)),
-            &[SlInterfaceRequest { iid: SlIid::record(), required: true }],
+            &[SlInterfaceRequest { iid: record(), required: true }],
         ),
         SL_RESULT_FEATURE_UNSUPPORTED
     );
@@ -566,7 +566,8 @@ fn player_realize_opens_the_output_with_the_caller_format_and_refuses_unmappable
     let args = lock(&outputs[0].args).clone().expect("open recorded its arguments");
     assert_eq!(args.0, 16, "the sample-bit hint is the caller's format");
     assert!(!args.1, "the hint is not float");
-    assert!(args.2.contains("OpenSL"), "the description names the path: {args.2}");
+    let description = &args.2;
+    assert!(description.contains("OpenSL"), "the description names the path: {description}");
     assert_eq!(args.3, "", "the sink follows the user's configured device");
 
     // An unmappable layout is refused at realize, before any device exists.
@@ -623,18 +624,18 @@ fn player_realize_opens_the_output_with_the_caller_format_and_refuses_unmappable
 
     // Interface dispatch.
     let shared = get_player(player).unwrap();
-    assert_eq!(shared.get_interface(SlIid::play()), Ok(PlayerIid::Play));
+    assert_eq!(shared.get_interface(play()), Ok(PlayerIid::Play));
     assert_eq!(
-        shared.get_interface(SlIid::android_simple_buffer_queue()),
+        shared.get_interface(android_simple_buffer_queue()),
         Ok(PlayerIid::AndroidSimpleBufferQueue)
     );
-    assert_eq!(shared.get_interface(SlIid::volume()), Ok(PlayerIid::Volume));
+    assert_eq!(shared.get_interface(volume()), Ok(PlayerIid::Volume));
     assert_eq!(
-        shared.get_interface(SlIid::android_configuration()),
+        shared.get_interface(android_configuration()),
         Ok(PlayerIid::AndroidConfiguration)
     );
     assert_eq!(
-        shared.get_interface(SlIid::buffer_queue()),
+        shared.get_interface(buffer_queue()),
         Err(SL_RESULT_FEATURE_UNSUPPORTED),
         "BUFFERQUEUE is linked by the engine but never served: Android players use the \
          ANDROIDSIMPLEBUFFERQUEUE extension"
@@ -689,20 +690,24 @@ fn the_player_queue_drains_in_order_and_reports_each_buffer_once() {
         "PLAYING activates the pull"
     );
 
-    // Four frames of stereo, 16-bit: 16 bytes of caller PCM. The first two
-    // frames come out of buffer A; the engine's samples are the caller's
-    // little-endian s16 values scaled to f32.
+    // Two frames of stereo, 16-bit: 8 bytes of caller PCM — exactly buffer
+    // A. The samples are the caller's little-endian s16 pairs scaled to f32.
     let mut fill = player_fill(player);
-    let mut dst = [0f32; 8];
-    assert!(run_fill(&mut fill, &mut dst, 4));
-    let expected: [f32; 4] = [1.0 / 32768.0, 2.0 / 32768.0, 3.0 / 32768.0, 4.0 / 32768.0];
-    for (got, want) in dst.iter().zip(expected.iter().chain([0.0; 4].iter())) {
-        assert!((got - want).abs() < 1e-6, "sample {got} vs {want}");
+    let mut dst = [0f32; 4];
+    assert!(run_fill(&mut fill, &mut dst, 2));
+    let expected: [f32; 4] = [513.0 / 32768.0, 1027.0 / 32768.0, 1541.0 / 32768.0, 2055.0 / 32768.0];
+    for (i, (got, want)) in dst.iter().zip(expected.iter()).enumerate() {
+        assert!((got - want).abs() < 1e-6, "sample {i}: {got} vs {want}");
     }
-    assert!(lock(drains()).is_empty(), "buffer A is only half consumed");
+    assert!(lock(drains()).is_empty(), "buffer A is fully consumed but not yet re-filled past");
 
-    // The next fill finishes A (drained, reported) and starts B.
-    assert!(run_fill(&mut fill, &mut dst, 4));
+    // The next fill finishes B and reports its drain.
+    assert!(run_fill(&mut fill, &mut dst, 2));
+    assert!(
+        (dst[0] - 2569.0 / 32768.0).abs() < 1e-6,
+        "the second buffer follows the first: {}",
+        dst[0]
+    );
     let drained = lock(drains()).clone();
     assert_eq!(
         drained,
@@ -891,17 +896,17 @@ fn recorder_validation_refuses_everything_but_default_input_s16() {
     assert_eq!(shared.state(), SL_OBJECT_STATE_REALIZED);
     assert_eq!(live_captures(), 0, "realizing a recorder still opens nothing");
 
-    assert_eq!(shared.get_interface(SlIid::record()), Ok(RecorderIid::Record));
+    assert_eq!(shared.get_interface(record()), Ok(RecorderIid::Record));
     assert_eq!(
-        shared.get_interface(SlIid::android_simple_buffer_queue()),
+        shared.get_interface(android_simple_buffer_queue()),
         Ok(RecorderIid::AndroidSimpleBufferQueue)
     );
     assert_eq!(
-        shared.get_interface(SlIid::android_configuration()),
+        shared.get_interface(android_configuration()),
         Ok(RecorderIid::AndroidConfiguration)
     );
     assert_eq!(
-        shared.get_interface(SlIid::volume()),
+        shared.get_interface(volume()),
         Err(SL_RESULT_FEATURE_UNSUPPORTED)
     );
     assert_eq!(shared.destroy(), SL_RESULT_SUCCESS);
@@ -1028,7 +1033,7 @@ fn recorder_validation_refuses_everything_but_default_input_s16() {
             },
             &absq_src(2),
             &pcm_16_stereo(8_000_000),
-            &[SlInterfaceRequest { iid: SlIid::play(), required: true }],
+            &[SlInterfaceRequest { iid: play(), required: true }],
         ),
         SL_RESULT_FEATURE_UNSUPPORTED
     );
