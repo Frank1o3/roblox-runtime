@@ -5,4 +5,5 @@ pub mod aaudio {
 }
 
 pub mod backend;
+pub mod input_callback;
 pub mod types;

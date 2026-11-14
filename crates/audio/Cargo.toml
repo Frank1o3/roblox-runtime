@@ -1,17 +1,22 @@
 [package]
-name = "roblox-audio"
-edition.workspace = true
-license.workspace = true
-version.workspace = true
+    edition.workspace=true
+    license.workspace=true
+    name="roblox-audio"
+    version.workspace=true
 
 [dependencies]
-libc.workspace = true
-cpal.workspace = true
-roblox-logging.workspace = true
+    cpal.workspace=true
+    libc.workspace=true
+    roblox-logging.workspace=true
+
+[features]
+    default=["pipewire", "pulseaudio"]
+    pipewire=["cpal/pipewire"]
+    pulseaudio=["cpal/pulseaudio"]
 
 [lints.rust]
-unsafe_code = "allow"
-unsafe_op_in_unsafe_fn = "deny"
+    unsafe_code="allow"
+    unsafe_op_in_unsafe_fn="deny"
 
 [lints.clippy]
-undocumented_unsafe_blocks = "warn"
+    undocumented_unsafe_blocks="warn"

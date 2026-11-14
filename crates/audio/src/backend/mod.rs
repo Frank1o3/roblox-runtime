@@ -1,4 +1,7 @@
 //! Host audio backend interfaces (PipeWire, PulseAudio, ALSA, fallback).
+pub mod pcm;
+pub mod oss;
+pub mod output;
 
 use std::collections::HashSet;
 use std::sync::atomic::AtomicBool;

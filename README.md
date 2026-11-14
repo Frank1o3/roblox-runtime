@@ -202,4 +202,4 @@ The long-term direction is:
 
 ## License
 
-GPL-3.0-or-later.
+BSD 3-Clause License.

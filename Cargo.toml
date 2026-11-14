@@ -22,7 +22,7 @@
     [workspace.dependencies]
         ash={version="0.38.0", default-features=false, features=["loaded", "std"]}
         cmake="0.1.58"
-        cpal="0.18.2"
+        cpal={version="0.18.2", default-features=false}
         jni-sys="0.4.1"
         libc="0.2.191"
         rustix={version="1", default-features=false, features=["mm", "param", "std"]}
