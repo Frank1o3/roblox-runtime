@@ -149,8 +149,8 @@ impl OutputStream for OssStream {
                     buffer.fill(0.0);
                     silence.fetch_add(1, Ordering::Relaxed);
                 }
-                for (src, out) in buffer.iter().zip(scratch.chunks_exact_mut(2)) {
-                    out.copy_from_slice(&f32_to_s16(*src).to_ne_bytes());
+                for (i, src) in buffer.iter().enumerate() {
+                    scratch[i * 2..i * 2 + 2].copy_from_slice(&f32_to_s16(*src).to_ne_bytes());
                 }
                 // write_all retries on EINTR. Any other failure means the
                 // device is lost; retrying would spin.

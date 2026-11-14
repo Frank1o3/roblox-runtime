@@ -65,7 +65,7 @@ fn on_stream_error(err: cpal::Error) {
 fn build_f32(device: &cpal::Device, cfg: &StreamConfig, ctx: Ctx) -> Result<Stream, String> {
     device
         .build_output_stream(
-            cfg.clone(),
+            *cfg,
             move |data: &mut [f32], _: &cpal::OutputCallbackInfo| render(&ctx, data),
             on_stream_error,
             None,
@@ -82,7 +82,7 @@ where
     let mut scratch: Vec<f32> = Vec::with_capacity(16_384);
     device
         .build_output_stream(
-            cfg.clone(),
+            *cfg,
             move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
                 scratch.resize(data.len(), 0.0);
                 render(&ctx, &mut scratch);

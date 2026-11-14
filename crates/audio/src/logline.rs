@@ -15,6 +15,10 @@ use std::sync::OnceLock;
 /// column-aligned block in the merged log.
 pub const AUDIO_TAG: &str = "RobloxRuntime-Audio";
 
+/// The tag the OpenSL ES surface speaks under, matching the C++ file's
+/// `RobloxRuntime-OpenSLES` prefix so old logs and new read the same.
+pub const OPENSL_TAG: &str = "RobloxRuntime-OpenSLES";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Priority {
     Verbose,

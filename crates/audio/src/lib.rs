@@ -6,6 +6,8 @@ pub mod aaudio {
     pub mod stream;
 }
 
+pub mod opensles;
+
 pub mod backend;
 pub mod input_callback;
 pub mod logline;

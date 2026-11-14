@@ -376,7 +376,7 @@ where
     // keeps the callback bounded in time.
     device
         .build_input_stream::<T, _, _>(
-            cfg.clone(),
+            *cfg,
             move |data: &[T], _: &cpal::InputCallbackInfo| {
                 ring.write_with(data.len(), |i| f32::from_sample(data[i]));
             },

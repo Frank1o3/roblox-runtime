@@ -79,6 +79,7 @@ pub const SL_RESULT_BUFFER_INSUFFICIENT: SLresult = 7;
 pub const SL_RESULT_UNKNOWN_ERROR: SLresult = 8;
 pub const SL_RESULT_SERVICE_UNAVAILABLE: SLresult = 9;
 pub const SL_RESULT_CONTROL_LOST: SLresult = 10;
+pub const SL_RESULT_CONTENT_UNSUPPORTED: SLresult = 9;
 pub const SL_RESULT_FEATURE_UNSUPPORTED: SLresult = 12;
 
 pub const SL_BOOLEAN_FALSE: SLboolean = 0;
@@ -91,6 +92,31 @@ pub const SL_PLAYSTATE_PLAYING: SLuint32 = 3;
 pub const SL_RECORDSTATE_STOPPED: SLuint32 = 1;
 pub const SL_RECORDSTATE_PAUSED: SLuint32 = 2;
 pub const SL_RECORDSTATE_RECORDING: SLuint32 = 3;
+
+pub const SL_OBJECT_STATE_UNREALIZED: SLuint32 = 0x00000001;
+pub const SL_OBJECT_STATE_REALIZED: SLuint32 = 0x00000002;
+
+pub const SL_PRIORITY_NORMAL: SLint32 = 0x00000000;
+
+pub const SL_MILLIBEL_MAX: SLmillibel = 0x7FFF;
+pub const SL_MILLIBEL_MIN: SLmillibel = -SL_MILLIBEL_MAX - 1;
+
+pub type SLmillisecond = u32;
+pub const SL_TIME_UNKNOWN: SLmillisecond = 0xFFFFFFFF;
+
+// Android extension range for the buffer-queue locator type.
+pub const SL_DATALOCATOR_IODEVICE: SLuint32 = 0x00000003;
+pub const SL_DATALOCATOR_OUTPUTMIX: SLuint32 = 0x00000004;
+pub const SL_DATALOCATOR_ANDROIDSIMPLEBUFFERQUEUE: SLuint32 = 0x800007BD;
+
+pub const SL_IODEVICE_AUDIOINPUT: SLuint32 = 0x00000001;
+pub const SL_DEFAULTDEVICEID_AUDIOINPUT: SLuint32 = 0xFFFFFFFF;
+
+pub const SL_DATAFORMAT_PCM: SLuint32 = 0x00000002;
+pub const SL_ANDROID_DATAFORMAT_PCM_EX: SLuint32 = 0x00000004;
+pub const SL_ANDROID_PCM_REPRESENTATION_SIGNED_INT: SLuint32 = 0x00000001;
+
+pub const SL_BYTEORDER_BIGENDIAN: SLuint32 = 0x00000001;
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
