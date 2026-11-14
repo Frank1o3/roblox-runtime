@@ -799,6 +799,50 @@ pub fn aaudio_overrides() -> Vec<(&'static str, *mut c_void)> {
 }
 
 #[cfg(test)]
+mod opensles_tests {
+    /// The eight names `libroblox.so` 2.734.0.917 references through
+    /// `libOpenSLES.so`, from `docs/analysis/undefined-symbols.tsv` (the
+    /// engine's own dynamic symbol table, not a reading of any source).
+    ///
+    /// Duplicated here on purpose, exactly as the AAudio table above is: this
+    /// is the assertion that the exported table and the measurement still
+    /// agree. Unlike AAudio these are linked rather than `dlsym`ed, so a
+    /// missing name fails the `DT_NEEDED` walk at load time — which is why
+    /// this gate matters *more*: seven of the eight are data symbols, and a
+    /// typo in one of them is a load failure for the whole engine, not a
+    /// muted feature.
+    const MEASURED: &[&str] = &[
+        "slCreateEngine",
+        "SL_IID_ENGINE",
+        "SL_IID_PLAY",
+        "SL_IID_RECORD",
+        "SL_IID_VOLUME",
+        "SL_IID_BUFFERQUEUE",
+        "SL_IID_ANDROIDSIMPLEBUFFERQUEUE",
+        "SL_IID_ANDROIDCONFIGURATION",
+    ];
+
+    #[test]
+    fn exports_exactly_the_symbols_the_engine_links() {
+        let mut got: Vec<&str> = super::opensles_overrides()
+            .into_iter()
+            .map(|(n, _)| n)
+            .collect();
+        got.sort_unstable();
+        let mut want: Vec<&str> = MEASURED.to_vec();
+        want.sort_unstable();
+        assert_eq!(got, want);
+    }
+
+    #[test]
+    fn every_export_has_a_real_address() {
+        for (name, addr) in super::opensles_overrides() {
+            assert!(!addr.is_null(), "{name} resolved to a null address");
+        }
+    }
+}
+
+#[cfg(test)]
 mod aaudio_tests {
     /// The 25 names `libroblox.so` 2.734.0.917 looks up, from
     /// `docs/analysis/aaudio-contract.md`.
