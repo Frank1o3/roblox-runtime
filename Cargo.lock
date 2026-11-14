@@ -264,6 +264,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "roblox-audio"
+version = "0.1.2"
+dependencies = [
+ "libc",
+ "roblox-logging",
+]
+
+[[package]]
 name = "roblox-graphics-vulkan"
 version = "0.1.2"
 dependencies = [
@@ -305,6 +313,7 @@ dependencies = [
  "jnivm",
  "roblox-abi",
  "roblox-android",
+ "roblox-audio",
  "roblox-graphics-vulkan",
  "roblox-jni-sys",
  "roblox-linker",

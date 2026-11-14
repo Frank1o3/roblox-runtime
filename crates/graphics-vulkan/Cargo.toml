@@ -6,8 +6,8 @@
     version.workspace=true
 
 [dependencies]
-    ash={version="0.38.0", default-features=false, features=["loaded", "std"]}
-    roblox-logging={path="../logging"}
+    ash.workspace=true
+    roblox-logging.workspace=true
 
 [lints.rust]
     unsafe_code="allow"

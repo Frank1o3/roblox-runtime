@@ -1,0 +1,17 @@
+[package]
+name = "roblox-audio"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+libc.workspace = true
+cpal.workspace = true
+roblox-logging.workspace = true
+
+[lints.rust]
+unsafe_code = "allow"
+unsafe_op_in_unsafe_fn = "deny"
+
+[lints.clippy]
+undocumented_unsafe_blocks = "warn"

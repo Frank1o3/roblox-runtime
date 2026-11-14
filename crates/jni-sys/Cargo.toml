@@ -7,7 +7,7 @@
     version.workspace=true
 
 [dependencies]
-    roblox-linker-sys={path="../linker-sys"}
+    roblox-linker-sys.workspace=true
 
 [lints.rust]
     unsafe_code="allow"

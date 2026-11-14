@@ -1,12 +1,42 @@
 [workspace]
     default-members=["."]
-    members=[".", "crates/abi", "crates/android", "crates/graphics-vulkan", "crates/jni-sys", "crates/jnivm", "crates/linker", "crates/linker-sys", "crates/logging"]
+    members=[
+        ".",
+        "crates/abi",
+        "crates/android",
+        "crates/audio",
+        "crates/graphics-vulkan",
+        "crates/jni-sys",
+        "crates/jnivm",
+        "crates/linker",
+        "crates/linker-sys",
+        "crates/logging"
+    ]
     resolver="3"
 
     [workspace.package]
         edition="2024"
         license="GPL-3.0-or-later"
         version="0.1.2"
+
+    [workspace.dependencies]
+        ash={version="0.38.0", default-features=false, features=["loaded", "std"]}
+        cmake="0.1.58"
+        cpal="0.18.2"
+        jni-sys="0.4.1"
+        libc="0.2.191"
+        rustix={version="1", default-features=false, features=["mm", "param", "std"]}
+        serde_json="1.0.154"
+        zip={version="9.5.1", default-features=false, features=["deflate"]}
+        jnivm={path="crates/jnivm"}
+        roblox-abi={path="crates/abi"}
+        roblox-android={path="crates/android"}
+        roblox-audio={path="crates/audio"}
+        roblox-graphics-vulkan={path="crates/graphics-vulkan"}
+        roblox-jni-sys={path="crates/jni-sys"}
+        roblox-linker={path="crates/linker"}
+        roblox-linker-sys={path="crates/linker-sys"}
+        roblox-logging={path="crates/logging"}
 
 [package]
     description="Embeddable Roblox Android runtime for Linux"
@@ -16,15 +46,16 @@
     version.workspace=true
 
 [dependencies]
-    jnivm={path="crates/jnivm"}
-    roblox-abi={path="crates/abi"}
-    roblox-android={path="crates/android"}
-    roblox-graphics-vulkan={path="crates/graphics-vulkan"}
-    roblox-jni-sys={path="crates/jni-sys"}
-    roblox-linker={path="crates/linker"}
-    roblox-linker-sys={path="crates/linker-sys"}
-    roblox-logging={path="crates/logging"}
-    serde_json="1.0.154"
+    jnivm.workspace=true
+    roblox-abi.workspace=true
+    roblox-android.workspace=true
+    roblox-audio.workspace=true
+    roblox-graphics-vulkan.workspace=true
+    roblox-jni-sys.workspace=true
+    roblox-linker.workspace=true
+    roblox-linker-sys.workspace=true
+    roblox-logging.workspace=true
+    serde_json.workspace=true
 
 [lints.rust]
     unsafe_code="deny"

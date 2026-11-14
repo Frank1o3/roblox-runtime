@@ -6,8 +6,8 @@ license.workspace = true
 version.workspace = true
 
 [dependencies]
-jni-sys = "0.4.1"
-roblox-logging = { path = "../logging" }
+jni-sys.workspace = true
+roblox-logging.workspace = true
 
 [lints.rust]
 unsafe_code = "allow"

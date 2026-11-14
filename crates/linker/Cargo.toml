@@ -15,6 +15,6 @@
     undocumented_unsafe_blocks="warn"
 
 [dependencies]
-    libc="0.2.191"
-    roblox-logging={path="../logging"}
-    rustix={version="1", default-features=false, features=["mm", "param", "std"]}
+    libc.workspace=true
+    roblox-logging.workspace=true
+    rustix.workspace=true
