@@ -178,7 +178,8 @@ fn install_fakes() {
     let _ = backend::set_capture_opener(Arc::new(FakeOpener {
         shared: Arc::clone(capture_shared()),
     }));
-    let factory: Arc<dyn OutputFactory> = Arc::clone(output_factory_shared());
+    let shared_factory = Arc::clone(output_factory_shared());
+    let factory: Arc<dyn OutputFactory> = shared_factory;
     let _ = backend::set_output_factory(factory);
 }
 
@@ -204,10 +205,11 @@ static DESTROY_TARGET: AtomicU64 = AtomicU64::new(0);
 
 unsafe extern "C" fn destroying_drain(queue: usize, context: *mut c_void) {
     let target = DESTROY_TARGET.load(Ordering::Acquire) as usize;
-    if target != 0 && context as usize == target {
-        if let Some(recorder) = get_recorder(queue) {
-            recorder.destroy();
-        }
+    if target != 0
+        && context as usize == target
+        && let Some(recorder) = get_recorder(queue)
+    {
+        recorder.destroy();
     }
 }
 
@@ -317,8 +319,8 @@ fn sl_create_engine_refuses_or_serves_depending_on_the_host_and_validates_reques
     let mut out = None;
     let result = sl_create_engine(Some(&mut out), 0, &no_interfaces());
     if result == SL_RESULT_SUCCESS {
-        let engine = out.expect("success wrote a handle");
-        let object = get_engine(engine).unwrap();
+        let created = out.expect("success wrote a handle");
+        let object = get_engine(created).unwrap();
         assert_eq!(
             object.get_state(None),
             SL_RESULT_PARAMETER_INVALID,
@@ -335,8 +337,8 @@ fn sl_create_engine_refuses_or_serves_depending_on_the_host_and_validates_reques
             object.get_interface(play()),
             Err(SL_RESULT_FEATURE_UNSUPPORTED)
         );
-        assert_eq!(object.destroy(engine), SL_RESULT_SUCCESS);
-        assert!(get_engine(engine).is_none(), "destroy removed the engine");
+        assert_eq!(object.destroy(created), SL_RESULT_SUCCESS);
+        assert!(get_engine(created).is_none(), "destroy removed the engine");
     } else {
         assert_eq!(result, SL_RESULT_FEATURE_UNSUPPORTED);
         assert!(out.is_none());
@@ -691,7 +693,8 @@ fn the_player_queue_drains_in_order_and_reports_each_buffer_once() {
     );
 
     // Two frames of stereo, 16-bit: 8 bytes of caller PCM — exactly buffer
-    // A. The samples are the caller's little-endian s16 pairs scaled to f32.
+    // A, which is therefore consumed and drained by this fill. The samples
+    // are the caller's little-endian s16 pairs scaled to f32.
     let mut fill = player_fill(player);
     let mut dst = [0f32; 4];
     assert!(run_fill(&mut fill, &mut dst, 2));
@@ -699,9 +702,13 @@ fn the_player_queue_drains_in_order_and_reports_each_buffer_once() {
     for (i, (got, want)) in dst.iter().zip(expected.iter()).enumerate() {
         assert!((got - want).abs() < 1e-6, "sample {i}: {got} vs {want}");
     }
-    assert!(lock(drains()).is_empty(), "buffer A is fully consumed but not yet re-filled past");
+    assert_eq!(
+        lock(drains()).clone(),
+        vec![(player, 0x1234)],
+        "buffer A drained with the queue token and the registered context"
+    );
 
-    // The next fill finishes B and reports its drain.
+    // The next fill drains B the same way.
     assert!(run_fill(&mut fill, &mut dst, 2));
     assert!(
         (dst[0] - 2569.0 / 32768.0).abs() < 1e-6,
@@ -711,8 +718,8 @@ fn the_player_queue_drains_in_order_and_reports_each_buffer_once() {
     let drained = lock(drains()).clone();
     assert_eq!(
         drained,
-        vec![(player, 0x1234)],
-        "one drain, in order, with the queue token and the registered context"
+        vec![(player, 0x1234), (player, 0x1234)],
+        "one drain per buffer, in order"
     );
 
     // Pause stops the pull without clearing the queue.
@@ -727,8 +734,8 @@ fn the_player_queue_drains_in_order_and_reports_each_buffer_once() {
     assert_eq!(shared.absq_get_state(Some(&mut count), None), SL_RESULT_SUCCESS);
     assert_eq!(count, 0, "STOPPED abandons the queued buffers");
     lock(drains()).clear();
-    let mut dst = [7f32; 8];
-    assert!(run_fill(&mut fill, &mut dst, 4));
+    let mut dst = [7f32; 4];
+    assert!(run_fill(&mut fill, &mut dst, 2));
     assert!(dst.iter().all(|&s| s == 0.0), "silence after stop, not stale bytes");
     assert!(lock(drains()).is_empty(), "abandoned buffers never report a drain");
 
@@ -741,26 +748,46 @@ fn player_volume_and_mute_follow_the_spec_curve() {
     install_fakes();
     let (_, player) = realized_player(2);
     let shared = get_player(player).unwrap();
+    let mut fill = player_fill(player);
 
     let mut max = 99;
     assert_eq!(shared.get_max_volume_level(Some(&mut max)), SL_RESULT_SUCCESS);
     assert_eq!(max, 0, "0 millibel = unity gain is the ceiling");
 
-    // -60 dB: 10^(-6000/2000) = 0.001; the round trip returns the millibels.
+    // One full-scale sample to hear through the gain changes. 2 frames of
+    // one channel: 4 bytes of caller PCM.
+    let data = [0xFFu8, 0x7F, 0x00, 0x00]; // samples 32767, 0
+    let mut dst = [0f32; 2];
+
+    // -60 dB: 10^(-6000/2000) = 0.001; the round trip lands within one
+    // millibel because f32 powf then f64 log10 truncates, exactly as the
+    // C++ static_cast did.
     assert_eq!(shared.set_volume_level(-6000), SL_RESULT_SUCCESS);
     let mut level = 0;
     assert_eq!(shared.get_volume_level(Some(&mut level)), SL_RESULT_SUCCESS);
-    assert_eq!(level, -6000);
+    assert!(
+        (-6000..=-5999).contains(&level),
+        "round trip within one millibel: {level}"
+    );
+    // SAFETY: `data` outlives the drain reported within this test.
+    unsafe {
+        assert_eq!(shared.enqueue(data.as_ptr(), 4), SL_RESULT_SUCCESS);
+    }
+    assert!(run_fill(&mut fill, &mut dst, 2));
+    assert!(
+        (dst[0] - 0.001 * 32767.0 / 32768.0).abs() < 1e-5,
+        "-60 dB scaled the sample: {}",
+        dst[0]
+    );
 
     // The floor is silence, and reading it back reports the floor.
     assert_eq!(shared.set_volume_level(SL_MILLIBEL_MIN), SL_RESULT_SUCCESS);
-    let mut volume = [0f32; 4];
-    {
-        let mut fill = player_fill(player);
-        assert!(run_fill(&mut fill, &mut volume, 4));
-        // gain 0: silence whatever the queue held.
-        assert!(volume.iter().all(|&s| s == 0.0));
+    // SAFETY: as above.
+    unsafe {
+        assert_eq!(shared.enqueue(data.as_ptr(), 4), SL_RESULT_SUCCESS);
     }
+    assert!(run_fill(&mut fill, &mut dst, 2));
+    assert!(dst.iter().all(|&s| s == 0.0), "the floor is silence, not a negative gain");
     assert_eq!(shared.get_volume_level(Some(&mut level)), SL_RESULT_SUCCESS);
     assert_eq!(level, SL_MILLIBEL_MIN);
 
@@ -768,20 +795,22 @@ fn player_volume_and_mute_follow_the_spec_curve() {
     assert_eq!(shared.get_volume_level(Some(&mut level)), SL_RESULT_SUCCESS);
     assert_eq!(level, 0);
 
+    // Mute silences the output but the delivery machinery still runs.
     assert_eq!(shared.set_mute(SL_BOOLEAN_TRUE), SL_RESULT_SUCCESS);
     let mut mute = 0;
     assert_eq!(shared.get_mute(Some(&mut mute)), SL_RESULT_SUCCESS);
     assert_eq!(mute, SL_BOOLEAN_TRUE);
-    {
-        let mut fill = player_fill(player);
-        // SAFETY: the buffer is the caller's; enqueue is valid until drained.
-        unsafe {
-            assert_eq!(shared.enqueue(volume.as_mut_ptr() as *const u8, 8), SL_RESULT_SUCCESS);
-        }
-        let mut dst = [1f32; 4];
-        assert!(run_fill(&mut fill, &mut dst, 4));
-        assert!(dst.iter().all(|&s| s == 0.0), "mute silences the output");
+    // SAFETY: as above.
+    unsafe {
+        assert_eq!(shared.enqueue(data.as_ptr(), 4), SL_RESULT_SUCCESS);
     }
+    let mut dst = [1f32; 2];
+    assert!(run_fill(&mut fill, &mut dst, 2));
+    assert!(dst.iter().all(|&s| s == 0.0), "mute silences the output");
+
+    assert_eq!(shared.set_mute(SL_BOOLEAN_FALSE), SL_RESULT_SUCCESS);
+    assert_eq!(shared.get_mute(Some(&mut mute)), SL_RESULT_SUCCESS);
+    assert_eq!(mute, SL_BOOLEAN_FALSE);
 
     // Stereo position is a named feature this backend does not have.
     let mut enabled = SL_BOOLEAN_TRUE;

@@ -1346,6 +1346,9 @@ mod tests {
                 None => i32::MIN,
             }
         };
+        // SAFETY: `audio` is the engine's own interleaved s16 buffer for
+        // `frames` frames, exactly as the data callback contract delivers
+        // it; only its bytes are read here.
         let bytes = unsafe { std::slice::from_raw_parts(audio as *const u8, (frames * 2) as usize) };
         let mut inner = state.inner.lock().unwrap_or_else(|p| p.into_inner());
         inner.calls += 1;
@@ -1429,12 +1432,12 @@ mod tests {
             builder_set_data_callback(
                 builder,
                 Some(receive),
-                Arc::as_ptr(state) as *const CallbackState as *mut c_void,
+                Arc::as_ptr(state) as *mut c_void,
             );
             builder_set_error_callback(
                 builder,
                 Some(receive_error),
-                Arc::as_ptr(state) as *const CallbackState as *mut c_void,
+                Arc::as_ptr(state) as *mut c_void,
             );
         }
         let mut stream = None;

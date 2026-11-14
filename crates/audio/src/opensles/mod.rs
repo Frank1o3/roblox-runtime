@@ -693,11 +693,11 @@ pub fn get_mix(handle: MixHandle) -> Option<Arc<MixObject>> {
     mix_for(handle)
 }
 
-pub(crate) fn get_player(handle: PlayerHandle) -> Option<Arc<player::PlayerShared>> {
+pub fn get_player(handle: PlayerHandle) -> Option<Arc<player::PlayerShared>> {
     player_for(handle)
 }
 
-pub(crate) fn get_recorder(handle: RecorderHandle) -> Option<Arc<recorder::RecorderShared>> {
+pub fn get_recorder(handle: RecorderHandle) -> Option<Arc<recorder::RecorderShared>> {
     recorder_for(handle)
 }
 

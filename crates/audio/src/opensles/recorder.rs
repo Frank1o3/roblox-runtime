@@ -41,7 +41,7 @@ pub type RecorderHandle = usize;
 
 pub type SlBufferQueueCallback = unsafe extern "C" fn(queue: usize, context: *mut c_void);
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RecorderIid {
     Record,
     AndroidSimpleBufferQueue,
@@ -69,7 +69,7 @@ struct RecorderInner {
     frames_recorded: u64,
 }
 
-pub(crate) struct RecorderShared {
+pub struct RecorderShared {
     state: AtomicU32,
     record_state: AtomicU32,
     rate_hz: u32,
@@ -109,7 +109,7 @@ thread_local! {
 }
 
 impl RecorderShared {
-    pub(crate) fn new(rate_hz: u32, channels: u32, num_buffers: u32) -> Arc<Self> {
+    pub fn new(rate_hz: u32, channels: u32, num_buffers: u32) -> Arc<Self> {
         Arc::new(Self {
             state: AtomicU32::new(SL_OBJECT_STATE_UNREALIZED),
             record_state: AtomicU32::new(SL_RECORDSTATE_STOPPED),
@@ -191,7 +191,7 @@ impl RecorderShared {
     /// moment the callback does, so skipping the join costs nothing; the
     /// registry entry goes away immediately, and the pump's own `Arc` keeps
     /// the object alive until the loop exits.
-    pub(crate) fn destroy(self: Arc<Self>) -> SLresult {
+    pub fn destroy(self: Arc<Self>) -> SLresult {
         self.stop_capture();
         self.record_state.store(SL_RECORDSTATE_STOPPED, Ordering::Release);
         self.state.store(SL_OBJECT_STATE_UNREALIZED, Ordering::Release);
@@ -465,8 +465,8 @@ fn run_pump(shared: Arc<RecorderShared>) {
     while shared.pumping.load(Ordering::Acquire) {
         let mut completed = false;
         let mut got = 0usize;
-        let mut callback: Option<SlBufferQueueCallback> = None;
-        let mut context: *mut c_void = std::ptr::null_mut();
+        let callback: Option<SlBufferQueueCallback>;
+        let context: *mut c_void;
         {
             let mut inner = lock(&shared.inner);
             let mut capture = lock(&shared.capture);
@@ -489,9 +489,8 @@ fn run_pump(shared: Arc<RecorderShared>) {
             if completed {
                 inner.pending.pop_front();
             }
-            if shared.bytes_per_frame != 0 {
-                inner.frames_recorded += (got as u32 / shared.bytes_per_frame) as u64;
-            }
+            // A partial frame is not a frame recorded; whole frames only.
+            inner.frames_recorded += (got as u32).checked_div(shared.bytes_per_frame).unwrap_or(0) as u64;
             callback = inner.callback;
             context = inner.context;
         }

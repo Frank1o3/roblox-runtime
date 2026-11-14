@@ -66,7 +66,6 @@ pub fn choose_output_target(requested: &str, available: &[String]) -> (String, b
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::ptr;
 
     fn pb(src: &[u8], ctx: usize) -> PendingBuffer {
         PendingBuffer {
@@ -132,9 +131,8 @@ mod tests {
         let mut drained = Vec::new();
         assert_eq!(fill_pcm(&mut q, &mut dst, &mut drained), 0);
         assert_eq!(dst, [1, 2, 3, 4]);
-        assert_eq!(drained, vec![1usize as *mut c_void, 2usize as *mut c_void]);
+        assert_eq!(drained, vec![pb(&a, 1).context, pb(&b, 2).context]);
         assert!(q.is_empty());
-        let _ = ptr::null::<u8>();
     }
 
     fn sinks(names: &[&str]) -> Vec<String> {
@@ -177,7 +175,7 @@ mod tests {
     #[test]
     fn matching_is_exact_rather_than_by_prefix_or_description() {
         let s = sinks(&["card.HiFi__HDMI1__sink", "card.HiFi__HDMI2__sink"]);
-        assert_eq!(choose_output_target("card.HiFi__HDMI2__sink", &s).1, false);
+        assert!(!choose_output_target("card.HiFi__HDMI2__sink", &s).1);
         assert_eq!(
             choose_output_target("Built-in Audio (HDMI 2)", &s),
             (String::new(), true)

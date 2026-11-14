@@ -36,7 +36,7 @@ pub type PlayerHandle = usize;
 /// will pass) and the caller's registered context.
 pub type SlBufferQueueCallback = unsafe extern "C" fn(queue: usize, context: *mut c_void);
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlayerIid {
     Play,
     AndroidSimpleBufferQueue,
@@ -103,7 +103,7 @@ struct PlayerFillState {
     token: usize,
 }
 
-pub(crate) struct PlayerShared {
+pub struct PlayerShared {
     state: AtomicU32,
     play_state: AtomicU32,
     // Format, captured at create time and used at realize.
@@ -138,7 +138,7 @@ unsafe impl Send for PlayerShared {}
 unsafe impl Sync for PlayerShared {}
 
 impl PlayerShared {
-    pub(crate) fn new(
+    pub fn new(
         rate_hz: u32,
         channels: u32,
         bits_per_sample: u32,
@@ -278,8 +278,13 @@ impl PlayerShared {
     }
 
     /// `Destroy`: stops being pulled, closes the host stream, unregisters.
-    pub(crate) fn destroy(self: Arc<Self>) -> SLresult {
-        lock(&self.output).take();
+    pub fn destroy(self: Arc<Self>) -> SLresult {
+        let mut output = lock(&self.output).take();
+        // Explicit close, not a drop: dropping the box releases the object,
+        // but `close` is the method that actually shuts the device down.
+        if let Some(output) = output.as_mut() {
+            output.close();
+        }
         self.play_state.store(SL_PLAYSTATE_STOPPED, Ordering::Release);
         lock(&self.queue).0.clear();
         self.state.store(SL_OBJECT_STATE_UNREALIZED, Ordering::Release);
@@ -474,7 +479,9 @@ impl PlayerShared {
         // The spec's own curve: millibels are hundredths of a dB, so
         // 10^(mb/2000) is the linear gain. The floor is silence, not a
         // negative gain.
-        let linear = if level <= SL_MILLIBEL_MIN {
+        // `SL_MILLIBEL_MIN` is i16's minimum, so `==` is the whole story:
+        // nothing can be smaller.
+        let linear = if level == SL_MILLIBEL_MIN {
             0.0f32
         } else {
             10.0f32.powf(level as f32 / 2000.0)
@@ -639,7 +646,9 @@ impl PlayerFillState {
 
     fn render(&mut self, dst: &mut [f32], frames: u32) -> bool {
         let frames = frames as usize;
-        let channels = if frames == 0 { 0 } else { dst.len() / frames };
+        // Zero frames is a degenerate call; zero channels keeps the fill a
+        // no-op rather than dividing by it.
+        let channels = dst.len().checked_div(frames).unwrap_or(0);
         let want_bytes = frames * channels * self.container_bytes;
         if self.scratch.len() < want_bytes {
             self.scratch.resize(want_bytes, 0);
