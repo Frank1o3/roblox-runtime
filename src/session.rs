@@ -170,9 +170,9 @@ fn restore_identity(engine: &crate::LoadedEngine, session_dir: &Path) -> Result<
         identity.has_roblox_subscription,
     );
     // The app-start parameters and NativeUserJavaInterface read the runtime's
-    // mirrors, but Roblox also keeps its own user id. Cordial measured that
-    // leaving this copy empty still routed a cookie-authenticated profile to
-    // Landing. Restore it after app-bridge init and before StartAppParams is
+    // mirrors, but Roblox also keeps its own user id. Leaving this copy empty
+    // still routed a cookie-authenticated profile to Landing, so it is
+    // restored here: after app-bridge init and before StartAppParams is
     // built, which is the point at which this function is called.
     let native = engine
         .symbol("Java_com_roblox_engine_jni_NativeSettingsInterface_nativeSetUserId")
