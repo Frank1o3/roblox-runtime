@@ -31,6 +31,8 @@ const PT_LOAD: u32 = 1;
 
 const PT_DYNAMIC: u32 = 2;
 
+const PT_PHDR: u32 = 6;
+
 const PT_TLS: u32 = 7;
 
 const PT_GNU_RELRO: u32 = 0x6474_e552;
@@ -209,6 +211,8 @@ pub struct LoadSegment {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TlsSegment {
+    pub offset: u64,
+
     pub vaddr: u64,
 
     pub file_size: u64,
@@ -304,6 +308,10 @@ pub struct ElfImage<'a> {
     pub dyn_info: DynInfo,
 
     pub dynsyms: Vec<DynSym>,
+
+    pub phdr_vaddr: u64,
+
+    pub phnum: u16,
 }
 
 fn read_u16(bytes: &[u8], off: usize) -> Result<u16, ElfError> {
@@ -382,6 +390,7 @@ impl<'a> ElfImage<'a> {
         let mut dynamic = None;
         let mut tls = None;
         let mut relro = None;
+        let mut phdr_vaddr = None;
 
         for i in 0..e_phnum {
             let ph = e_phoff
@@ -403,6 +412,7 @@ impl<'a> ElfImage<'a> {
             let p_align = read_u64(bytes, ph + 48)?;
 
             match p_type {
+                PT_PHDR => phdr_vaddr = Some(p_vaddr),
                 PT_LOAD => loads.push(LoadSegment {
                     file_offset: p_offset,
                     vaddr: p_vaddr,
@@ -414,6 +424,7 @@ impl<'a> ElfImage<'a> {
                 PT_DYNAMIC => dynamic = Some((p_vaddr, p_filesz)),
                 PT_TLS => {
                     tls = Some(TlsSegment {
+                        offset: p_offset,
                         vaddr: p_vaddr,
                         file_size: p_filesz,
                         mem_size: p_memsz,
@@ -430,6 +441,15 @@ impl<'a> ElfImage<'a> {
             }
         }
 
+        let phdr_vaddr = phdr_vaddr.unwrap_or_else(|| {
+            if let Some(first) = loads.first() {
+                if first.file_offset == 0 {
+                    return first.vaddr + e_phoff as u64;
+                }
+            }
+            e_phoff as u64
+        });
+
         let mut img = ElfImage {
             bytes,
             abi,
@@ -439,6 +459,8 @@ impl<'a> ElfImage<'a> {
             relro,
             dyn_info: DynInfo::default(),
             dynsyms: Vec::new(),
+            phdr_vaddr,
+            phnum: e_phnum as u16,
         };
 
         if let Some((dyn_vaddr, dyn_size)) = img.dynamic {

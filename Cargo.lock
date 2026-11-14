@@ -283,6 +283,7 @@ name = "roblox-linker"
 version = "0.1.2"
 dependencies = [
  "libc",
+ "roblox-logging",
  "rustix",
 ]
 

@@ -273,6 +273,20 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
         "()Lcom/roblox/client/startup/NativeHelper;",
         invalid_get_native_helper,
     )?;
+    install_instance_builtin(
+        vm,
+        invalid,
+        "run",
+        "(Ljava/lang/String;Ljava/lang/String;)V",
+        reporter_noop,
+    )?;
+    install_instance_builtin(
+        vm,
+        invalid,
+        "run",
+        "(Ljava/lang/String;)V",
+        reporter_noop,
+    )?;
     install_instance_builtin(vm, invalid, "bootstrapTheApp", "()V", invalid_bootstrap)?;
 
     // GameActivity is the object the runtime supplies to
@@ -530,6 +544,39 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
         ("restartInput", "()V"),
     ] {
         register_unhandled_instance(vm, input_connection, name, descriptor)?;
+    }
+    let input_connection_bare = vm.register_class("InputConnection")
+        .map_err(|error| error.to_string())?;
+    for (name, descriptor) in [
+        ("setState", "(Lcom/google/androidgamesdk/gametextinput/State;)V"),
+        ("setSoftKeyboardActive", "(ZI)V"),
+        ("restartInput", "()V"),
+    ] {
+        register_unhandled_instance(vm, input_connection_bare, name, descriptor)?;
+    }
+
+    let message_bus = vm.register_class("com/roblox/universalapp/messagebus/MessageBus")
+        .map_err(|error| error.to_string())?;
+    for (name, descriptor) in [
+        ("getMessageId", "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;"),
+        ("subscribeRaw", "(Ljava/lang/String;Lcom/roblox/universalapp/messagebus/RawCallback;)V"),
+        ("setRequestHandlerAsyncRaw", "(Ljava/lang/String;Ljava/lang/String;Lcom/roblox/universalapp/messagebus/RequestHandlerAsyncRaw;)V"),
+        ("callResponseHandlerRaw", "(Ljava/lang/String;Ljava/lang/String;)V"),
+        ("publishProtocolMethodResponseRaw", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;)V"),
+    ] {
+        register_unhandled_static(vm, message_bus, name, descriptor)?;
+    }
+
+    let raw_callback = vm.register_class("com/roblox/universalapp/messagebus/RawCallback")
+        .map_err(|error| error.to_string())?;
+    register_unhandled_instance(vm, raw_callback, "run", "(Ljava/lang/String;)V")?;
+
+    for name in [
+        "com/roblox/universalapp/messagebus/RequestHandlerAsyncRaw",
+        "RequestHandlerAsyncRaw",
+    ] {
+        let async_raw = vm.register_class(name).map_err(|error| error.to_string())?;
+        register_unhandled_instance(vm, async_raw, "run", "(Ljava/lang/String;Ljava/lang/String;)V")?;
     }
 
     // AGDK resolves these accessors while registering GameActivity, before it
@@ -1347,6 +1394,12 @@ fn install_instance_builtin(
 
 fn register_unhandled_instance(vm: &Vm, class: crate::ClassId, name: &str, descriptor: &str) -> Result<(), String> {
     vm.register_method(class, name, descriptor, false)
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
+fn register_unhandled_static(vm: &Vm, class: crate::ClassId, name: &str, descriptor: &str) -> Result<(), String> {
+    vm.register_method(class, name, descriptor, true)
         .map(|_| ())
         .map_err(|error| error.to_string())
 }

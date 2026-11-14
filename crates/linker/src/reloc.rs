@@ -1,4 +1,4 @@
-#![forbid(unsafe_code)]
+#![allow(unsafe_code)]
 
 use std::fmt;
 
@@ -279,7 +279,23 @@ pub fn apply_one(
                 .wrapping_add(sym_tls)
                 .wrapping_add(rela.addend as u64)
         }
-        kind @ (RelocKind::None | RelocKind::IRelative | RelocKind::Unsupported(_)) => {
+        RelocKind::IRelative => {
+            let resolver_addr = base.wrapping_add(rela.addend as u64);
+            let target_addr: u64 = unsafe {
+                #[cfg(target_arch = "x86_64")]
+                {
+                    let resolver: unsafe extern "C" fn() -> u64 =
+                        std::mem::transmute(resolver_addr as usize);
+                    resolver()
+                }
+                #[cfg(not(target_arch = "x86_64"))]
+                {
+                    resolver_addr
+                }
+            };
+            target_addr
+        }
+        kind @ (RelocKind::None | RelocKind::Unsupported(_)) => {
             return Err(RelocError::UnsupportedType {
                 abi: image.abi(),
                 kind,

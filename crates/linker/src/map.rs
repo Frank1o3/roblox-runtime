@@ -3,7 +3,7 @@ use std::ptr::NonNull;
 use std::time::{Duration, Instant};
 
 use rustix::mm::{
-    Advice, MapFlags, MprotectFlags, ProtFlags, madvise, mmap_anonymous, mprotect, munmap,
+    Advice, MapFlags, MprotectFlags, ProtFlags, madvise, mmap_anonymous, mprotect,
 };
 
 use super::elf::{ElfError, ElfImage, LoadSegment, PF_R, PF_W, PF_X, RelroSegment};
@@ -119,6 +119,10 @@ pub struct SymbolRelocStats {
 
     pub abs64_applied: usize,
 
+    pub tpoff64_applied: usize,
+
+    pub irelative_applied: usize,
+
     pub resolved_nonnull: usize,
 
     pub deferred: usize,
@@ -126,7 +130,11 @@ pub struct SymbolRelocStats {
 
 impl SymbolRelocStats {
     pub fn total_applied(&self) -> usize {
-        self.glob_dat_applied + self.jump_slot_applied + self.abs64_applied
+        self.glob_dat_applied
+            + self.jump_slot_applied
+            + self.abs64_applied
+            + self.tpoff64_applied
+            + self.irelative_applied
     }
 }
 
@@ -327,10 +335,10 @@ impl MappedObject {
         Ok((obj, stats))
     }
 
-    pub fn relocate_symbols(
+    pub fn relocate_symbols<R: SymbolResolver>(
         &mut self,
         img: &ElfImage<'_>,
-        scope: &Scope,
+        resolver: &R,
         page_size: u64,
     ) -> Result<SymbolRelocStats, MapError> {
         let relas = img
@@ -355,7 +363,14 @@ impl MappedObject {
                     stats.abs64_applied += 1;
                     symbol_relas.push(*r);
                 }
-                RelocKind::TpOff64 | RelocKind::IRelative => stats.deferred += 1,
+                RelocKind::TpOff64 => {
+                    stats.tpoff64_applied += 1;
+                    symbol_relas.push(*r);
+                }
+                RelocKind::IRelative => {
+                    stats.irelative_applied += 1;
+                    symbol_relas.push(*r);
+                }
 
                 RelocKind::None | RelocKind::Relative => {}
 
@@ -369,18 +384,18 @@ impl MappedObject {
             }
         }
 
-        let resolver = ScopedResolver::new(scope, &img.dynsyms);
         let load_base = self.load_base();
         let tls_off = self.static_tls_offset;
 
         for seg in &img.loads {
-            self.mprotect_segment_pages(seg, page_size, ProtFlags::READ | ProtFlags::WRITE)?;
+            let prot = prot_of(seg.flags) | ProtFlags::READ | ProtFlags::WRITE;
+            self.mprotect_segment_pages(seg, page_size, prot)?;
         }
 
         let resolved_nonnull = {
             let bytes = unsafe { self.image_bytes() };
             let mut image = reloc::SliceImage::new(img.abi, load_base, tls_off, bytes);
-            reloc::apply_rela(&mut image, &resolver, &symbol_relas)?;
+            reloc::apply_rela(&mut image, resolver, &symbol_relas)?;
 
             let mut nonnull = 0usize;
             for r in &symbol_relas {
@@ -689,7 +704,11 @@ impl MappedObject {
 
 impl Drop for MappedObject {
     fn drop(&mut self) {
-        let _ = unsafe { munmap(self.base.as_ptr().cast(), self.span) };
+        // Shared libraries like libroblox.so spawn native worker and render
+        // threads that are not stopped before the host drops the engine.
+        // Calling munmap here would unmap code segments while background threads
+        // are still executing, causing SIGSEGV or hangs in crash handlers.
+        // The OS kernel reclaims the virtual memory when the process terminates.
     }
 }
 

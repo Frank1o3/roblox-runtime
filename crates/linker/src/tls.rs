@@ -193,6 +193,12 @@ impl<R: SymbolResolver> SymbolResolver for TlsResolver<'_, R> {
         }
         let sym = self.dynsyms.get(sym_index as usize)?;
 
-        self.layout.tp_offset_of(&sym.name).map(|v| v as u64)
+        self.layout
+            .tp_offset_of(&sym.name)
+            .map(|v| v as u64)
+            .or_else(|| {
+                self.own_tp_offset
+                    .map(|tp| tp.wrapping_add(sym.value as i64) as u64)
+            })
     }
 }

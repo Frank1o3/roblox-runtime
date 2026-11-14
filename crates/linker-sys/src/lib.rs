@@ -51,6 +51,20 @@ mod ffi {
 pub const RTLD_NOW: c_int = 2;
 pub const RTLD_LAZY: c_int = 1;
 
+/// Look up a symbol from the runtime process's default symbol search space (RTLD_DEFAULT),
+/// falling back to host libc.so.6.
+pub fn runtime_symbol(symbol: &str) -> Option<*mut c_void> {
+    let name = CString::new(symbol).ok()?;
+    // SAFETY: std::ptr::null_mut() corresponds to RTLD_DEFAULT on glibc/Linux,
+    // searching the global symbol scope of the running process.
+    let address = unsafe { host_ffi::dlsym(std::ptr::null_mut(), name.as_ptr()) };
+    if !address.is_null() {
+        Some(address)
+    } else {
+        host_symbol("libc.so.6", symbol)
+    }
+}
+
 /// Look up a symbol in one explicitly selected host library.
 ///
 /// The loader handle remains open for the process lifetime because registered

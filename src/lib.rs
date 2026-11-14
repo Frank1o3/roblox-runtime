@@ -332,6 +332,13 @@ impl RuntimeConfig {
             .is_ok_and(|value| matches!(value.trim().to_ascii_lowercase().as_str(), "true" | "1"));
         let library = if use_rust_linker {
             eprintln!("[runtime] using experimental Rust ELF linker");
+            roblox_linker::set_search_dir(&self.native_lib_dir);
+            for (lib_name, syms) in &tables.libraries {
+                roblox_linker::register_library(
+                    lib_name,
+                    syms.iter().map(|(n, a)| (n.clone(), *a as usize)).collect(),
+                );
+            }
             let mut external_symbols = tables
                 .libraries
                 .into_values()
@@ -342,6 +349,22 @@ impl RuntimeConfig {
                 external_symbols
                     .entry("vkGetInstanceProcAddr".to_owned())
                     .or_insert(address as usize);
+                let vulkan_syms: std::collections::BTreeMap<_, _> = [("vkGetInstanceProcAddr".to_owned(), address as usize)]
+                    .into_iter()
+                    .collect();
+                for name in roblox_graphics_vulkan::LIBRARY_NAMES {
+                    roblox_linker::register_library(name, vulkan_syms.clone());
+                }
+            }
+            if roblox_abi::bionic::aaudio_selected() {
+                let aaudio: std::collections::BTreeMap<_, _> = roblox_abi::bionic::aaudio_overrides()
+                    .into_iter()
+                    .map(|(name, address)| (name.to_owned(), address as usize))
+                    .collect();
+                for (name, addr) in &aaudio {
+                    external_symbols.insert(name.clone(), *addr);
+                }
+                roblox_linker::register_library("libaaudio.so", aaudio);
             }
             EngineLibrary::Rust(
                 roblox_linker::MappedLibrary::load(&library_path, &external_symbols)

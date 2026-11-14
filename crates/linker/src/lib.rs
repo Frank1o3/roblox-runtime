@@ -2,29 +2,53 @@
 //!
 //! The loader maps the requested object and any `DT_NEEDED` objects found
 //! beside it, applies base and symbol relocations, and defers constructors
-//! until the embedding runtime has prepared Android services. It remains
-//! opt-in because TLS, IFUNC, and Android `dlopen` / `dlsym` are not implemented.
+//! until the embedding runtime has prepared Android services.
 
 #![allow(unsafe_code)]
+
+macro_rules! eprintln {
+    () => {{
+        roblox_logging::emit(String::new());
+    }};
+    ($($arg:tt)*) => {{
+        roblox_logging::emit(format!($($arg)*));
+    }};
+}
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt;
 use std::path::{Path, PathBuf};
 
 mod abi;
+pub mod dl;
 pub mod elf;
 #[allow(dead_code)]
 mod map;
 #[allow(dead_code)]
 mod reloc;
 mod resolve;
+pub mod stub;
 #[allow(dead_code)]
 mod tls;
+
+pub use dl::{linker_symbols, register_library, set_search_dir};
+
+use std::ffi::CString;
+
+pub fn resolve_runtime_libc(name: &str) -> Option<usize> {
+    let c_name = CString::new(name).ok()?;
+    let addr = unsafe { libc::dlsym(libc::RTLD_DEFAULT, c_name.as_ptr()) };
+    if !addr.is_null() {
+        Some(addr as usize)
+    } else {
+        None
+    }
+}
 
 use abi::Abi;
 use elf::{DynSym, ElfImage, PF_X};
 use map::{MappedObject, host_page_size};
-use reloc::{RelocKind, SymbolResolver};
+use reloc::SymbolResolver;
 use resolve::{AddressProvider, ObjectProvider, Scope, ScopedResolver};
 
 struct LoadedObject {
@@ -66,6 +90,8 @@ impl MappedLibrary {
     ) -> Result<Self, Error> {
         let root_path = path.as_ref().to_path_buf();
         let search_dir = root_path.parent().unwrap_or_else(|| Path::new("."));
+        dl::set_search_dir(search_dir);
+        dl::register_global_symbols(external_symbols);
         let mut queue = VecDeque::from([root_path.clone()]);
         let mut queued = BTreeSet::from([root_path.clone()]);
         let mut loaded_sonames = BTreeSet::new();
@@ -129,6 +155,18 @@ impl MappedLibrary {
         // The requested root is always queued before its dependencies.
         let root = 0;
 
+        let mut tls_layout = tls::TlsLayout::new();
+        let mut tls_modules = Vec::new();
+        for (idx, object) in objects.iter().enumerate() {
+            let image = ElfImage::parse(&object.bytes).map_err(|e| Error::Elf(e.to_string()))?;
+            if let Some(ref tls) = image.tls {
+                let module = tls_layout
+                    .add_module(tls, &object.bytes, tls.offset, &image.dynsyms)
+                    .map_err(|_e| Error::InvalidImage("invalid TLS layout"))?;
+                tls_modules.push((idx, module.tp_offset));
+            }
+        }
+
         let mut scope = Scope::new();
         for object in &objects {
             let image = ElfImage::parse(&object.bytes).map_err(|e| Error::Elf(e.to_string()))?;
@@ -137,34 +175,68 @@ impl MappedLibrary {
                 &image.dynsyms,
             )));
         }
+
+        let mut all_external = external_symbols.clone();
+        for (name, addr) in dl::linker_symbols() {
+            all_external.entry(name).or_insert(addr);
+        }
+
         scope.push(Box::new(AddressProvider(
-            external_symbols
+            all_external
                 .iter()
                 .map(|(name, &address)| (name.clone(), address as u64))
                 .collect(),
         )));
 
-        for object in &mut objects {
+        // Detect any unresolvable symbols, log them by type, and create placeholders
+        let mut placeholders: BTreeMap<String, u64> = BTreeMap::new();
+        for object in &objects {
             let image = ElfImage::parse(&object.bytes).map_err(|e| Error::Elf(e.to_string()))?;
             let relas = image.relocations().map_err(|e| Error::Elf(e.to_string()))?;
             let resolver = ScopedResolver::new(&scope, &image.dynsyms);
-            let mut unresolved = BTreeSet::new();
             for relocation in relas.iter().filter(|r| r.kind.writes_symbol_address()) {
                 if resolver.resolve_symbol(relocation.sym_index).is_none() {
                     if let Some(symbol) = image.dynsyms.get(relocation.sym_index as usize) {
-                        unresolved.insert(symbol.name.clone());
+                        if !symbol.name.is_empty() && !placeholders.contains_key(&symbol.name) {
+                            if let Some(libc_addr) = resolve_runtime_libc(&symbol.name) {
+                                placeholders.insert(symbol.name.clone(), libc_addr as u64);
+                                continue;
+                            }
+                            let kind_str = match symbol.sym_type {
+                                1 => "variable",
+                                2 | 10 => "function",
+                                6 => "thread-local variable",
+                                _ => "symbol",
+                            };
+                            eprintln!(
+                                "[linker] unimplemented {kind_str}: {} (object: {}); creating placeholder",
+                                symbol.name, object.soname
+                            );
+                            let placeholder_addr = match symbol.sym_type {
+                                1 => stub::get_or_create_variable_placeholder(&symbol.name),
+                                _ => stub::get_or_create_function_stub(&symbol.name),
+                            };
+                            placeholders.insert(symbol.name.clone(), placeholder_addr as u64);
+                        }
                     }
                 }
             }
-            if !unresolved.is_empty() {
-                return Err(Error::UnresolvedSymbols {
-                    object: object.soname.clone(),
-                    names: unresolved.into_iter().collect(),
-                });
-            }
+        }
+        if !placeholders.is_empty() {
+            scope.push(Box::new(AddressProvider(placeholders)));
+        }
+
+        for (idx, object) in objects.iter_mut().enumerate() {
+            let image = ElfImage::parse(&object.bytes).map_err(|e| Error::Elf(e.to_string()))?;
+            let scoped_resolver = ScopedResolver::new(&scope, &image.dynsyms);
+            let own_tp = tls_modules
+                .iter()
+                .find(|(i, _)| *i == idx)
+                .map(|(_, tp)| *tp);
+            let resolver = tls::TlsResolver::new(&scoped_resolver, &image.dynsyms, &tls_layout, own_tp);
             object
                 .mapped
-                .relocate_symbols(&image, &scope, host_page_size())
+                .relocate_symbols(&image, &resolver, host_page_size())
                 .map_err(|e| Error::Map(format!("{}: {e}", object.soname)))?;
         }
 
@@ -178,6 +250,15 @@ impl MappedLibrary {
             }
             object.symbols = exported_symbols(object.base, &image.dynsyms);
             object.constructors = constructor_addresses(&image, &object.mapped, object.base)?;
+
+            dl::register_mapped_object(
+                object.soname.clone(),
+                object.base,
+                object.mapped.span(),
+                object.symbols.clone(),
+                image.phdr_vaddr,
+                image.phnum,
+            );
         }
 
         Ok(Self {
@@ -226,17 +307,7 @@ impl MappedLibrary {
     }
 }
 
-fn ensure_supported(image: &ElfImage<'_>) -> Result<(), Error> {
-    if image.tls.is_some() {
-        return Err(Error::Unsupported("PT_TLS / static TLS"));
-    }
-    let relas = image.relocations().map_err(|e| Error::Elf(e.to_string()))?;
-    if relas.iter().any(|r| r.kind == RelocKind::TpOff64) {
-        return Err(Error::Unsupported("TPOFF64 relocations"));
-    }
-    if relas.iter().any(|r| r.kind == RelocKind::IRelative) {
-        return Err(Error::Unsupported("IRELATIVE relocations"));
-    }
+fn ensure_supported(_image: &ElfImage<'_>) -> Result<(), Error> {
     Ok(())
 }
 

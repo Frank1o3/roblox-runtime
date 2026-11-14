@@ -90,6 +90,10 @@ fn host_candidates(library: &str) -> &'static [(&'static str, &'static str)] {
     }
 }
 
+fn runtime_libc_symbol(symbol: &str) -> Option<*mut c_void> {
+    roblox_linker_sys::runtime_symbol(symbol)
+}
+
 fn host_address(library: &str, symbol: &str) -> Option<(&'static str, *mut c_void)> {
     let registered = host_candidates(library)
         .iter()
@@ -105,119 +109,293 @@ fn host_address(library: &str, symbol: &str) -> Option<(&'static str, *mut c_voi
     // explicit: resolving every libc import from glibc would silently cross
     // incompatible structures such as bionic's `stat` and `sigaction`.
     const HOST_LIBC_COMPATIBLE: &[&str] = &[
+        // String and memory
+        "__memcpy_chk",
+        "__memmove_chk",
+        "__memset_chk",
+        "__strcat_chk",
+        "__strcpy_chk",
+        "memchr",
+        "memcmp",
+        "memcpy",
+        "memmove",
+        "memrchr",
+        "memset",
+        "strcasecmp",
+        "strcat",
+        "strchr",
+        "strcmp",
+        "strcoll",
+        "strcoll_l",
+        "strcpy",
+        "strcspn",
+        "strdup",
+        "strerror",
+        "strerror_r",
+        "strlen",
+        "strncasecmp",
+        "strncat",
+        "strncmp",
+        "strncpy",
+        "strndup",
+        "strnlen",
+        "strpbrk",
+        "strrchr",
+        "strsignal",
+        "strspn",
+        "strstr",
+        "strtod",
+        "strtod_l",
+        "strtof",
+        "strtold",
+        "strtold_l",
+        "strtoll",
+        "strtoll_l",
+        "strtoul",
+        "strtoull",
+        "strtoull_l",
+        "strxfrm",
+        "strxfrm_l",
+        // Character & locale & wide chars
+        "atoi",
+        "atol",
+        "atoll",
+        "atof",
+        "btowc",
+        "freelocale",
+        "isalnum",
+        "isalpha",
+        "isblank",
+        "iscntrl",
+        "isdigit",
+        "isdigit_l",
+        "isgraph",
+        "islower",
+        "islower_l",
+        "isprint",
+        "ispunct",
+        "isspace",
+        "isupper",
+        "isupper_l",
+        "iswalnum",
+        "iswalpha",
+        "iswalpha_l",
+        "iswblank",
+        "iswblank_l",
+        "iswcntrl",
+        "iswcntrl_l",
+        "iswctype",
+        "iswdigit",
+        "iswdigit_l",
+        "iswgraph",
+        "iswlower",
+        "iswlower_l",
+        "iswprint",
+        "iswprint_l",
+        "iswpunct",
+        "iswpunct_l",
+        "iswspace",
+        "iswspace_l",
+        "iswupper",
+        "iswupper_l",
+        "iswxdigit",
+        "iswxdigit_l",
+        "isxdigit",
+        "isxdigit_l",
+        "localeconv",
+        "mbrlen",
+        "mbrtowc",
+        "mbsnrtowcs",
+        "mbsrtowcs",
+        "mbtowc",
+        "newlocale",
+        "nl_langinfo",
+        "nl_langinfo_l",
+        "swprintf",
+        "tolower",
+        "tolower_l",
+        "toupper",
+        "toupper_l",
+        "towlower",
+        "towlower_l",
+        "towupper",
+        "towupper_l",
+        "uselocale",
+        "wcrtomb",
+        "wcscat",
+        "wcschr",
+        "wcscmp",
+        "wcscoll_l",
+        "wcscpy",
+        "wcslen",
+        "wcsncat",
+        "wcsncmp",
+        "wcsncpy",
+        "wcsnrtombs",
+        "wcsrchr",
+        "wcsrtombs",
+        "wcstod",
+        "wcstof",
+        "wcstol",
+        "wcstold",
+        "wcstoll",
+        "wcstoul",
+        "wcstoull",
+        "wcsxfrm_l",
+        "wctob",
+        "wmemchr",
+        "wmemcmp",
+        "wmemcpy",
+        "wmemmove",
+        "wmemset",
+        // General libc / runtime
         "__cxa_atexit",
         "__ctype_get_mb_cur_max",
         "arc4random_buf",
-        "atoi",
+        "bsearch",
         "clock",
         "closedir",
-        // Descriptor close has the same integer argument and result.
         "close",
-        // On the supported 64-bit Linux hosts, clockid_t and the two-long
-        // timespec layout match bionic. Engine constructors require this
-        // before JNI_OnLoad, so keep it available without broad libc fallback.
         "clock_gettime",
-        // Same scalar/pointer layouts in bionic and glibc. These are data
-        // symbols (not calls); leaving them as function stubs corrupts native
-        // constructor state when Roblox reads the variables directly.
         "daylight",
-        // Both libcs expose `environ` as a pointer to a null-terminated array
-        // of `char *`. This is a data symbol; resolving it to the generated
-        // function stub makes Android code read the stub address as envp.
+        "dirfd",
+        "dup",
+        "dup2",
         "environ",
         "eventfd",
         "feof",
+        "ferror",
+        "fflush",
+        "fgetc",
+        "fgetpos",
         "fgets",
         "fileno",
+        "fputc",
+        "fputs",
+        "fread",
+        "free",
+        "freeaddrinfo",
         "fscanf",
         "fseeko",
-        "ftello",
+        "fsetpos",
         "fstat",
+        "fsync",
+        "ftello",
+        "ftruncate",
+        "fwrite",
+        "getaddrinfo",
         "getauxval",
         "getcwd",
+        "getegid",
         "getenv",
-        "getpid",
+        "geteuid",
+        "getgid",
         "getpagesize",
+        "getpeername",
+        "getpid",
+        "getppid",
+        "getsockname",
+        "getsockopt",
+        "gettid",
+        "gettimeofday",
+        "getuid",
         "gmtime",
         "gmtime_r",
+        "if_indextoname",
+        "if_nametoindex",
         "in6addr_any",
         "in6addr_loopback",
-        "mbtowc",
-        // Linux VM calls use the same pointer, size, protection, flag, fd and
-        // 64-bit offset ABI in bionic and glibc. Roblox's allocator uses these
-        // during static initialization; a zero-returning stub looks like an
-        // allocation failure and makes its constructor abort.
+        "inet_ntop",
+        "inet_pton",
+        "localtime_r",
         "madvise",
+        "malloc",
+        "mkdir",
+        "mktime",
+        "mlock",
         "mmap",
         "mmap64",
         "mprotect",
+        "mremap",
+        "msync",
         "munmap",
-        "memchr",
-        "memcpy",
-        "memcmp",
-        "memmove",
-        "memset",
-        "newlocale",
+        "nanosleep",
+        "openat",
+        "opendir",
         "optarg",
         "opterr",
         "optind",
         "optopt",
-        // File-descriptor I/O has the same scalar and pointer ABI in both
-        // libcs. Path policy is applied when the descriptor is opened.
-        "read",
+        "pipe",
+        "pipe2",
+        "poll",
+        "posix_fallocate",
+        "posix_memalign",
+        "prctl",
+        "pread",
+        "pread64",
+        "pwrite",
+        "pwrite64",
+        "qsort",
         "rand",
-        "sched_getcpu",
+        "random",
+        "read",
+        "readdir",
+        "readlink",
+        "realloc",
+        "recv",
+        "recvfrom",
+        "recvmmsg",
+        "recvmsg",
+        "rmdir",
         "sched_get_priority_max",
+        "sched_get_priority_min",
+        "sched_getaffinity",
+        "sched_getcpu",
+        "sched_getparam",
+        "sched_getscheduler",
+        "sched_setaffinity",
         "sched_setscheduler",
         "sched_yield",
-        "socket",
-        "strcasecmp",
-        "strchr",
-        "strcpy",
-        "strerror",
-        "strncpy",
-        "strncasecmp",
-        "strncmp",
-        "strnlen",
-        "strstr",
-        "strtoll",
+        "send",
+        "sendmmsg",
+        "sendmsg",
+        "sendto",
+        "setsockopt",
+        "shutdown",
+        "sleep",
         "snprintf",
-        "strlen",
-        "vsnprintf",
-        "pipe",
-        "fcntl",
-        "epoll_create1",
-        "epoll_ctl",
-        "mktime",
-        "pread",
-        "posix_fallocate",
-        "readdir",
-        "srand",
-        "write",
-        "clearerr",
-        "qsort",
-        "strftime",
-        "strftime_l",
-        "strrchr",
-        "strtoull_l",
-        "localtime_r",
-        "timerfd_create",
-        "poll",
-        "strtod",
+        "socket",
+        "socketpair",
+        "sprintf",
         "sscanf",
-        "localeconv",
-        "__memcpy_chk",
-        // Linux's kernel sysinfo layout is the same in bionic and glibc on
-        // the 64-bit host, and the call only reads system resource totals.
-        "sysinfo",
-        "syscall",
-        "strcmp",
-        "timezone",
-        "tzname",
+        "stderr",
         "stdin",
         "stdout",
-        "stderr",
-        "uselocale",
+        "strftime",
+        "strftime_l",
+        "syscall",
+        "sysinfo",
+        "timerfd_create",
+        "timerfd_gettime",
+        "timerfd_settime",
+        "timezone",
+        "tzname",
+        "tzset",
+        "unlink",
+        "usleep",
+        "vsnprintf",
+        "vsprintf",
+        "write",
+        "epoll_create",
+        "epoll_create1",
+        "epoll_ctl",
+        "epoll_pwait",
+        "epoll_wait",
+        "fchmod",
+        "fchown",
+        "chown",
+        "fcntl",
     ];
     let host_pthread_compatible = cfg!(target_arch = "x86_64")
         && matches!(
@@ -256,9 +434,12 @@ fn host_address(library: &str, symbol: &str) -> Option<(&'static str, *mut c_voi
                 | "pthread_rwlock_trywrlock"
                 | "pthread_rwlock_timedwrlock"
                 | "pthread_rwlock_unlock"
+                | "pthread_detach"
+                | "pthread_equal"
+                | "pthread_sigmask"
         );
     if library == "libc.so" && (HOST_LIBC_COMPATIBLE.contains(&symbol) || host_pthread_compatible) {
-        return roblox_linker_sys::host_symbol("libc.so.6", symbol)
+        return runtime_libc_symbol(symbol)
             .map(|address| ("libc.so", address));
     }
     None
@@ -266,6 +447,9 @@ fn host_address(library: &str, symbol: &str) -> Option<(&'static str, *mut c_voi
 
 pub(crate) fn build(imports: &roblox_linker_sys::elf::Imports, host_libc: bool) -> SymbolTables {
     let mut result = SymbolTables::default();
+    let use_rust_linker = std::env::var("USE_EXPERIMENTAL_RUST_LINKER")
+        .is_ok_and(|value| matches!(value.trim().to_ascii_lowercase().as_str(), "true" | "1"));
+    let allow_libc_fallback = host_libc || use_rust_linker;
     let overrides: BTreeMap<&str, *mut c_void> = roblox_abi::bionic::function_overrides()
         .into_iter()
         .chain(roblox_abi::bionic::data_overrides())
@@ -281,8 +465,8 @@ pub(crate) fn build(imports: &roblox_linker_sys::elf::Imports, host_libc: bool) 
         }
         let library = library_for(name);
         let host = host_address(library, name).or_else(|| {
-            (host_libc && library == "libc.so")
-                .then(|| roblox_linker_sys::host_symbol("libc.so.6", name))
+            (allow_libc_fallback && library == "libc.so")
+                .then(|| runtime_libc_symbol(name))
                 .flatten()
                 .map(|address| ("libc.so", address))
         });
@@ -311,8 +495,8 @@ pub(crate) fn build(imports: &roblox_linker_sys::elf::Imports, host_libc: bool) 
         }
         let library = library_for(name);
         let host = host_address(library, name).or_else(|| {
-            (host_libc && library == "libc.so")
-                .then(|| roblox_linker_sys::host_symbol("libc.so.6", name))
+            (allow_libc_fallback && library == "libc.so")
+                .then(|| runtime_libc_symbol(name))
                 .flatten()
                 .map(|address| ("libc.so", address))
         });
@@ -462,5 +646,39 @@ mod tests {
                 .iter()
                 .any(|(name, address)| name == "stat" && !address.is_null())
         );
+    }
+
+    #[test]
+    fn runtime_libc_resolves_standard_functions_without_host_libc() {
+        let symbol_names = [
+            "strcspn",
+            "strtoul",
+            "strtoull",
+            "strtof",
+            "pthread_detach",
+            "timerfd_settime",
+            "epoll_wait",
+            "pwrite",
+            "geteuid",
+            "fchown",
+            "freelocale",
+            "mbrtowc",
+            "mbsrtowcs",
+        ];
+        let imports: BTreeMap<String, Binding> = symbol_names
+            .iter()
+            .map(|&name| (name.to_owned(), Binding::Strong))
+            .collect();
+        let tables = build(&imports, false);
+        for name in symbol_names {
+            let host = roblox_linker_sys::runtime_symbol(name)
+                .unwrap_or_else(|| panic!("runtime libc must export {name}"));
+            assert!(
+                tables.libraries["libc.so"]
+                    .iter()
+                    .any(|(registered, address)| registered == name && *address == host),
+                "{name} must resolve to runtime libc without host_libc"
+            );
+        }
     }
 }
