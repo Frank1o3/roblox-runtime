@@ -1,15 +1,31 @@
-//! Host audio backend interfaces (PipeWire, PulseAudio, ALSA, fallback).
-pub mod pcm;
+//! Host audio backend interfaces.
+//!
+//! Backend selection lives in [`host`]: the cpal-probe selector (a host counts
+//! only if it constructs and has a default output device, because
+//! `supportsAAudio()` is a one-way door). The one-implementation-per-need rule:
+//! PipeWire, PulseAudio and ALSA are all served by [`cpal_output`]; OSS keeps
+//! its own libc implementation in [`oss`].
+pub mod capture;
+pub mod cpal_output;
+pub mod host;
 pub mod oss;
 pub mod output;
+pub mod pcm;
+
+pub use host::{effective_backend_name, host_backend_available, host_backend_name, make_output_stream};
 
 use std::collections::HashSet;
 use std::sync::atomic::AtomicBool;
 
 use cpal::traits::{DeviceTrait, HostTrait};
 
+/// Set by the voice-mute path (`AppRtcDeviceWrapper.wrapSetCommunicationMute`
+/// and friends). The capture stream keeps recording while muted only if a
+/// consumer says so — muting is an engine-side mixing decision, not a
+/// microphone-teardown decision.
 pub static VOICE_MUTED: AtomicBool = AtomicBool::new(false);
 
+/// One audio endpoint as the engine's device queries see it.
 #[derive(Debug, Clone)]
 pub struct DeviceInfo {
     pub id: u32,
@@ -21,97 +37,9 @@ pub struct DeviceInfo {
     pub is_default: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum HostBackendKind {
-    PipeWire,
-    PulseAudio,
-    Alsa,
-    None,
-}
-
-impl HostBackendKind {
-    pub fn name(&self) -> &'static str {
-        match self {
-            HostBackendKind::PipeWire => "pipewire",
-            HostBackendKind::PulseAudio => "pulse",
-            HostBackendKind::Alsa => "alsa",
-            HostBackendKind::None => "none",
-        }
-    }
-}
-
-pub fn host_backend_kind() -> HostBackendKind {
-    if let Ok(val) = std::env::var("RBX_RUNTIME_AUDIO_HOST") {
-        match val.to_ascii_lowercase().as_str() {
-            "pipewire" | "pw" => return HostBackendKind::PipeWire,
-            "pulse" | "pulseaudio" => return HostBackendKind::PulseAudio,
-            "alsa" => return HostBackendKind::Alsa,
-            "none" | "off" => return HostBackendKind::None,
-            _ => {}
-        }
-    }
-    // Auto-detection preference
-    if pipewire_available() {
-        HostBackendKind::PipeWire
-    } else if pulse_available() {
-        HostBackendKind::PulseAudio
-    } else if alsa_available() {
-        HostBackendKind::Alsa
-    } else {
-        HostBackendKind::None
-    }
-}
-
-pub fn pipewire_available() -> bool {
-    // Check if PipeWire runtime socket exists or libpipewire can be opened
-    if std::env::var_os("PIPEWIRE_RUNTIME_DIR").is_some()
-        || std::env::var_os("XDG_RUNTIME_DIR").is_some()
-    {
-        unsafe {
-            let lib = libc::dlopen(b"libpipewire-0.3.so.0\0".as_ptr().cast(), libc::RTLD_LAZY);
-            if !lib.is_null() {
-                libc::dlclose(lib);
-                return true;
-            }
-        }
-    }
-    false
-}
-
-pub fn pulse_available() -> bool {
-    unsafe {
-        let lib = libc::dlopen(b"libpulse.so.0\0".as_ptr().cast(), libc::RTLD_LAZY);
-        if !lib.is_null() {
-            libc::dlclose(lib);
-            return true;
-        }
-    }
-    false
-}
-
-pub fn alsa_available() -> bool {
-    unsafe {
-        let lib = libc::dlopen(b"libasound.so.2\0".as_ptr().cast(), libc::RTLD_LAZY);
-        if !lib.is_null() {
-            libc::dlclose(lib);
-            return true;
-        }
-    }
-    false
-}
-
-pub fn host_backend_available() -> bool {
-    host_backend_kind() != HostBackendKind::None
-}
-
-pub fn effective_backend_name() -> &'static str {
-    host_backend_kind().name()
-}
-
-pub fn host_backend_name() -> String {
-    std::env::var("RBX_RUNTIME_AUDIO_HOST").unwrap_or_else(|_| "auto".to_owned())
-}
-
+/// Enumerate host devices through cpal. **This opens no stream of any kind** —
+/// not a capture stream, not an output stream: the whole privacy gate rests on
+/// enumeration being side-effect-free.
 pub fn enumerate_devices() -> Result<Vec<DeviceInfo>, cpal::Error> {
     let host = cpal::default_host();
     let default_input_id = host
@@ -173,6 +101,8 @@ fn device_info(
     }
 }
 
+/// Stable FNV-style hash distinguishing direction, so the same device can be
+/// both a source and a sink with two different ids.
 fn unique_device_id(device_id: &str, is_source: bool, ids: &mut HashSet<u32>) -> u32 {
     let direction: &[u8] = if is_source { b"input:" } else { b"output:" };
     let mut hash = 0x811c_9dc5_u32;

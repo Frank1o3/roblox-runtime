@@ -15,6 +15,7 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{BufferSize, ErrorKind, FromSample, SizedSample, Stream, StreamConfig};
 
 use super::host::host_by_name;
+use crate::logline::{log, Priority, AUDIO_TAG};
 use super::output::{FillCallback, OutputStream};
 
 /// Everything the audio callback touches. No locks except one `try_lock` on a
@@ -55,16 +56,16 @@ fn on_stream_error(err: cpal::Error) {
     match err.kind() {
         ErrorKind::Xrun => {} // counted by the server; logging here would flood
         ErrorKind::DeviceChanged | ErrorKind::RealtimeDenied => {
-            eprintln!("W/RobloxRuntime-Audio           stream: {err}");
+            log(Priority::Warn, AUDIO_TAG, &format!("stream: {err}"));
         }
-        _ => eprintln!("E/RobloxRuntime-Audio           stream error: {err}"),
+        _ => log(Priority::Error, AUDIO_TAG, &format!("stream error: {err}")),
     }
 }
 
 fn build_f32(device: &cpal::Device, cfg: &StreamConfig, ctx: Ctx) -> Result<Stream, String> {
     device
         .build_output_stream(
-            cfg,
+            cfg.clone(),
             move |data: &mut [f32], _: &cpal::OutputCallbackInfo| render(&ctx, data),
             on_stream_error,
             None,
@@ -81,7 +82,7 @@ where
     let mut scratch: Vec<f32> = Vec::with_capacity(16_384);
     device
         .build_output_stream(
-            cfg,
+            cfg.clone(),
             move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
                 scratch.resize(data.len(), 0.0);
                 render(&ctx, &mut scratch);
@@ -107,9 +108,13 @@ fn pick_device(host: &cpal::Host, target: &str) -> Option<cpal::Device> {
         if let Some(d) = target.parse().ok().and_then(|id| host.device_by_id(&id)) {
             return Some(d);
         }
-        eprintln!(
-            "W/RobloxRuntime-Audio           output device '{target}' is not on this host; \
-             falling back to the default so audio still plays somewhere."
+        log(
+            Priority::Warn,
+            AUDIO_TAG,
+            &format!(
+                "output device '{target}' is not on this host; falling back to the default \
+                 so audio still plays somewhere."
+            ),
         );
     }
     host.default_output_device()
@@ -146,10 +151,16 @@ fn build_stream(host_name: &str, target: &str, base: &Ctx) -> Result<(Stream, Gr
                         return Err("the host did not turn a cycle within 3s".into());
                     }
                     let granted = Granted { rate: cfg.sample_rate, channels: cfg.channels as u32 };
-                    eprintln!(
-                        "I/RobloxRuntime-Audio           {host_name}: {} Hz, {} channel(s), {name}, \
-                         {} frames per burst (rate and channels are what the device granted).",
-                        granted.rate, granted.channels, ctx.burst.load(Ordering::Relaxed)
+                    log(
+                        Priority::Info,
+                        AUDIO_TAG,
+                        &format!(
+                            "{host_name}: {} Hz, {} channel(s), {name}, {} frames per burst \
+                             (rate and channels are what the device granted).",
+                            granted.rate,
+                            granted.channels,
+                            ctx.burst.load(Ordering::Relaxed)
+                        ),
                     );
                     return Ok((stream, granted));
                 }
@@ -226,7 +237,11 @@ impl OutputStream for CpalOutputStream {
                 true
             }
             Ok(Err(e)) => {
-                eprintln!("E/RobloxRuntime-Audio           {} output failed to open: {e}", self.host);
+                log(
+                    Priority::Error,
+                    AUDIO_TAG,
+                    &format!("{} output failed to open: {e}", self.host),
+                );
                 let _ = handle.join();
                 false
             }

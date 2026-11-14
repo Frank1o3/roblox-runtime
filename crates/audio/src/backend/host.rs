@@ -7,6 +7,7 @@ use std::sync::OnceLock;
 use cpal::traits::HostTrait;
 
 use super::cpal_output::CpalOutputStream;
+use crate::logline::{log, Priority, AUDIO_TAG};
 use super::oss::{make_oss_stream, oss_available};
 use super::output::OutputStream;
 
@@ -30,9 +31,13 @@ pub fn host_backend_name() -> &'static str {
     NAME.get_or_init(|| {
         let raw = std::env::var("RBX_RUNTIME_AUDIO_HOST").unwrap_or_default();
         normalize(&raw).unwrap_or_else(|| {
-            eprintln!(
-                "W/RobloxRuntime-Audio           RBX_RUNTIME_AUDIO_HOST={raw} is not a backend this \
-                 build has (pipewire, pulse, alsa, oss, none); detecting instead."
+            log(
+                Priority::Warn,
+                AUDIO_TAG,
+                &format!(
+                    "RBX_RUNTIME_AUDIO_HOST={raw} is not a backend this build has \
+                     (pipewire, pulse, alsa, oss, none); detecting instead."
+                ),
             );
             "auto"
         })
@@ -63,14 +68,14 @@ pub fn effective_backend_name() -> &'static str {
                 if oss_available() {
                     return "oss";
                 }
-                eprintln!("W/RobloxRuntime-Audio           RBX_RUNTIME_AUDIO_HOST=oss, but the device would not open; detecting instead.");
+                log(Priority::Warn, AUDIO_TAG, "RBX_RUNTIME_AUDIO_HOST=oss, but the device would not open; detecting instead.");
             }
             "auto" => {}
             name => {
                 if probe(name) {
                     return name;
                 }
-                eprintln!("W/RobloxRuntime-Audio           RBX_RUNTIME_AUDIO_HOST={name}, but that host is not available or has no output device; detecting instead.");
+                log(Priority::Warn, AUDIO_TAG, &format!("RBX_RUNTIME_AUDIO_HOST={name}, but that host is not available or has no output device; detecting instead."));
             }
         }
         for name in ORDER {
