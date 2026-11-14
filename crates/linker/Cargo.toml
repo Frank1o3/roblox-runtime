@@ -1,10 +1,19 @@
 [package]
-    description="Rust API for the Android bionic linker used by the Roblox runtime"
+    description="Experimental Rust ELF mapper and relocator for the Roblox runtime"
     edition.workspace=true
     license.workspace=true
     name="roblox-linker"
     version.workspace=true
 
 [lints.rust]
-    unsafe_code="deny"
+    # Mapping executable ELF images and transferring control to their
+    # constructors necessarily crosses an unsafe OS/process boundary.
+    unsafe_code="allow"
+    unsafe_op_in_unsafe_fn="deny"
 
+[lints.clippy]
+    undocumented_unsafe_blocks="warn"
+
+[dependencies]
+    libc="0.2.191"
+    rustix={version="1", default-features=false, features=["mm", "param", "std"]}

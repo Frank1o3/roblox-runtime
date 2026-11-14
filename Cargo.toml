@@ -21,6 +21,7 @@
     roblox-android={path="crates/android"}
     roblox-graphics-vulkan={path="crates/graphics-vulkan"}
     roblox-jni-sys={path="crates/jni-sys"}
+    roblox-linker={path="crates/linker"}
     roblox-linker-sys={path="crates/linker-sys"}
     roblox-logging={path="crates/logging"}
     serde_json="1.0.154"

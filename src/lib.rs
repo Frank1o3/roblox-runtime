@@ -16,6 +16,47 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+#[derive(Debug)]
+enum EngineLibrary {
+    Bionic(roblox_linker_sys::Library),
+    Rust(roblox_linker::MappedLibrary),
+}
+
+impl EngineLibrary {
+    fn base(&self) -> usize {
+        match self {
+            Self::Bionic(lib) => lib.base(),
+            Self::Rust(lib) => lib.base(),
+        }
+    }
+
+    fn code_region(&self) -> (usize, usize) {
+        match self {
+            Self::Bionic(lib) => lib.code_region(),
+            Self::Rust(lib) => lib.code_region(),
+        }
+    }
+
+    fn symbol(&self, name: &str) -> Option<*mut std::ffi::c_void> {
+        match self {
+            Self::Bionic(lib) => lib.symbol(name),
+            Self::Rust(lib) => lib.symbol(name),
+        }
+    }
+
+    #[allow(unsafe_code)]
+    fn run_constructors(&mut self) {
+        match self {
+            Self::Bionic(lib) => roblox_linker_sys::run_deferred_ctors(*lib),
+            Self::Rust(lib) => {
+                // SAFETY: `LoadedEngine::run_constructors` enforces the same
+                // pre-constructor setup boundary as the bionic backend.
+                unsafe { lib.run_constructors() }
+            }
+        }
+    }
+}
+
 pub use roblox_abi as abi;
 pub use roblox_android as android;
 pub use roblox_jni_sys as jni;
@@ -283,52 +324,71 @@ impl RuntimeConfig {
                     .collect(),
             ));
         }
-        if !roblox_linker_sys::constructor_deferral_available() {
-            return Err(LoadError::ConstructorDeferralUnavailable);
-        }
-
-        roblox_linker_sys::init();
         roblox_abi::bionic::announce_audio_backend();
-        roblox_linker_sys::set_library_path(
-            self.native_lib_dir
-                .to_str()
-                .ok_or(LoadError::NonUtf8Path("native library directory"))?,
-        )
-        .map_err(|error| LoadError::Linker(error.to_string()))?;
-        for (name, symbols) in tables.libraries {
-            roblox_linker_sys::register(name, &symbols)
-                .map_err(|error| LoadError::Linker(error.to_string()))?;
-        }
-        if let Some(address) = roblox_graphics_vulkan::loader_symbol() {
-            let symbols = [("vkGetInstanceProcAddr".to_owned(), address)];
-            for name in roblox_graphics_vulkan::LIBRARY_NAMES {
-                roblox_linker_sys::register(name, &symbols)
-                    .map_err(|error| LoadError::Linker(error.to_string()))?;
-            }
-        }
-        // FMOD reaches AAudio with dlopen("libaaudio.so"), so none of its
-        // exports appear in libroblox.so's DT_NEEDED import table. Register
-        // the virtual library explicitly whenever the FMOD Java bridge will
-        // advertise AAudio support; otherwise FMOD fails System::init with
-        // FMOD_ERR_OUTPUT_INIT before it can try the Java AudioDevice path.
-        if roblox_abi::bionic::aaudio_selected() {
-            let aaudio: Vec<_> = roblox_abi::bionic::aaudio_overrides()
-                .into_iter()
-                .map(|(name, address)| (name.to_owned(), address))
-                .collect();
-            roblox_linker_sys::register("libaaudio.so", &aaudio)
-                .map_err(|error| LoadError::Linker(error.to_string()))?;
-        }
         let library_path = self.native_lib_dir.join("libroblox.so");
         let exported_symbols = roblox_linker_sys::elf::exported_symbols(&library_path)
             .map_err(|error| LoadError::Config(ConfigError::ElfInspection(error.to_string())))?;
-        let library_name = library_path
-            .to_str()
-            .ok_or(LoadError::NonUtf8Path("libroblox.so"))?;
-        roblox_linker_sys::defer_next_ctors(true);
-        let load_result = roblox_linker_sys::dlopen(library_name, roblox_linker_sys::RTLD_NOW);
-        roblox_linker_sys::defer_next_ctors(false);
-        let library = load_result.map_err(|error| LoadError::Linker(error.to_string()))?;
+        let use_rust_linker = std::env::var("USE_EXPERIMENTAL_RUST_LINKER")
+            .is_ok_and(|value| matches!(value.trim().to_ascii_lowercase().as_str(), "true" | "1"));
+        let library = if use_rust_linker {
+            eprintln!("[runtime] using experimental Rust ELF linker");
+            let mut external_symbols = tables
+                .libraries
+                .into_values()
+                .flatten()
+                .map(|(name, address)| (name, address as usize))
+                .collect::<std::collections::BTreeMap<_, _>>();
+            if let Some(address) = roblox_graphics_vulkan::loader_symbol() {
+                external_symbols
+                    .entry("vkGetInstanceProcAddr".to_owned())
+                    .or_insert(address as usize);
+            }
+            EngineLibrary::Rust(
+                roblox_linker::MappedLibrary::load(&library_path, &external_symbols)
+                    .map_err(|error| LoadError::Linker(error.to_string()))?,
+            )
+        } else {
+            if !roblox_linker_sys::constructor_deferral_available() {
+                return Err(LoadError::ConstructorDeferralUnavailable);
+            }
+            roblox_linker_sys::init();
+            roblox_linker_sys::set_library_path(
+                self.native_lib_dir
+                    .to_str()
+                    .ok_or(LoadError::NonUtf8Path("native library directory"))?,
+            )
+            .map_err(|error| LoadError::Linker(error.to_string()))?;
+            for (name, symbols) in tables.libraries {
+                roblox_linker_sys::register(name, &symbols)
+                    .map_err(|error| LoadError::Linker(error.to_string()))?;
+            }
+            if let Some(address) = roblox_graphics_vulkan::loader_symbol() {
+                let symbols = [("vkGetInstanceProcAddr".to_owned(), address)];
+                for name in roblox_graphics_vulkan::LIBRARY_NAMES {
+                    roblox_linker_sys::register(name, &symbols)
+                        .map_err(|error| LoadError::Linker(error.to_string()))?;
+                }
+            }
+            // FMOD reaches AAudio with dlopen("libaaudio.so"), so none of its
+            // exports appear in libroblox.so's DT_NEEDED import table.
+            if roblox_abi::bionic::aaudio_selected() {
+                let aaudio: Vec<_> = roblox_abi::bionic::aaudio_overrides()
+                    .into_iter()
+                    .map(|(name, address)| (name.to_owned(), address))
+                    .collect();
+                roblox_linker_sys::register("libaaudio.so", &aaudio)
+                    .map_err(|error| LoadError::Linker(error.to_string()))?;
+            }
+            let library_name = library_path
+                .to_str()
+                .ok_or(LoadError::NonUtf8Path("libroblox.so"))?;
+            roblox_linker_sys::defer_next_ctors(true);
+            let load_result = roblox_linker_sys::dlopen(library_name, roblox_linker_sys::RTLD_NOW);
+            roblox_linker_sys::defer_next_ctors(false);
+            EngineLibrary::Bionic(
+                load_result.map_err(|error| LoadError::Linker(error.to_string()))?,
+            )
+        };
         Ok(LoadedEngine {
             library,
             exported_symbols,
@@ -346,7 +406,7 @@ impl RuntimeConfig {
 /// A mapped engine library. Roblox bootstrap is not invoked automatically.
 #[derive(Debug)]
 pub struct LoadedEngine {
-    library: roblox_linker_sys::Library,
+    library: EngineLibrary,
     exported_symbols: std::collections::BTreeMap<String, u64>,
     constructors_pending: bool,
     constructors_ready: bool,
@@ -389,7 +449,7 @@ impl LoadedEngine {
             if !self.constructors_ready {
                 return Err(JniError::PreConstructorSetupRequired);
             }
-            roblox_linker_sys::run_deferred_ctors(self.library);
+            self.library.run_constructors();
             self.constructors_pending = false;
         }
         Ok(())
