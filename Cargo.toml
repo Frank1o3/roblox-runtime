@@ -4,7 +4,7 @@
         ".",
         "crates/abi",
         "crates/android",
-        "crates/audio",
+        "crates/audio", "crates/framework",
         "crates/graphics-vulkan",
         "crates/jni-sys",
         "crates/jnivm",
