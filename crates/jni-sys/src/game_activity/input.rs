@@ -196,8 +196,8 @@ unsafe extern "C" {
     fn roblox_input_key_event(
         f: *mut c_void,
         down: c_int,
+        scan_code: c_int,
         key_code: c_int,
-        modifiers: c_int,
         is_repeat: c_int,
         err: *mut c_char,
         n: usize,

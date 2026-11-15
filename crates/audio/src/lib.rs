@@ -3,6 +3,7 @@
 pub mod aaudio {
     pub mod backend;
     pub mod builder;
+    pub mod ffi;
     pub mod stream;
 }
 

@@ -31,6 +31,7 @@
 // The runtime owns the cross-thread request slot. The embedding UI consumes
 // it later on its own event-loop thread, where toolkit calls are safe.
 extern "C" void roblox_runtime_webview_open(const char* url, const char* title);
+extern "C" const char* roblox_framework_files_dir();
 
 // ------------------------------------------------------- focused text box
 //
@@ -1201,75 +1202,14 @@ public:
     }
 };
 
-/// The directory Roblox may write to.
+/// The directory Roblox may write to, set from Rust before JNI bootstrap.
 ///
 /// On Android this is the app's private storage. Here it is per-instance, which
 /// is the mechanism the multi-account design rests on: two instances that never
 /// share a files directory can never share a session.
 /// See docs/design/instances-and-launch.md §4.
-/// Set from Rust, which is the only side that knows which profile is active.
-///
-/// Empty until `roblox_set_files_dir` runs, which is the state the fallback
-/// below exists for.
-std::string g_files_dir;
-
 const char* files_dir() {
-    static const std::string dir = [] {
-        if (const char* override = getenv("RBX_RUNTIME_FILES_DIR")) {
-            return std::string(override);
-        }
-        // What Rust passed to `nativeSetFilesDirectory`, when it has.
-        if (!g_files_dir.empty()) {
-            return g_files_dir;
-        }
-        std::string base;
-        if (const char* xdg = getenv("XDG_DATA_HOME")) {
-            base = xdg;
-        } else if (const char* home = getenv("HOME")) {
-            base = std::string(home) + "/.local/share";
-        } else {
-            base = "/tmp";
-        }
-        // Pre-ADR-012 layout, kept only as the last resort for a caller that
-        // runs before the setter. ADR-012 moved storage to
-        // `roblox-runtime/profiles/<name>/` and this path names neither the new layout
-        // nor any particular profile, so anything that reaches it is answering
-        // about a directory the client is not using.
-        auto path = base + "/roblox-runtime/instances/default/data";
-        // Roblox assumes the directory exists; on Android the platform made it.
-        std::string acc;
-        for (size_t i = 1; i <= path.size(); i++) {
-            if (i == path.size() || path[i] == '/') {
-                acc = path.substr(0, i);
-                mkdir(acc.c_str(), 0700);
-            }
-        }
-        return path;
-    }();
-    return dir.c_str();
-}
-
-/// Tell the framework layer which files directory the active profile uses.
-///
-/// C++ cannot work this out. ADR-012 moved storage to
-/// `roblox-runtime/profiles/<name>/`, and which name is active is a `--profile`
-/// decision that only Rust has; `files_dir()` was still computing
-/// `roblox-runtime/instances/default/data`, the layout ADR-012 replaced, so it named a
-/// directory the client was not using and would have named the same one for
-/// every profile.
-///
-/// This is the third place that trap has been hit. `SharedPreferences::path`
-/// and `getAllocatableBytes` both work around it by hanging off the process
-/// working directory, and both carry a comment saying why. Those workarounds are
-/// correct for what they do and are left alone -- the preferences store and the
-/// free-space measurement genuinely want the directory the client is running in
-/// -- but a third caller should not have to discover the same thing.
-///
-/// **`files_dir()` latches on first use**, so this has to run before anything
-/// asks. Rust calls it beside `nativeSetFilesDirectory`, with the same value, so
-/// the engine and the framework layer cannot disagree about where files live.
-extern "C" void roblox_set_files_dir(const char* dir) {
-    g_files_dir = dir ? dir : "";
+    return roblox_framework_files_dir();
 }
 
 /// `com.roblox.engine.jni.reporter.SessionReporterJavaInterface`

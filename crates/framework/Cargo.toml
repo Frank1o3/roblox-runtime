@@ -1,5 +1,5 @@
 [package]
-name = "framework"
+name = "roblox-framework"
 edition.workspace = true
 license.workspace = true
 version.workspace = true

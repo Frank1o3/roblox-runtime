@@ -39,10 +39,9 @@
 
 namespace {
 
-/// The host directory standing in for `/system`. Set once from Rust before the
-/// engine runs; empty means "no redirect", which leaves every call untouched.
-char g_root[PATH_MAX];
-size_t g_root_len = 0;
+/// The Rust-owned Android framework context supplies the directory standing in
+/// for `/system`. A missing/empty directory disables the redirect.
+extern "C" size_t roblox_framework_copy_system_root(char* output, size_t capacity);
 
 /// `RBX_RUNTIME_TRACE_PATHS=1`. Every function here is fixed-arity except `open`,
 /// which is forwarded properly, so this is safe to leave on — unlike
@@ -80,14 +79,19 @@ void trace_i(const char* call, const char* path, long r) {
 /// Returns null when the path is not under `/system`, which is the overwhelming
 /// majority of calls — the cost on that path is one `strncmp`.
 const char* remap(const char* path, char* buf, size_t n) {
-    if (!path || g_root_len == 0) {
+    if (!path) {
         return nullptr;
     }
     if (std::strncmp(path, "/system/", 8) != 0) {
         return nullptr;
     }
+    char root[PATH_MAX];
+    const size_t root_len = roblox_framework_copy_system_root(root, sizeof root);
+    if (root_len == 0 || root_len >= sizeof root) {
+        return nullptr;
+    }
     // `path + 7` keeps the separator, so the result is `<root>/fonts/...`.
-    int w = std::snprintf(buf, n, "%s%s", g_root, path + 7);
+    int w = std::snprintf(buf, n, "%s%s", root, path + 7);
     if (w < 0 || static_cast<size_t>(w) >= n) {
         return nullptr;
     }
@@ -306,22 +310,6 @@ extern "C" struct RuntimeSystemSymbol {
     const char* name;
     void* addr;
 };
-
-/// Point the redirect at a host directory. Passing null or "" disables it.
-extern "C" void roblox_set_system_root(const char* root) {
-    if (!root || !*root) {
-        g_root_len = 0;
-        g_root[0] = '\0';
-        return;
-    }
-    std::snprintf(g_root, sizeof g_root, "%s", root);
-    g_root_len = std::strlen(g_root);
-    // A trailing slash would produce `<root>//fonts`, which works but reads
-    // badly in a trace, and would break a later exact-prefix comparison.
-    while (g_root_len > 1 && g_root[g_root_len - 1] == '/') {
-        g_root[--g_root_len] = '\0';
-    }
-}
 
 /// Turn on the path log. Separate from the root so tracing works even when the
 /// redirect is disabled.

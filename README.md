@@ -22,9 +22,10 @@ The runtime is designed as an embeddable component rather than a standalone
 launcher. It does not download or discover Roblox builds itself; the embedding
 application supplies the APKs and runtime directories through `RuntimeConfig`.
 
-The current working JNI path uses the native compatibility core in the runtime's
-native layer. A pure-Rust JNI VM (`jnivm`) is also present as an experimental
-backend and is selected explicitly with `USE_EXPERIMENTAL_JNIVM=true`.
+The active engine loader is the Rust ELF mapper in `crates/linker`, and the
+runtime creates its JavaVM with the pure-Rust `jnivm` crate. Android class hooks
+and GameActivity drivers still use the native compatibility layer while their
+Rust implementations are completed.
 
 ## Architecture
 
@@ -43,7 +44,7 @@ backend and is selected explicitly with `USE_EXPERIMENTAL_JNIVM=true`.
                 ├── ABI compatibility
                 ├── Android framework compatibility
                 ├── JNI / GameActivity bridge
-                ├── native linker + ELF loading
+                ├── Rust ELF loading
                 ├── pthread / bionic compatibility
                 ├── graphics integration
                 └── Roblox libroblox.so
@@ -63,8 +64,10 @@ Linux host, including assets, storage, loopers, native windows and system APIs.
 
 ### Native loading
 
-The `linker` crate exposes the AOSP-derived bionic linker integration and ELF
-inspection used to load `libroblox.so`.
+The `linker` crate maps ELF objects, resolves imports, and delays constructors
+until Android services are ready. The former AOSP bionic linker integration
+has been removed; the remaining native build support is for compatibility code
+outside the linker.
 
 Engine imports are inspected from the actual ELF rather than maintained as a
 manually copied symbol list. Symbols are then supplied by runtime-owned
@@ -134,7 +137,6 @@ Requirements:
 - recent stable Rust
 - Clang/Clang++
 - CMake
-- GNU `patch`
 - initialized Git submodules
 
 Initialize the native dependencies and check the workspace:

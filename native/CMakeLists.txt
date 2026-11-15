@@ -5,95 +5,13 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-# Clang is not a preference. AOSP bionic uses C11 _Atomic inside C++ headers
-# (bionic_elf_tls.h, bionic_fdsan.h) — a Clang extension GCC rejects, producing
-# 144 errors on an otherwise clean tree. See docs/base-evaluation.md §2.1.
+# Clang is required by the remaining native compatibility sources, which use
+# compiler extensions not supported by GCC.
 if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   message(FATAL_ERROR
     "The native subtree requires Clang (found ${CMAKE_CXX_COMPILER_ID}). "
-    "AOSP bionic does not build with GCC.")
+    "The remaining native compatibility sources use Clang extensions.")
 endif()
-
-# The AOSP bionic linker, via minecraft-linux's host wrapper. Target: `linker`.
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../third_party/mcpelauncher-linker
-                 ${CMAKE_CURRENT_BINARY_DIR}/mcpelauncher-linker)
-
-# Keep the constructor staging change in this repository rather than in the
-# pinned upstream submodule. The engine's static initialisers currently call
-# compatibility APIs before the runtime has finished preparing them.
-find_program(PATCH_EXECUTABLE patch REQUIRED)
-set(_linker_source
-    ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/mcpelauncher-linker/bionic/linker/linker.cpp)
-set(_linker_build_dir ${CMAKE_CURRENT_BINARY_DIR}/linker-with-deferred-constructors)
-file(MAKE_DIRECTORY ${_linker_build_dir}/bionic/linker)
-configure_file(${_linker_source}
-               ${_linker_build_dir}/bionic/linker/linker.cpp COPYONLY)
-execute_process(
-  COMMAND ${PATCH_EXECUTABLE} -p1 -i
-          ${CMAKE_CURRENT_SOURCE_DIR}/patches/linker-constructor-deferral.patch
-  WORKING_DIRECTORY ${_linker_build_dir}
-  RESULT_VARIABLE _linker_patch_status
-  OUTPUT_VARIABLE _linker_patch_output
-  ERROR_VARIABLE _linker_patch_error)
-if(NOT _linker_patch_status EQUAL 0)
-  message(FATAL_ERROR "Could not apply runtime linker patch: ${_linker_patch_error}")
-endif()
-get_target_property(_linker_sources linker SOURCES)
-list(REMOVE_ITEM _linker_sources bionic/linker/linker.cpp)
-list(APPEND _linker_sources ${_linker_build_dir}/bionic/linker/linker.cpp)
-set_target_properties(linker PROPERTIES SOURCES "${_linker_sources}")
-target_include_directories(linker PRIVATE
-  ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/mcpelauncher-linker/bionic/linker)
-
-# Undo the upstream `-DPATH_MAX=256`, which is a stack overflow waiting for a
-# long enough path.
-#
-# third_party/mcpelauncher-linker/CMakeLists.txt does:
-#
-#     target_compile_definitions(linker PRIVATE PATH_MAX=256 _GNU_SOURCE)
-#
-# so every `char buf[PATH_MAX]` in the linker port is 256 bytes — seven of them,
-# in linker.cpp, linker_utils.cpp, linker_main.cpp and linker_config.cpp — while
-# the `realpath`, `readlink` and `snprintf` those buffers are handed to are the
-# *host's*, which are entitled to write up to the real PATH_MAX of 4096.
-#
-# glibc caught it. Inside the Flatpak, whose runtime fortifies these calls, the
-# client aborted at linker init with `*** buffer overflow detected ***`, and the
-# check reads exactly this:
-#
-#     lea    -0x130(%rbp),%rsi
-#     mov    $0x100,%edx          ; 256, the buffer this define created
-#     call   __realpath_chk@plt   ; refuses anything under PATH_MAX
-#
-# The host build makes the same calls through plain `realpath@plt` with no
-# `__realpath_chk` anywhere in the binary, so it has carried the same undersized
-# buffers unchecked for as long as this has existed. **The host build working is
-# the less trustworthy of the two results**, not the baseline the Flatpak
-# departed from: a resolved path over 256 bytes smashes that stack frame there
-# today and nothing reports it.
-#
-# Corrected to 4096 rather than deleted, and the difference was measured. The
-# first attempt removed the define outright on the theory that `<limits.h>`
-# would then supply the real value; the build failed immediately with
-#
-#     linker_utils.cpp:216:22: error: use of undeclared identifier 'PATH_MAX'
-#
-# because these translation units are compiled with `-include compat.h` against
-# `include/`, and never see a `<limits.h>` that defines it. Supplying the macro
-# is exactly why upstream's line exists. Only its value was wrong.
-#
-# 4096 is what the kernel uapi header in this same submodule says
-# (bionic/libc/kernel/uapi/linux/limits.h), and what both this host and the
-# Flatpak SDK report from `<limits.h>` — checked, not assumed.
-#
-# Kept on our side rather than patched into the submodule because the Flatpak
-# manifest pins that repository by commit and clones it fresh: a local edit
-# there would fix `cargo build` and leave the package broken, which is the
-# worse half to get right by accident.
-get_target_property(_linker_defs linker COMPILE_DEFINITIONS)
-list(REMOVE_ITEM _linker_defs "PATH_MAX=256")
-list(APPEND _linker_defs "PATH_MAX=4096")
-set_target_properties(linker PROPERTIES COMPILE_DEFINITIONS "${_linker_defs}")
 
 # PipeWire, for opensles.cpp's audio backend. Headers only, and only if
 # present: libpipewire-0.3.so is never linked (dlopen'd at run time instead,
@@ -188,21 +106,13 @@ else()
                   "enable it.")
 endif()
 
-# Thin extern "C" surface over the linker's C++ API, so Rust can drive it.
 # Android liblog. Roblox narrates its own startup through it, so this is the
 # runtime layer's most valuable diagnostic. It is not the source of
 # onLogLine/onJoin: neither event exists, see the header of liblog.cpp.
 #
-# `aaudio.cpp` is here rather than beside the JNI shim because it belongs with
-# `pipewire_backend.cpp`, and it needs no PipeWire headers of its own — its two
-# local headers deliberately carry no PipeWire types. So the AAudio bridge
-# compiles identically on a tree with no
-# pipewire-devel, and honestly refuses every stream there, exactly as
-# `slCreateEngine` does.
 add_library(roblox_liblog STATIC
   liblog.cpp system_paths.cpp netdb_compat.cpp opensles.cpp pipewire_backend.cpp
-  pulse_backend.cpp alsa_backend.cpp oss_backend.cpp aaudio.cpp
-  aaudio_input_callback.cpp thread_trace.cpp)
+  pulse_backend.cpp alsa_backend.cpp oss_backend.cpp thread_trace.cpp)
 # Compiled unconditionally, like every other file here: without the headers it
 # is its own honest "unavailable" arm, so the selector gets a truthful answer
 # rather than a link error. Only the define is conditional.
@@ -278,26 +188,7 @@ if(PIPEWIRE_FOUND)
   add_dependencies(roblox_liblog roblox_pipewire_backend_test)
 endif()
 
-add_executable(roblox_aaudio_input_callback_test EXCLUDE_FROM_ALL
-  aaudio_input_callback.cpp aaudio_input_callback_test.cpp)
-target_compile_options(roblox_aaudio_input_callback_test PRIVATE -UNDEBUG)
-add_custom_command(TARGET roblox_aaudio_input_callback_test POST_BUILD
-  COMMAND roblox_aaudio_input_callback_test
-  COMMENT "Running AAudio input callback lifecycle checks")
-add_dependencies(roblox_liblog roblox_aaudio_input_callback_test)
-
-add_executable(roblox_aaudio_input_test EXCLUDE_FROM_ALL
-  aaudio.cpp aaudio_input_callback.cpp aaudio_input_test.cpp)
-target_compile_options(roblox_aaudio_input_test PRIVATE -UNDEBUG)
-add_custom_command(TARGET roblox_aaudio_input_test POST_BUILD
-  COMMAND roblox_aaudio_input_test
-  COMMENT "Running AAudio callback and blocking input ABI checks")
-add_dependencies(roblox_liblog roblox_aaudio_input_test)
-
-add_library(roblox_linker_shim STATIC shim.cpp)
-target_link_libraries(roblox_linker_shim PUBLIC linker)
-
-install(TARGETS roblox_linker_shim roblox_liblog linker ARCHIVE DESTINATION lib)
+install(TARGETS roblox_liblog ARCHIVE DESTINATION lib)
 
 # JNI virtual machine. Roblox's native code calls into Java through 518 statically
 # registered natives and expects a JavaVM to call back into; libjnivm supplies both

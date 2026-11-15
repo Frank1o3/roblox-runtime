@@ -1,5 +1,4 @@
 [package]
-    build="build.rs"
     description="Android framework compatibility APIs for the Roblox runtime"
     edition.workspace=true
     license.workspace=true
@@ -7,7 +6,7 @@
     version.workspace=true
 
 [dependencies]
-    roblox-linker-sys.workspace=true
+    roblox-framework.workspace=true
     roblox-logging.workspace=true
     serde_json.workspace=true
     zip.workspace=true

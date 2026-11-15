@@ -55,7 +55,7 @@
 // one appeared within half a second of `RECORDING`, and it was gone again on
 // `PAUSED`, on `STOPPED` and after `Destroy` — including when the stop came
 // from inside the buffer callback. Re-run on 2026-08-28 against this same
-// `audio_probe.cpp` OpenSL path — the identical `CaptureStream` primitive
+// Rust audio probe's OpenSL path — the identical capture primitive
 // `WebRtcAudioRecord::startRecording`/`stop` call below, not a second one —
 // it held again: a `pw-dump` sampler independently caught the node while
 // `SL_RECORDSTATE_RECORDING` and not otherwise, and 590 buffers of real
@@ -97,7 +97,8 @@
 #include <thread>
 #include <vector>
 
-#include "aaudio.h"
+extern "C" int roblox_audio_backend_is_aaudio(void);
+extern "C" int roblox_audio_host_backend_available(void);
 #include "pipewire_backend.h"
 
 namespace roblox_runtime {
@@ -1901,7 +1902,7 @@ public:
     /// the same failure in the one place people already know to look.
     static jboolean supportsAAudio(jnivm::ENV*, jnivm::Class*) {
         if (!roblox_audio_backend_is_aaudio()) return JNI_FALSE;
-        if (!audio::host_backend_available()) {
+        if (!roblox_audio_host_backend_available()) {
             std::fprintf(stderr,
                 "W/RobloxRuntime-FMOD            AAudio is selected but no PipeWire session is "
                 "reachable; answering supportsAAudio() false so FMOD keeps its "

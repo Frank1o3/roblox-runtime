@@ -2,41 +2,11 @@
 //! message bus for microphone permission; Android's checkSelfPermission shim
 //! alone does not answer that protocol request.
 
-use std::ffi::{CStr, CString, c_char, c_int, c_void};
-
-unsafe extern "C" {
-    fn roblox_messagebus_set_request_handler_async(
-        set_fn: *mut c_void,
-        publish_fn: *mut c_void,
-        respond_fn: *mut c_void,
-        dual_response: c_int,
-        protocol: *const c_char,
-        method: *const c_char,
-        sink: extern "C" fn(*const c_char, *mut c_char, usize) -> c_int,
-        err: *mut c_char,
-        err_len: usize,
-    ) -> c_int;
-}
+use std::ffi::{CString, c_void};
 
 const PROTOCOL: &str = "PermissionsProtocol";
 const MICROPHONE: &str = "MICROPHONE_ACCESS";
 const SUPPORTED: [&str; 2] = [MICROPHONE, "LOCAL_NETWORK"];
-
-extern "C" fn request(raw: *const c_char, out: *mut c_char, len: usize) -> c_int {
-    answer("PermissionsRequest", raw, out, len)
-}
-extern "C" fn has(raw: *const c_char, out: *mut c_char, len: usize) -> c_int {
-    answer("HasPermissions", raw, out, len)
-}
-extern "C" fn supports(raw: *const c_char, out: *mut c_char, len: usize) -> c_int {
-    answer("SupportsPermissions", raw, out, len)
-}
-extern "C" fn upsell(raw: *const c_char, out: *mut c_char, len: usize) -> c_int {
-    answer("ShouldShowPermissionUpsell", raw, out, len)
-}
-extern "C" fn rationale(raw: *const c_char, out: *mut c_char, len: usize) -> c_int {
-    answer("ShouldShowRequestPermissionRationale", raw, out, len)
-}
 
 fn compute_response(method: &str, request: &str) -> String {
     let object = serde_json::from_str::<serde_json::Value>(request).ok();
@@ -79,27 +49,6 @@ fn compute_response(method: &str, request: &str) -> String {
         _ => serde_json::json!({ "status": "DENIED", "missingPermissions": [MICROPHONE] }),
     };
     response.to_string()
-}
-
-fn answer(method: &str, raw: *const c_char, out: *mut c_char, len: usize) -> c_int {
-    if raw.is_null() || out.is_null() || len == 0 {
-        return 0;
-    }
-    // SAFETY: the native request bridge passes a NUL-terminated request string
-    // valid for the duration of this callback and an output buffer of `len`.
-    let request = unsafe { CStr::from_ptr(raw) }.to_string_lossy();
-    let response_str = compute_response(method, &request);
-    let Ok(response) = CString::new(response_str) else {
-        return 0;
-    };
-    if response.as_bytes_with_nul().len() > len {
-        return 0;
-    }
-    // SAFETY: the response plus its terminator fits the caller-provided buffer.
-    unsafe {
-        std::ptr::copy_nonoverlapping(response.as_ptr(), out, response.as_bytes_with_nul().len());
-    }
-    1
 }
 
 #[derive(Clone, Copy)]
@@ -334,46 +283,5 @@ pub fn arm(mut symbol: impl FnMut(&str) -> Option<*mut c_void>) {
         return;
     }
 
-    if jnivm::selected_from_environment() {
-        arm_rust(set, publish, respond, dual);
-        return;
-    }
-
-    let protocol = CString::new(PROTOCOL).expect("literal");
-    let handlers: [(
-        &str,
-        extern "C" fn(*const c_char, *mut c_char, usize) -> c_int,
-    ); 5] = [
-        ("PermissionsRequest", request),
-        ("HasPermissions", has),
-        ("SupportsPermissions", supports),
-        ("ShouldShowPermissionUpsell", upsell),
-        ("ShouldShowRequestPermissionRationale", rationale),
-    ];
-    for (method, callback) in handlers {
-        let method_c = CString::new(method).expect("literal");
-        let mut error = [0i8; 512];
-        // SAFETY: native pointers come from this loaded engine's exports; the
-        // C strings and error buffer remain valid for the duration of the call.
-        let result = unsafe {
-            roblox_messagebus_set_request_handler_async(
-                set,
-                publish.unwrap_or(std::ptr::null_mut()),
-                respond,
-                c_int::from(dual),
-                protocol.as_ptr(),
-                method_c.as_ptr(),
-                callback,
-                error.as_mut_ptr(),
-                error.len(),
-            )
-        };
-        if result == 0 {
-            eprintln!("[runtime-permissions] {PROTOCOL}.{method} handler bound");
-        } else {
-            // SAFETY: the native bridge NUL-terminates the supplied error buffer.
-            let message = unsafe { CStr::from_ptr(error.as_ptr()) }.to_string_lossy();
-            eprintln!("[runtime-permissions] could not bind {PROTOCOL}.{method}: {message}");
-        }
-    }
+    arm_rust(set, publish, respond, dual);
 }

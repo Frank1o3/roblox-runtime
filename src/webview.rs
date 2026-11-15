@@ -15,7 +15,7 @@
 #![allow(unsafe_code)]
 
 use std::collections::HashMap;
-use std::ffi::{CStr, CString, c_char, c_int, c_void};
+use std::ffi::{CStr, CString, c_char, c_void};
 use std::sync::{Mutex, OnceLock};
 
 /// A Roblox request to show an in-experience page.
@@ -169,13 +169,7 @@ pub fn arm(engine: &crate::LoadedEngine) {
             return;
         }
     };
-    let subscribe_result = if jnivm::selected_from_environment() {
-        eprintln!("[runtime-webview] using RustVM-owned MessageBus callback objects");
-        subscribe_raw_rust(subscribe, &open_bus_id, on_open_window)
-    } else {
-        eprintln!("[runtime-webview] using libjnivm MessageBus callback objects");
-        subscribe_raw(subscribe, &open_bus_id, on_open_window)
-    };
+    let subscribe_result = subscribe_raw_rust(subscribe, &open_bus_id, on_open_window);
     if let Err(error) = subscribe_result {
         eprintln!("[runtime-webview] could not subscribe to WebView.openWindow: {error}");
         return;
@@ -192,11 +186,7 @@ pub fn arm(engine: &crate::LoadedEngine) {
                 &close_id,
             )
         } {
-            Ok(id) if !id.is_empty() => match if jnivm::selected_from_environment() {
-                subscribe_raw_rust(subscribe, &id, on_close_window)
-            } else {
-                subscribe_raw(subscribe, &id, on_close_window)
-            } {
+            Ok(id) if !id.is_empty() => match subscribe_raw_rust(subscribe, &id, on_close_window) {
                 Ok(()) => eprintln!("[runtime-webview] subscribed to {protocol}.{close_id} ({id})"),
                 Err(error) => eprintln!(
                     "[runtime-webview] could not subscribe to WebView.closeWindow: {error}"
@@ -210,16 +200,6 @@ pub fn arm(engine: &crate::LoadedEngine) {
             }
         }
     }
-}
-
-unsafe extern "C" {
-    fn roblox_messagebus_subscribe(
-        native: *mut c_void,
-        message_id: *const c_char,
-        sink: Option<MessageSink>,
-        error: *mut c_char,
-        error_len: usize,
-    ) -> c_int;
 }
 
 fn subscribe_raw_rust(
@@ -345,31 +325,6 @@ fn raw_callback_run(
     };
     sink(payload.as_ptr());
     jnivm::JniValue::Void
-}
-
-fn subscribe_raw(native: *mut c_void, message_id: &str, sink: MessageSink) -> Result<(), String> {
-    let message_id = CString::new(message_id).map_err(|error| error.to_string())?;
-    let mut error = vec![0u8; 512];
-    // SAFETY: native is the loaded engine's doSubscribeRaw export; the string,
-    // sink and error buffer all outlive the synchronous registration call.
-    let result = unsafe {
-        roblox_messagebus_subscribe(
-            native,
-            message_id.as_ptr(),
-            Some(sink),
-            error.as_mut_ptr().cast(),
-            error.len(),
-        )
-    };
-    if result == 0 {
-        Ok(())
-    } else {
-        let end = error
-            .iter()
-            .position(|byte| *byte == 0)
-            .unwrap_or(error.len());
-        Err(String::from_utf8_lossy(&error[..end]).into_owned())
-    }
 }
 
 extern "C" fn on_open_window(json: *const c_char) {

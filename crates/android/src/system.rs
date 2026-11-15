@@ -15,13 +15,7 @@
 //! symbol table rather than on the filesystem.
 
 use std::collections::BTreeMap;
-use std::ffi::CString;
 use std::path::{Path, PathBuf};
-
-unsafe extern "C" {
-    fn roblox_set_system_root(root: *const std::ffi::c_char);
-    fn roblox_set_files_dir(dir: *const std::ffi::c_char);
-}
 
 /// Tell the framework layer which files directory this profile uses.
 ///
@@ -29,10 +23,7 @@ unsafe extern "C" {
 /// compatibility layer caches it on first use, so set it before Java queries
 /// the framework path.
 pub fn set_files_dir(dir: &Path) {
-    if let Ok(c) = CString::new(dir.to_string_lossy().as_bytes()) {
-        // SAFETY: the callee copies the string; `c` need not outlive the call.
-        unsafe { roblox_set_files_dir(c.as_ptr()) };
-    }
+    roblox_framework::set_files_dir(dir);
 }
 
 /// Where the host's fonts live. Searched in order; later entries do not
@@ -168,11 +159,7 @@ pub fn install(cache_dir: &Path) -> PathBuf {
         );
     }
 
-    if let Ok(c) = CString::new(root.to_string_lossy().as_bytes()) {
-        // SAFETY: `roblox_set_system_root` copies the string; `c` need not
-        // outlive the call.
-        unsafe { roblox_set_system_root(c.as_ptr()) };
-    }
+    roblox_framework::set_system_root(&root);
     root
 }
 

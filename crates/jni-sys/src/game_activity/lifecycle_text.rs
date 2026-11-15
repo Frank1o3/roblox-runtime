@@ -43,10 +43,15 @@ pub fn text_input(handle: i64, text: &str, sel_start: i32, sel_end: i32) -> Resu
             err.len(),
         )
     };
-    if rc == 0 { Ok(()) } else { Err(take_err_buf(&err)) }
+    if rc == 0 {
+        Ok(())
+    } else {
+        Err(take_err_buf(&err))
+    }
 }
 
 /// `NativeGLInterface.nativePassKeyEvent` — Roblox's own keyboard path.
+/// The native takes the physical scan code followed by the Android keycode.
 ///
 /// # Safety
 ///
@@ -60,8 +65,8 @@ pub fn text_input(handle: i64, text: &str, sel_start: i32, sel_end: i32) -> Resu
 pub unsafe fn pass_key_event(
     native: *mut c_void,
     down: bool,
+    scan_code: i32,
     key_code: i32,
-    modifiers: i32,
     is_repeat: bool,
 ) -> Result<(), String> {
     let mut err = [0u8; 512];
@@ -70,14 +75,18 @@ pub unsafe fn pass_key_event(
         roblox_input_key_event(
             native,
             down as c_int,
+            scan_code,
             key_code,
-            modifiers,
             is_repeat as c_int,
             err.as_mut_ptr() as *mut c_char,
             err.len(),
         )
     };
-    if rc == 0 { Ok(()) } else { Err(take_err_buf(&err)) }
+    if rc == 0 {
+        Ok(())
+    } else {
+        Err(take_err_buf(&err))
+    }
 }
 
 /// Which text box the engine has focus in, learned from `showKeyboard`.

@@ -2,8 +2,8 @@ use std::path::PathBuf;
 
 fn main() {
     let root = PathBuf::from(
-        std::env::var_os("DEP_ROBLOX_LINKER_SYS_SHIM_ROOT")
-            .expect("roblox-linker-sys must expose its native build directory"),
+        std::env::var_os("DEP_ROBLOX_NATIVE_SYS_ROOT")
+            .expect("roblox-native-sys must expose its native build directory"),
     );
     println!("cargo:rustc-link-search=native={}/lib", root.display());
     for library in ["roblox_jni_shim", "roblox_liblog", "jnivm", "logger"] {

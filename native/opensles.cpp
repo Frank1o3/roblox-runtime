@@ -50,7 +50,7 @@
 // `SL_RECORDSTATE_STOPPED` and `Destroy`. So the microphone's lifetime is
 // exactly the engine's own recording state, which is a thing an outside
 // observer can check with `pw-dump` while the client runs, and is what
-// `native/audio_probe.cpp` checks. Refusing to implement the recorder would
+// `crates/audio/examples/audio_probe.rs` checks. Refusing to implement the recorder would
 // have made that guarantee vacuous rather than true.
 //
 // `WebRtcAudioRecord` in `audio_classes.cpp` is still refused, and that is not

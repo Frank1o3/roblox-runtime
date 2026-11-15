@@ -1,8 +1,7 @@
 # roblox-linker
 
-Experimental Rust-native ELF mapper and relocator for the runtime. Enable it
-with `USE_EXPERIMENTAL_RUST_LINKER=1` when launching the client; the existing
-AOSP-derived linker remains the default.
+Rust-native ELF mapper and relocator used by the runtime. It is the only engine
+loader; the former AOSP-derived C++ linker integration has been removed.
 
 This first implementation maps an ELF shared object and available
 `DT_NEEDED` files beside it, applies supported x86-64 base and symbol
@@ -12,10 +11,8 @@ Android services. The runtime supplies imported symbol addresses from its
 existing compatibility tables.
 
 It currently supports only x86-64 hosts and explicitly rejects `PT_TLS`,
-`TPOFF64`, and `IRELATIVE` images. Android `dlopen` / `dlsym` emulation is not
-implemented yet, so this path is an initial experiment and is not expected to
-load every Roblox client build. The existing linker is still required to build
-the rest of the runtime.
+`TPOFF64`, and `IRELATIVE` images. Its supported ELF and relocation surface
+remains limited to the behavior described above.
 
 The ELF parser, memory mapper, relocation decoder, and TLS layout foundations
 were adapted from [Eclipse](https://github.com/Kuenec/Eclipse); see

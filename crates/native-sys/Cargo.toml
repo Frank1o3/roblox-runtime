@@ -1,0 +1,11 @@
+[package]
+build = "build.rs"
+description = "Native compatibility build support for Roblox runtime"
+edition.workspace = true
+license.workspace = true
+links = "roblox_native_sys"
+name = "roblox-native-sys"
+version.workspace = true
+
+[build-dependencies]
+cmake.workspace = true

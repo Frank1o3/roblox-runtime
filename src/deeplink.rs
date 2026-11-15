@@ -106,7 +106,7 @@ fn parse_desktop_launch(payload: &str) -> Result<(String, Option<String>), Strin
     let (origin_path, query) = launcher_url
         .split_once('?')
         .ok_or_else(|| "Roblox PlaceLauncher URL has no query".to_owned())?;
-    if origin_path != "https://assetgame.roblox.com/game/PlaceLauncher.ashx" {
+    if !is_place_launcher_endpoint(origin_path) {
         return Err("unsupported Roblox PlaceLauncher endpoint".into());
     }
     let mut place_id = None;
@@ -123,7 +123,7 @@ fn parse_desktop_launch(payload: &str) -> Result<(String, Option<String>), Strin
                 }
                 place_id = Some(value.to_owned());
             }
-            "gameid" | "jobid" if instance_id.is_none() => {
+            "gameid" | "gamejobid" | "jobid" if instance_id.is_none() => {
                 if !value.is_empty()
                     && value.len() <= 64
                     && value.bytes().all(|b| b.is_ascii_hexdigit() || b == b'-')
@@ -137,6 +137,19 @@ fn parse_desktop_launch(payload: &str) -> Result<(String, Option<String>), Strin
     place_id
         .map(|place_id| (place_id, instance_id))
         .ok_or_else(|| "Roblox PlaceLauncher URL has no valid placeId".into())
+}
+
+fn is_place_launcher_endpoint(origin_path: &str) -> bool {
+    let Some((scheme, authority_and_path)) = origin_path.split_once("://") else {
+        return false;
+    };
+    let Some((host, path)) = authority_and_path.split_once('/') else {
+        return false;
+    };
+    scheme.eq_ignore_ascii_case("https")
+        && (host.eq_ignore_ascii_case("assetgame.roblox.com")
+            || host.eq_ignore_ascii_case("www.roblox.com"))
+        && path.eq_ignore_ascii_case("game/PlaceLauncher.ashx")
 }
 
 fn percent_decode(value: &str) -> Result<String, String> {
@@ -168,5 +181,58 @@ fn hex_value(byte: u8) -> Option<u8> {
         b'a'..=b'f' => Some(byte - b'a' + 10),
         b'A'..=b'F' => Some(byte - b'A' + 10),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{parse_desktop_launch, parse_game_url};
+
+    #[test]
+    fn accepts_current_www_place_launcher_case_and_game_job_id() {
+        let payload = "1+launchmode:play+placelauncherurl:https%3A%2F%2Fwww.roblox.com%2FGame%2FPlaceLauncher.ashx%3Frequest%3DRequestGameJob%26placeId%3D12345%26gameJobId%3D01234567-89ab-cdef-0123-456789abcdef";
+        assert_eq!(
+            parse_desktop_launch(payload).unwrap(),
+            (
+                "12345".to_owned(),
+                Some("01234567-89ab-cdef-0123-456789abcdef".to_owned())
+            )
+        );
+    }
+
+    #[test]
+    fn keeps_assetgame_place_launcher_support() {
+        let payload = "1+launchmode:play+placelauncherurl:https%3A%2F%2Fassetgame.roblox.com%2Fgame%2FPlaceLauncher.ashx%3Frequest%3DRequestGame%26placeId%3D987%26gameId%3Dfedcba98-7654-3210-fedc-ba9876543210";
+        assert_eq!(
+            parse_desktop_launch(payload).unwrap(),
+            (
+                "987".to_owned(),
+                Some("fedcba98-7654-3210-fedc-ba9876543210".to_owned())
+            )
+        );
+    }
+
+    #[test]
+    fn rejects_untrusted_place_launcher_authorities_and_paths() {
+        for endpoint in [
+            "https%3A%2F%2Froblox.com%2FGame%2FPlaceLauncher.ashx%3FplaceId%3D1",
+            "https%3A%2F%2Fwww.roblox.com.attacker.test%2FGame%2FPlaceLauncher.ashx%3FplaceId%3D1",
+            "https%3A%2F%2Fwww.roblox.com%3A8443%2FGame%2FPlaceLauncher.ashx%3FplaceId%3D1",
+            "https%3A%2F%2Fwww.roblox.com%2FGame%2FOther.ashx%3FplaceId%3D1",
+        ] {
+            let payload = format!("1+launchmode:play+placelauncherurl:{endpoint}");
+            assert!(parse_desktop_launch(&payload).is_err(), "{endpoint}");
+        }
+    }
+
+    #[test]
+    fn custom_join_url_still_parses_and_bad_launch_ticket_is_not_required() {
+        assert_eq!(
+            parse_game_url(
+                "roblox-player:1+launchmode:play+gameinfo:opaque+placelauncherurl:https%3A%2F%2Fwww.roblox.com%2FGame%2FPlaceLauncher.ashx%3FplaceId%3D42"
+            )
+            .unwrap(),
+            ("42".to_owned(), None)
+        );
     }
 }

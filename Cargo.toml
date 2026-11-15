@@ -9,7 +9,7 @@
         "crates/jni-sys",
         "crates/jnivm",
         "crates/linker",
-        "crates/linker-sys",
+        "crates/native-sys",
         "crates/logging"
     ]
     resolver="3"
@@ -29,13 +29,14 @@
         serde_json="1.0.154"
         zip={version="9.5.1", default-features=false, features=["deflate"]}
         jnivm={path="crates/jnivm"}
+        roblox-framework={path="crates/framework"}
         roblox-abi={path="crates/abi"}
         roblox-android={path="crates/android"}
         roblox-audio={path="crates/audio"}
         roblox-graphics-vulkan={path="crates/graphics-vulkan"}
         roblox-jni-sys={path="crates/jni-sys"}
         roblox-linker={path="crates/linker"}
-        roblox-linker-sys={path="crates/linker-sys"}
+        roblox-native-sys={path="crates/native-sys"}
         roblox-logging={path="crates/logging"}
 
 [package]
@@ -53,7 +54,6 @@
     roblox-graphics-vulkan.workspace=true
     roblox-jni-sys.workspace=true
     roblox-linker.workspace=true
-    roblox-linker-sys.workspace=true
     roblox-logging.workspace=true
     serde_json.workspace=true
 

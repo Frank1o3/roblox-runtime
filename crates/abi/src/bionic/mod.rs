@@ -716,30 +716,23 @@ pub fn opensles_overrides() -> Vec<(&'static str, *mut c_void)> {
 /// Whether `RBX_RUNTIME_AUDIO` selected an AAudio mode. True for an unset
 /// variable: AAudio is the default.
 ///
-/// Read from `native/aaudio.cpp` rather than from `std::env` here so that
-/// there is exactly one parser of the variable in the process. The failure
-/// this forecloses is specific: `symtab` deciding to register
+/// Read through the Rust audio crate's one cached parser, shared with AAudio
+/// stream creation. This keeps virtual-library registration and
+/// `supportsAAudio()` in agreement. The failure this forecloses is specific:
+/// `symtab` deciding to register
 /// `libaaudio.so` while `org.fmod.FMOD.supportsAAudio()` in
 /// `native/audio_classes.cpp` says false, which would leave FMOD on the Java
 /// path with a virtual library nobody opens — an experiment that looks like
 /// it ran and did not.
 pub fn aaudio_selected() -> bool {
-    unsafe extern "C" {
-        fn roblox_audio_backend_is_aaudio() -> c_int;
-    }
-    // SAFETY: reads a process-wide `static` decided once in aaudio.cpp.
-    unsafe { roblox_audio_backend_is_aaudio() != 0 }
+    roblox_audio::aaudio::ffi::roblox_audio_backend_is_aaudio() != 0
 }
 
 /// Whether the selected host audio backend is reachable. AAudio support is a
 /// one-way FMOD choice, so the VM only advertises it when opening a stream can
 /// succeed.
 pub fn audio_host_backend_available() -> bool {
-    unsafe extern "C" {
-        fn roblox_audio_host_backend_available() -> c_int;
-    }
-    // SAFETY: reports the process-wide backend probe result.
-    unsafe { roblox_audio_host_backend_available() != 0 }
+    roblox_audio::aaudio::stream::audio_host_backend_available()
 }
 
 /// Prints which audio backend is in force, during startup.
@@ -750,15 +743,11 @@ pub fn audio_host_backend_available() -> bool {
 /// announces itself rather than leaving the reader to infer it from whether
 /// sound comes out.
 pub fn announce_audio_backend() {
-    unsafe extern "C" {
-        fn roblox_audio_backend_announce();
-    }
-    // SAFETY: no arguments, no return; writes one line to stderr.
-    unsafe { roblox_audio_backend_announce() }
+    roblox_audio::aaudio::stream::announce_selection();
+    roblox_audio::aaudio::stream::announce_backend();
 }
 
-/// AAudio, implemented in `native/aaudio.cpp` over
-/// `native/pipewire_backend.cpp`'s `CallbackStream`.
+/// AAudio, implemented by the Rust `roblox-audio` crate.
 ///
 /// Unlike OpenSL ES above, none of these are linked: `libroblox.so` has no
 /// undefined `AAudio*` symbols at all. It reaches them by `dlopen`ing
@@ -771,31 +760,7 @@ pub fn announce_audio_backend() {
 /// a virtual library of its own — by default, since 2026-08-22, with
 /// `RBX_RUNTIME_AUDIO=java` the way back to FMOD's Java `AudioDevice` path.
 pub fn aaudio_overrides() -> Vec<(&'static str, *mut c_void)> {
-    #[repr(C)]
-    struct Symbol {
-        name: *const c_char,
-        addr: *mut c_void,
-    }
-    unsafe extern "C" {
-        fn roblox_aaudio_symbols(count: *mut usize) -> *const Symbol;
-    }
-
-    let mut count = 0usize;
-    // SAFETY: the table is a static in aaudio.cpp and outlives the process.
-    let table = unsafe { roblox_aaudio_symbols(&mut count) };
-    if table.is_null() {
-        return Vec::new();
-    }
-    // SAFETY: `table` points at `count` initialised entries with static names.
-    let entries = unsafe { std::slice::from_raw_parts(table, count) };
-    entries
-        .iter()
-        .map(|e| {
-            // SAFETY: each `name` is a string literal in aaudio.cpp.
-            let name = unsafe { CStr::from_ptr(e.name) }.to_str().unwrap_or("");
-            (name, e.addr)
-        })
-        .collect()
+    roblox_audio::aaudio::ffi::symbols()
 }
 
 #[cfg(test)]
@@ -849,7 +814,7 @@ mod aaudio_tests {
     ///
     /// Duplicated here on purpose rather than generated from the C++ table:
     /// this is the assertion that the table and the measurement still agree.
-    /// A typo in one entry of `aaudio.cpp`'s `kSymbols` is otherwise silent —
+    /// A typo in one entry of the Rust AAudio export table is otherwise silent —
     /// the guest's `dlsym` returns null for that one name, FMOD carries on
     /// with a null function pointer, and what surfaces is a crash or a mute
     /// stream a long way from the cause.

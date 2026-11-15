@@ -22,6 +22,9 @@ use std::path::{Path, PathBuf};
 mod abi;
 pub mod dl;
 pub mod elf;
+mod host_symbols;
+/// Read ELF import and export tables without invoking an external linker.
+pub mod imports;
 #[allow(dead_code)]
 mod map;
 #[allow(dead_code)]
@@ -32,6 +35,7 @@ pub mod stub;
 mod tls;
 
 pub use dl::{linker_symbols, register_library, set_search_dir};
+pub use host_symbols::{host_symbol, runtime_symbol};
 
 use std::ffi::CString;
 
@@ -240,7 +244,8 @@ impl MappedLibrary {
                 .iter()
                 .find(|(i, _)| *i == idx)
                 .map(|(_, tp)| *tp);
-            let resolver = tls::TlsResolver::new(&scoped_resolver, &image.dynsyms, &tls_layout, own_tp);
+            let resolver =
+                tls::TlsResolver::new(&scoped_resolver, &image.dynsyms, &tls_layout, own_tp);
             object
                 .mapped
                 .relocate_symbols(&image, &resolver, host_page_size())

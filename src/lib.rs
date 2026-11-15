@@ -16,51 +16,10 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-#[derive(Debug)]
-enum EngineLibrary {
-    Bionic(roblox_linker_sys::Library),
-    Rust(roblox_linker::MappedLibrary),
-}
-
-impl EngineLibrary {
-    fn base(&self) -> usize {
-        match self {
-            Self::Bionic(lib) => lib.base(),
-            Self::Rust(lib) => lib.base(),
-        }
-    }
-
-    fn code_region(&self) -> (usize, usize) {
-        match self {
-            Self::Bionic(lib) => lib.code_region(),
-            Self::Rust(lib) => lib.code_region(),
-        }
-    }
-
-    fn symbol(&self, name: &str) -> Option<*mut std::ffi::c_void> {
-        match self {
-            Self::Bionic(lib) => lib.symbol(name),
-            Self::Rust(lib) => lib.symbol(name),
-        }
-    }
-
-    #[allow(unsafe_code)]
-    fn run_constructors(&mut self) {
-        match self {
-            Self::Bionic(lib) => roblox_linker_sys::run_deferred_ctors(*lib),
-            Self::Rust(lib) => {
-                // SAFETY: `LoadedEngine::run_constructors` enforces the same
-                // pre-constructor setup boundary as the bionic backend.
-                unsafe { lib.run_constructors() }
-            }
-        }
-    }
-}
-
 pub use roblox_abi as abi;
 pub use roblox_android as android;
 pub use roblox_jni_sys as jni;
-pub use roblox_linker_sys::elf::{Binding as ImportBinding, Imports as EngineImports};
+pub use roblox_linker::imports::{Binding as ImportBinding, Imports as EngineImports};
 pub mod deeplink;
 pub mod graphics;
 #[allow(unsafe_code)]
@@ -80,12 +39,6 @@ struct StartupBootstrap {
 }
 
 static STARTUP_BOOTSTRAP: OnceLock<StartupBootstrap> = OnceLock::new();
-
-/// Configure whether the Rust JNI VM may dispatch unresolved members to the
-/// companion C++ compatibility VM.
-pub fn set_jnivm_cpp_fallback(enabled: bool) {
-    jnivm::set_cpp_fallback_enabled(enabled);
-}
 
 #[allow(unsafe_code)]
 extern "C" fn run_startup_bootstrap() {
@@ -304,11 +257,11 @@ impl RuntimeConfig {
     /// This does not load the object or resolve any symbols.
     pub fn engine_imports(&self) -> Result<EngineImports, ConfigError> {
         self.validate_paths()?;
-        roblox_linker_sys::elf::undefined_symbols(&self.native_lib_dir.join("libroblox.so"))
+        roblox_linker::imports::undefined_symbols(&self.native_lib_dir.join("libroblox.so"))
             .map_err(|error| ConfigError::ElfInspection(error.to_string()))
     }
 
-    /// Resolve imports and load `libroblox.so` through the bionic linker.
+    /// Resolve imports and load `libroblox.so` through the experimental Rust linker.
     /// Loading maps and relocates the engine but defers its ELF constructors;
     /// it does not call Roblox's GameActivity bootstrap entry points.
     pub fn load_engine(&self) -> Result<LoadedEngine, LoadError> {
@@ -326,92 +279,48 @@ impl RuntimeConfig {
         }
         roblox_abi::bionic::announce_audio_backend();
         let library_path = self.native_lib_dir.join("libroblox.so");
-        let exported_symbols = roblox_linker_sys::elf::exported_symbols(&library_path)
+        let exported_symbols = roblox_linker::imports::exported_symbols(&library_path)
             .map_err(|error| LoadError::Config(ConfigError::ElfInspection(error.to_string())))?;
-        let use_rust_linker = std::env::var("USE_EXPERIMENTAL_RUST_LINKER")
-            .is_ok_and(|value| matches!(value.trim().to_ascii_lowercase().as_str(), "true" | "1"));
-        let library = if use_rust_linker {
-            eprintln!("[runtime] using experimental Rust ELF linker");
-            roblox_linker::set_search_dir(&self.native_lib_dir);
-            for (lib_name, syms) in &tables.libraries {
-                roblox_linker::register_library(
-                    lib_name,
-                    syms.iter().map(|(n, a)| (n.clone(), *a as usize)).collect(),
-                );
-            }
-            let mut external_symbols = tables
-                .libraries
-                .into_values()
-                .flatten()
-                .map(|(name, address)| (name, address as usize))
-                .collect::<std::collections::BTreeMap<_, _>>();
-            if let Some(address) = roblox_graphics_vulkan::loader_symbol() {
-                external_symbols
-                    .entry("vkGetInstanceProcAddr".to_owned())
-                    .or_insert(address as usize);
-                let vulkan_syms: std::collections::BTreeMap<_, _> = [("vkGetInstanceProcAddr".to_owned(), address as usize)]
+        eprintln!("[runtime] using experimental Rust ELF linker");
+        roblox_linker::set_search_dir(&self.native_lib_dir);
+        for (lib_name, syms) in &tables.libraries {
+            roblox_linker::register_library(
+                lib_name,
+                syms.iter().map(|(n, a)| (n.clone(), *a as usize)).collect(),
+            );
+        }
+        let mut external_symbols = tables
+            .libraries
+            .into_values()
+            .flatten()
+            .map(|(name, address)| (name, address as usize))
+            .collect::<std::collections::BTreeMap<_, _>>();
+        if let Some(address) = roblox_graphics_vulkan::loader_symbol() {
+            external_symbols
+                .entry("vkGetInstanceProcAddr".to_owned())
+                .or_insert(address as usize);
+            let vulkan_syms: std::collections::BTreeMap<_, _> =
+                [("vkGetInstanceProcAddr".to_owned(), address as usize)]
                     .into_iter()
                     .collect();
-                for name in roblox_graphics_vulkan::LIBRARY_NAMES {
-                    roblox_linker::register_library(name, vulkan_syms.clone());
-                }
+            for name in roblox_graphics_vulkan::LIBRARY_NAMES {
+                roblox_linker::register_library(name, vulkan_syms.clone());
             }
-            if roblox_abi::bionic::aaudio_selected() {
-                let aaudio: std::collections::BTreeMap<_, _> = roblox_abi::bionic::aaudio_overrides()
-                    .into_iter()
-                    .map(|(name, address)| (name.to_owned(), address as usize))
-                    .collect();
-                for (name, addr) in &aaudio {
-                    external_symbols.insert(name.clone(), *addr);
-                }
-                roblox_linker::register_library("libaaudio.so", aaudio);
+        }
+        // FMOD requests AAudio with dlopen(), so these exports are not in
+        // libroblox.so's DT_NEEDED import table.
+        if roblox_abi::bionic::aaudio_selected() {
+            let aaudio: std::collections::BTreeMap<_, _> = roblox_abi::bionic::aaudio_overrides()
+                .into_iter()
+                .map(|(name, address)| (name.to_owned(), address as usize))
+                .collect();
+            for (name, addr) in &aaudio {
+                external_symbols.insert(name.clone(), *addr);
             }
-            EngineLibrary::Rust(
-                roblox_linker::MappedLibrary::load(&library_path, &external_symbols)
-                    .map_err(|error| LoadError::Linker(error.to_string()))?,
-            )
-        } else {
-            if !roblox_linker_sys::constructor_deferral_available() {
-                return Err(LoadError::ConstructorDeferralUnavailable);
-            }
-            roblox_linker_sys::init();
-            roblox_linker_sys::set_library_path(
-                self.native_lib_dir
-                    .to_str()
-                    .ok_or(LoadError::NonUtf8Path("native library directory"))?,
-            )
+            roblox_linker::register_library("libaaudio.so", aaudio);
+        }
+        let library = roblox_linker::MappedLibrary::load(&library_path, &external_symbols)
             .map_err(|error| LoadError::Linker(error.to_string()))?;
-            for (name, symbols) in tables.libraries {
-                roblox_linker_sys::register(name, &symbols)
-                    .map_err(|error| LoadError::Linker(error.to_string()))?;
-            }
-            if let Some(address) = roblox_graphics_vulkan::loader_symbol() {
-                let symbols = [("vkGetInstanceProcAddr".to_owned(), address)];
-                for name in roblox_graphics_vulkan::LIBRARY_NAMES {
-                    roblox_linker_sys::register(name, &symbols)
-                        .map_err(|error| LoadError::Linker(error.to_string()))?;
-                }
-            }
-            // FMOD reaches AAudio with dlopen("libaaudio.so"), so none of its
-            // exports appear in libroblox.so's DT_NEEDED import table.
-            if roblox_abi::bionic::aaudio_selected() {
-                let aaudio: Vec<_> = roblox_abi::bionic::aaudio_overrides()
-                    .into_iter()
-                    .map(|(name, address)| (name.to_owned(), address))
-                    .collect();
-                roblox_linker_sys::register("libaaudio.so", &aaudio)
-                    .map_err(|error| LoadError::Linker(error.to_string()))?;
-            }
-            let library_name = library_path
-                .to_str()
-                .ok_or(LoadError::NonUtf8Path("libroblox.so"))?;
-            roblox_linker_sys::defer_next_ctors(true);
-            let load_result = roblox_linker_sys::dlopen(library_name, roblox_linker_sys::RTLD_NOW);
-            roblox_linker_sys::defer_next_ctors(false);
-            EngineLibrary::Bionic(
-                load_result.map_err(|error| LoadError::Linker(error.to_string()))?,
-            )
-        };
         Ok(LoadedEngine {
             library,
             exported_symbols,
@@ -429,7 +338,7 @@ impl RuntimeConfig {
 /// A mapped engine library. Roblox bootstrap is not invoked automatically.
 #[derive(Debug)]
 pub struct LoadedEngine {
-    library: EngineLibrary,
+    library: roblox_linker::MappedLibrary,
     exported_symbols: std::collections::BTreeMap<String, u64>,
     constructors_pending: bool,
     constructors_ready: bool,
@@ -467,12 +376,15 @@ impl LoadedEngine {
     /// Run the engine's deferred ELF constructors once the caller has finished
     /// preparing Android services and graphics state. This executes engine
     /// code and can reach compatibility APIs that are not implemented yet.
+    #[allow(unsafe_code)]
     pub fn run_constructors(&mut self) -> Result<(), JniError> {
         if self.constructors_pending {
             if !self.constructors_ready {
                 return Err(JniError::PreConstructorSetupRequired);
             }
-            self.library.run_constructors();
+            // SAFETY: startup callers invoke this only after framework and JNI
+            // bindings have been initialized.
+            unsafe { self.library.run_constructors() };
             self.constructors_pending = false;
         }
         Ok(())
@@ -587,12 +499,10 @@ impl LoadedEngine {
                 delivered: AtomicBool::new(false),
             })
             .map_err(|_| JniError::BootstrapAlreadyInstalled)?;
-        if jnivm::selected_from_environment() {
-            jnivm::set_startup_bootstrap(run_startup_bootstrap)
-                .map_err(|_| JniError::BootstrapAlreadyInstalled)?;
-            jnivm::set_game_loaded_callback(report_rust_game_loaded)
-                .map_err(|_| JniError::BootstrapAlreadyInstalled)?;
-        }
+        jnivm::set_startup_bootstrap(run_startup_bootstrap)
+            .map_err(|_| JniError::BootstrapAlreadyInstalled)?;
+        jnivm::set_game_loaded_callback(report_rust_game_loaded)
+            .map_err(|_| JniError::BootstrapAlreadyInstalled)?;
         roblox_jni_sys::game_activity::set_bootstrap(Some(run_startup_bootstrap));
         // This host does not have Android's framework Activity to guarantee
         // that GameActivity.bootstrapTheApp is dispatched before the engine's
@@ -609,7 +519,7 @@ impl LoadedEngine {
             .to_path_buf()
     }
 
-    /// Create libjnivm's JavaVM and call Roblox's `JNI_OnLoad` export.
+    /// Create the Rust JavaVM and call Roblox's `JNI_OnLoad` export.
     /// Constructors must have run first.
     #[allow(unsafe_code)]
     pub fn initialize_jni(&mut self) -> Result<i32, JniError> {
@@ -622,19 +532,13 @@ impl LoadedEngine {
             self.vm_initialized = true;
         }
         // SAFETY: the function pointer is this live library's JNI_OnLoad;
-        // the native shim contains exceptions at the FFI boundary.
-        let version = if jnivm::selected_from_environment() {
-            // SAFETY: this is the live JNI_OnLoad export from the mapped engine.
-            unsafe { jnivm::call_on_load(on_load) }.map_err(JniError::OnLoad)?
-        } else {
-            // SAFETY: this is the live JNI_OnLoad export from the mapped engine.
-            unsafe { roblox_jni_sys::jni::call_on_load(on_load) }.map_err(JniError::OnLoad)?
-        };
+        // the Rust VM contains panics at the FFI boundary.
+        let version = unsafe { jnivm::call_on_load(on_load) }.map_err(JniError::OnLoad)?;
         self.jni_initialized = true;
         Ok(version)
     }
 
-    /// Call AGDK's `initializeNativeCode` through the selected JNI VM.
+    /// Call AGDK's `initializeNativeCode` through the Rust JNI VM.
     /// A JavaVM must exist, and constructors must have run first.
     #[allow(unsafe_code)]
     pub fn initialize_game_activity(
@@ -654,58 +558,34 @@ impl LoadedEngine {
         let native = self
             .symbol("Java_com_google_androidgamesdk_GameActivity_initializeNativeCode")
             .ok_or(JniError::MissingGameActivityInit)?;
-        if jnivm::selected_from_environment() {
-            let env = jnivm::current_env().ok_or(JniError::JniNotInitialized)?;
-            let activity = jnivm::new_opaque_object("com/google/androidgamesdk/GameActivity")
-                .map_err(JniError::ExperimentalJniVmUnavailable)?;
-            let internal = jnivm::new_string_ref(internal_path)
-                .map_err(JniError::ExperimentalJniVmUnavailable)?;
-            let obb =
-                jnivm::new_string_ref(obb_path).map_err(JniError::ExperimentalJniVmUnavailable)?;
-            let external = jnivm::new_string_ref(external_path)
-                .map_err(JniError::ExperimentalJniVmUnavailable)?;
-            let assets = jnivm::new_opaque_object("android/content/res/AssetManager")
-                .map_err(JniError::ExperimentalJniVmUnavailable)?;
-            let width = i32::try_from(width).map_err(|_| {
-                JniError::ExperimentalJniVmUnavailable(
-                    "configuration width exceeds Android limits".into(),
-                )
-            })?;
-            let height = i32::try_from(height).map_err(|_| {
-                JniError::ExperimentalJniVmUnavailable(
-                    "configuration height exceeds Android limits".into(),
-                )
-            })?;
-            let configuration = jnivm::new_configuration(width, height)
-                .map_err(JniError::ExperimentalJniVmUnavailable)?;
-            // SAFETY: all JNI references and the native export belong to the
-            // mapped engine and selected Rust VM, and remain live during call.
-            unsafe {
-                roblox_jni_sys::game_activity::initialize_with_vm_refs(
-                    native,
-                    env,
-                    activity,
-                    internal,
-                    obb,
-                    external,
-                    assets,
-                    configuration,
-                )
-            }
-            .map_err(JniError::GameActivity)
-        } else {
-            // SAFETY: the symbol belongs to this mapped engine and the process
-            // VM was checked above.
-            unsafe {
-                roblox_jni_sys::game_activity::initialize(
-                    native,
-                    internal_path,
-                    obb_path,
-                    external_path,
-                )
-            }
-            .map_err(JniError::GameActivity)
+        let env = jnivm::current_env().ok_or(JniError::JniNotInitialized)?;
+        let activity = jnivm::new_opaque_object("com/google/androidgamesdk/GameActivity")
+            .map_err(JniError::JniVm)?;
+        let internal = jnivm::new_string_ref(internal_path).map_err(JniError::JniVm)?;
+        let obb = jnivm::new_string_ref(obb_path).map_err(JniError::JniVm)?;
+        let external = jnivm::new_string_ref(external_path).map_err(JniError::JniVm)?;
+        let assets = jnivm::new_opaque_object("android/content/res/AssetManager")
+            .map_err(JniError::JniVm)?;
+        let width = i32::try_from(width)
+            .map_err(|_| JniError::JniVm("configuration width exceeds Android limits".into()))?;
+        let height = i32::try_from(height)
+            .map_err(|_| JniError::JniVm("configuration height exceeds Android limits".into()))?;
+        let configuration = jnivm::new_configuration(width, height).map_err(JniError::JniVm)?;
+        // SAFETY: all JNI references and the native export belong to the
+        // mapped engine and Rust VM, and remain live during the call.
+        unsafe {
+            roblox_jni_sys::game_activity::initialize_with_vm_refs(
+                native,
+                env,
+                activity,
+                internal,
+                obb,
+                external,
+                assets,
+                configuration,
+            )
         }
+        .map_err(JniError::GameActivity)
     }
 
     /// Deliver the initial client surface through GameActivity's native
@@ -789,31 +669,21 @@ extern "C" fn report_rust_game_loaded(place_id: i64) {
 }
 
 fn create_java_vm() -> Result<(), JniError> {
-    if jnivm::selected_from_environment() {
-        // FMOD can query its static Java capabilities during JNI_OnLoad, before
-        // the later startup-bootstrap installation point.
-        jnivm::set_fmod_aaudio_support(|| {
-            roblox_abi::bionic::aaudio_selected()
-                && roblox_abi::bionic::audio_host_backend_available()
-        })
-        .map_err(|_| JniError::BootstrapAlreadyInstalled)?;
-        jnivm::create_vm()
-            .map(|_| ())
-            .map_err(JniError::ExperimentalJniVmUnavailable)?;
-        roblox_jni_sys::jni::init_compat_bridge().map_err(JniError::ExperimentalJniVmUnavailable)
-    } else {
-        roblox_jni_sys::jni::create_vm()
-            .map(|_| ())
-            .ok_or(JniError::VmAlreadyExists)
-    }
+    // FMOD can query its static Java capabilities during JNI_OnLoad, before
+    // the later startup-bootstrap installation point.
+    jnivm::set_fmod_aaudio_support(|| {
+        roblox_abi::bionic::aaudio_selected()
+            && roblox_abi::bionic::audio_host_backend_available()
+    })
+    .map_err(|_| JniError::BootstrapAlreadyInstalled)?;
+    jnivm::create_vm().map_err(JniError::JniVm)?;
+    // Temporary compatibility bridge for the Java classes that are still
+    // registered by the native framework layer; removed with those ports.
+    roblox_jni_sys::jni::init_compat_bridge().map_err(JniError::JniVm)
 }
 
 fn current_jni_env() -> Option<*mut std::ffi::c_void> {
-    if jnivm::selected_from_environment() {
-        jnivm::current_env()
-    } else {
-        roblox_jni_sys::jni::env()
-    }
+    jnivm::current_env()
 }
 
 /// Failure during JavaVM or AGDK GameActivity initialisation.
@@ -825,8 +695,7 @@ pub enum JniError {
     VmNotInitialized,
     MissingStartupNative(&'static str),
     StartupNative(String),
-    VmAlreadyExists,
-    ExperimentalJniVmUnavailable(String),
+    JniVm(String),
     JniNotInitialized,
     MissingOnLoad,
     MissingGameActivityInit,
@@ -858,10 +727,7 @@ impl std::fmt::Display for JniError {
                 write!(f, "required startup native is not exported: {name}")
             }
             Self::StartupNative(message) => write!(f, "startup directory setter failed: {message}"),
-            Self::VmAlreadyExists => f.write_str("a JavaVM already exists in this process"),
-            Self::ExperimentalJniVmUnavailable(error) => {
-                write!(f, "create experimental Rust JavaVM: {error}")
-            }
+            Self::JniVm(error) => write!(f, "Rust JavaVM error: {error}"),
             Self::JniNotInitialized => {
                 f.write_str("complete JNI_OnLoad before GameActivity initialization")
             }
@@ -905,8 +771,6 @@ impl std::error::Error for JniError {}
 #[derive(Debug)]
 pub enum LoadError {
     Config(ConfigError),
-    NonUtf8Path(&'static str),
-    ConstructorDeferralUnavailable,
     UnresolvedImports(Vec<String>),
     Linker(String),
 }
@@ -915,10 +779,6 @@ impl std::fmt::Display for LoadError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Config(error) => write!(f, "{error}"),
-            Self::NonUtf8Path(name) => write!(f, "{name} path is not valid UTF-8"),
-            Self::ConstructorDeferralUnavailable => {
-                f.write_str("native linker cannot defer engine constructors")
-            }
             Self::UnresolvedImports(imports) => {
                 write!(
                     f,
@@ -976,7 +836,7 @@ pub fn supplied_path_exists(path: &Path) -> bool {
     path.exists()
 }
 
-pub use jnivm::{GcStats, set_selected_from_environment};
+pub use jnivm::GcStats;
 
 static LAST_GC: OnceLock<std::sync::Mutex<std::time::Instant>> = OnceLock::new();
 const GC_INTERVAL: std::time::Duration = std::time::Duration::from_secs(20);

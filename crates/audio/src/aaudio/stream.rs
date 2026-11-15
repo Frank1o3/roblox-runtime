@@ -3,9 +3,9 @@
 //! ten builder setters, `AAudioStreamBuilder_openStream`, and thirteen
 //! `AAudioStream_*` calls).
 //!
-//! Written from the AAudio contract the engine actually exercises, with
-//! `native/aaudio.cpp` consulted as a behavioral reference only. The rules
-//! that shaped it, each pinned by a test in this file:
+//! Written from the AAudio contract the engine actually exercises. The former
+//! native implementation served only as a behavioral reference and has been
+//! removed. The rules that shaped this code, pinned by tests in this file:
 //!
 //! - **Opening an input stream opens nothing.** The microphone exists only
 //!   between `requestStart` and callback STOP / pause / stop / close; an
@@ -29,6 +29,7 @@ use std::ffi::c_void;
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, Instant};
+use std::sync::OnceLock as SelectionOnceLock;
 
 use super::backend::{
     capture_backend, output_backend, Capture, DECLARED_BURST_FRAMES, DECLARED_BYTES_PER_FRAME,
@@ -48,6 +49,60 @@ pub type BuilderHandle = usize;
 /// Opaque stream handle: the registry key, the address of the stream's
 /// `Arc`. Passed back to the engine as its `AAudioStream*`.
 pub type StreamHandle = usize;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum BackendSelection {
+    Java,
+    AAudio,
+    AAudioRefuse,
+}
+
+fn selected_backend() -> BackendSelection {
+    static SELECTED: SelectionOnceLock<BackendSelection> = SelectionOnceLock::new();
+    *SELECTED.get_or_init(|| {
+        let raw = std::env::var("RBX_RUNTIME_AUDIO").unwrap_or_default();
+        match raw.as_str() {
+            "" | "aaudio" => BackendSelection::AAudio,
+            "aaudio-refuse" => BackendSelection::AAudioRefuse,
+            "java" => BackendSelection::Java,
+            _ => {
+                log(
+                    Priority::Warn,
+                    AUDIO_TAG,
+                    &format!("RBX_RUNTIME_AUDIO={raw} is not a backend I know (java, aaudio, aaudio-refuse); using aaudio, the default."),
+                );
+                BackendSelection::AAudio
+            }
+        }
+    })
+}
+
+pub fn aaudio_selected() -> bool {
+    selected_backend() != BackendSelection::Java
+}
+
+pub fn audio_host_backend_available() -> bool {
+    crate::backend::host_backend_available()
+}
+
+pub fn announce_selection() {
+    let selection = selected_backend();
+    let requested = std::env::var("RBX_RUNTIME_AUDIO").unwrap_or_else(|_| "unset".into());
+    let name = match selection {
+        BackendSelection::Java => "java",
+        BackendSelection::AAudio => "aaudio",
+        BackendSelection::AAudioRefuse => "aaudio-refuse",
+    };
+    log(
+        Priority::Info,
+        AUDIO_TAG,
+        &format!("audio backend: {name} (RBX_RUNTIME_AUDIO={requested}); {}", match selection {
+            BackendSelection::Java => "libaaudio.so is not registered and FMOD uses its Java AudioDevice path",
+            BackendSelection::AAudio => "libaaudio.so is registered and streams use the selected host audio backend",
+            BackendSelection::AAudioRefuse => "control run: AAudio is registered but every stream open is refused",
+        }),
+    );
+}
 
 // ---------------------------------------------------------------------------
 // Registries
@@ -317,6 +372,15 @@ pub fn open_stream(
             builder.error_callback.is_some(),
         ),
     );
+
+    if selected_backend() == BackendSelection::AAudioRefuse {
+        log(
+            Priority::Info,
+            AUDIO_TAG,
+            "control run (RBX_RUNTIME_AUDIO=aaudio-refuse): reporting AAUDIO_ERROR_UNAVAILABLE",
+        );
+        return AAUDIO_ERROR_UNAVAILABLE;
+    }
 
     if format_to_bits(builder.format).is_none() {
         log(
@@ -1129,7 +1193,7 @@ pub fn get_xrun_count(handle: StreamHandle) -> i32 {
 /// `true` answer as permanent; this is the gate that keeps that promise
 /// honest.
 pub fn supports_aaudio() -> bool {
-    crate::backend::host_backend_available()
+    aaudio_selected() && crate::backend::host_backend_available()
 }
 
 /// **Said out loud, because a user whose variable was silently ignored had no
@@ -1138,15 +1202,7 @@ pub fn supports_aaudio() -> bool {
 pub fn announce_backend() {
     let asked = crate::backend::host_backend_name();
     let got = crate::backend::effective_backend_name();
-    if asked == got {
-        log(Priority::Info, AUDIO_TAG, &format!("host backend: {got}"));
-    } else {
-        log(
-            Priority::Info,
-            AUDIO_TAG,
-            &format!("host backend: {got} (RBX_RUNTIME_AUDIO_HOST={asked})"),
-        );
-    }
+    log(Priority::Info, AUDIO_TAG, &format!("host audio device: {got} (RBX_RUNTIME_AUDIO_HOST={asked})"));
 }
 
 // ---------------------------------------------------------------------------

@@ -2351,7 +2351,6 @@ extern "C" {
 /// compiled into it. That is the honest starting point — inventing flag values
 /// would change engine behaviour in ways nothing here could account for.
 int roblox_init_flags(void* fn, const char* settings_json, char* err, size_t err_len) {
-    using Call = jobject (*)(JNIEnv*, jclass, jobjectArray);
     if (!fn) {
         snprintf(err, err_len, "nativeInitializeNativeFlags is not exported");
         return -1;
@@ -2395,36 +2394,16 @@ int roblox_init_flags(void* fn, const char* settings_json, char* err, size_t err
                 pos = nl + 1;
             }
         }
-        const char* experimental = getenv("USE_EXPERIMENTAL_JNIVM");
-        if (experimental && (strcmp(experimental, "1") == 0 || strcmp(experimental, "true") == 0)) {
-            std::vector<const char*> raw_names;
-            raw_names.reserve(names.size());
-            for (const auto& name : names) raw_names.push_back(name.c_str());
-            const int rc = roblox_runtime::roblox_jnivm_call_native_flags(
-                fn, raw_names.data(), static_cast<int>(raw_names.size()));
-            if (rc != 0) {
-                snprintf(err, err_len,
-                         "Rust JNI nativeInitializeNativeFlags call failed (%d)", rc);
-                return -1;
-            }
-            return 0;
-        }
-
-        auto* env = roblox_runtime::process_env();
-        if (!env) {
-            snprintf(err, err_len, "no JavaVM for nativeInitializeNativeFlags");
+        std::vector<const char*> raw_names;
+        raw_names.reserve(names.size());
+        for (const auto& name : names) raw_names.push_back(name.c_str());
+        const int rc = roblox_runtime::roblox_jnivm_call_native_flags(
+            fn, raw_names.data(), static_cast<int>(raw_names.size()));
+        if (rc != 0) {
+            snprintf(err, err_len,
+                     "Rust JNI nativeInitializeNativeFlags call failed (%d)", rc);
             return -1;
         }
-        auto cls = env->GetClass("com/roblox/client/flags/FlagJniInterface");
-        auto arr = std::make_shared<jnivm::Array<jnivm::String>>(names.size());
-        for (size_t k = 0; k < names.size(); ++k) {
-            (*arr)[k] = std::make_shared<jnivm::String>(names[k]);
-        }
-        jobjectArray array = (jobjectArray)roblox_runtime::to_jni(env, arr);
-        reinterpret_cast<Call>(fn)(
-            env->GetJNIEnv(),
-            (jclass)roblox_runtime::to_jni(env, cls),
-            array);
         return 0;
     } catch (const std::exception& e) {
         snprintf(err, err_len, "%s", e.what());

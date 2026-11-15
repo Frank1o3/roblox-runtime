@@ -1,15 +1,31 @@
 # Porting plan: removing every C++ dependency from roblox-runtime
 
-Status: **Step 1 — inventory and gap analysis. Written for review; no porting has
-started beyond the audio crate work that predates this document.**
+Status: **Implementation in progress. The MCP launcher linker has been removed
+and the Rust ELF mapper is the only engine loader. JNI hook migration remains.**
 
 Goal: after this work the workspace is 100% Rust. No `native/`, no `third_party/`,
 no CMake/C++ toolchain, no `*-sys` crate that links a C++ project. System libraries
 loaded at run time (Vulkan, cpal's host audio stack) remain.
 
+### User-directed scope adjustment
+
+The existing Rust `crates/linker` and `crates/jnivm` implementations are the
+behavioral implementations to use. Do not port the MCP launcher linker or the
+libjnivm C++ project. Their behavior is useful as a reference for the Android
+APKs' required contracts. The MCP linker submodule and its Rust binding/build
+crate have now been removed; the unrelated native build support has been
+separated into `crates/native-sys`. Remaining work is to replace the C++ JNI
+framework hooks with Rust hooks registered in the Rust VM, then remove the
+remaining native build inputs.
+
 ---
 
 ## 0. What was read (Step 0 record)
+
+Sections A-E record the original inventory and migration assumptions from
+2026-11-14. The user-directed scope adjustment above supersedes their proposed
+MCP linker/libjnivm porting work and the linker-related entries in those
+sections.
 
 - Repo layout: this workspace is a git submodule of the client repo `rusty-blox`
   (the parent directory). The client is visible at `..` and was read for §E.
@@ -42,7 +58,7 @@ pass. See §Audio for what still has to happen there anyway.
 tree**. Measured with `diff` (differing lines of both files combined):
 
 | file | lines here | diff vs cordial |
-|---|---|---|
+| --- | --- | --- |
 | opensles.cpp | 1655 | 45 |
 | liblog.cpp | 231 | 36 |
 | system_paths.cpp | 350 | 71 |
@@ -86,7 +102,7 @@ Four static libraries, plus four `EXCLUDE_FROM_ALL` test binaries run as
 POST_BUILD steps:
 
 | library | files | consumers |
-|---|---|---|
+| --- | --- | --- |
 | `roblox_liblog` | liblog, system_paths, netdb_compat, opensles, pipewire/pulse/alsa/oss backends, aaudio, aaudio_input_callback, thread_trace | `crates/abi/build.rs` links it; its symbol tables are read by `crates/abi/src/bionic/mod.rs` |
 | `roblox_linker_shim` | shim.cpp | `crates/linker-sys/build.rs`, `crates/android/build.rs` |
 | `roblox_jni_shim` | jni_shim + all class-hook files | `crates/jni-sys/build.rs`, `crates/android/build.rs` |
@@ -111,12 +127,12 @@ interception → `crates/abi/bionic/*`; Android filesystem/system → `crates/an
 **Audio group → `crates/audio`** (partly done; see §Audio status):
 
 | C++ file | exports | target |
-|---|---|---|
+| --- | --- | --- |
 | `pipewire_backend.cpp/.h` (2,490) | `roblox_audio_sinks`, `roblox_audio_sinks_free`; C++ `OutputStream`/`PlaybackStream`/`CallbackStream`/`CaptureStream`, backend selector, `voice_muted()`, `testing::fill_pcm` | `backend/pcm.rs` (PlaybackStream queue logic, 10 tests ported ✓), `backend/cpal_output.rs` (CallbackStream → cpal, done), `backend/host.rs` (selector, done), capture stream **TODO**, enumeration done via cpal |
 | `pulse_backend.cpp`, `alsa_backend.cpp` (807) | C++ `pulse_available/make_pulse_stream`, `alsa_available/make_alsa_stream` | merged into `cpal_output.rs` by design decision; losses recorded in new ADR |
 | `oss_backend.cpp` (269) | C++ `oss_available/make_oss_stream` | `backend/oss.rs` ✓ (tests: conversion clamp test ported) |
-| `aaudio.cpp/.h` (1,398) | 25 AAudio symbols via `roblox_aaudio_symbols` table + `roblox_audio_backend_is_aaudio/_available/_announce` | `aaudio/` module: `types.rs` ✓, `builder.rs` ✓; stream surface **TODO** (§Audio) |
-| `aaudio_input_callback.cpp/.h` (173) | C++ `InputCallbackDriver` | `input_callback.rs` ✓ (5 tests ported ✓) |
+| `aaudio.cpp/.h` (1,398) | 25 AAudio symbols and backend selection | **Ported and wired** through `crates/audio/src/aaudio/ffi.rs`; native AAudio implementation and callback sources removed |
+| `aaudio_input_callback.cpp/.h` (173) | C++ `InputCallbackDriver` | `input_callback.rs` ✓; native callback sources removed |
 | `opensles.cpp` (1,655) | `slCreateEngine` + 7 `SL_IID_*` **data** symbols via `roblox_opensles_symbols` | **TODO** → `crates/audio/opensles/` |
 | `audio_classes.cpp` (2,195) | Java hooks: AudioManager/AudioDeviceInfo, AudioRecord, WebRtcAudioManager/Record/Track, org/fmod/AudioDevice; the microphone-rule chokepoint | **TODO** → `crates/audio` JNI hooks module (they *are* the audio policy; registered via `jnivm::register_method_handler`) — or `crates/framework` if Q1 answers "one hooks crate for everything" |
 | `liblog.cpp` (231) | `__android_log_write/buf_write/print/vprint/assert`, `android_set_abort_message` via `roblox_liblog_symbols` | **TODO** → `crates/abi/bionic/liblog.rs` (variadic constraint: see §Variadic) |
@@ -124,13 +140,13 @@ interception → `crates/abi/bionic/*`; Android filesystem/system → `crates/an
 | `netdb_compat.cpp` (206) | `roblox_getaddrinfo/freeaddrinfo` table | **TODO** → `crates/abi/bionic/netdb.rs` |
 | `legacy_stdio.cpp` (103) | `roblox_legacy_{fflush,fclose,fseek,ftell,fputs,setvbuf,fread,fwrite,vfprintf,fprintf}` | **TODO** → `crates/abi/bionic/legacy_stdio.rs` (Rust already owns `__sF` and exports `roblox_legacy_sf_base/stride`) |
 | `thread_trace.cpp` (173) | `roblox_pthread_create`, `roblox_set_thread_trace`, table (`pthread_create`) | **TODO** → `crates/abi/bionic/pthread.rs` (the aarch64 `roblox_pthread_attr_real` it resolves is already Rust) |
-| `audio_probe.cpp`, `alsa/pulse_backend_probe.cpp` (1,287) | none | → `crates/audio/examples/` (probes never run under `cargo test`) |
+| `audio_probe.cpp`, `alsa/pulse_backend_probe.cpp` (1,287) | none | Rust replacements in `crates/audio/examples/`; native probes removed |
 | `*_test.cpp` (4 files, 38 tests) | — | → cargo tests of the same names; 15 ported ✓ (pcm 10 + input_callback 5), **23 remaining** |
 
 **JNI group → `crates/framework` (proposed, Q1):**
 
 | C++ file | exports | target |
-|---|---|---|
+| --- | --- | --- |
 | `jni_shim.cpp` (697) | 18 `roblox_jni_*` externs; owns process VM, `reserved0`, exception barriers, compat-bridge side | replaced by `crates/jni-sys`'s `jni.rs` calling `jnivm` directly; `init_compat_bridge` and the whole C++ fallback disappear |
 | `android_classes.cpp` (2,037) | `roblox_register_android_classes` + 20 textbox/identity/app-ready exports; 10+ classes (StringBridge, DeviceStaticParams, NativeTextBoxInfo, NativeGL/Locale/UserJavaInterface, LoggingProtocol, SessionReporter, VideoCodecCapability, MediaCodecInfoUtils, BuildVersion…) | port → `crates/framework`; the textbox/identity *state* sinks stay where their Rust consumers already live (`crates/jni-sys` drivers + `jnivm::native_helper`) |
 | `game_activity.cpp` (2,134) | 36 externs driving AGDK lifecycle/input/IME/gamepad; registers GameActivity/MotionEvent/KeyEvent/State/InputConnection/AssetManager/Configuration/ClassLoader; reads back RegisterNatives entries via `Class::natives` | drivers already in Rust (`crates/jni-sys/game_activity/*`) — only the C++ bodies they call move to Rust (`crates/framework`); `crates/jnivm` needs `find_native`-based registered-native lookup (exists) |
@@ -148,7 +164,7 @@ interception → `crates/abi/bionic/*`; Android filesystem/system → `crates/an
 **Linker group → `crates/linker`:**
 
 | C++ file | exports | target |
-|---|---|---|
+| --- | --- | --- |
 | `shim.cpp` (156) | 12 `roblox_linker_*` externs over the C++ linker API | replaced by `crates/linker-sys`'s Rust API → then by `crates/linker` (§C) |
 | `third_party/mcpelauncher-linker` (257 MB, MIT) | the bionic linker: virtual libraries, dlopen/dlsym, TLS, constructors, deferral patch | replaced by `crates/linker` (already: elf/map/reloc/resolve/dl/tls/stub) |
 | `third_party/libjnivm` (632 KB, MIT, fake-jni ancestry) | the C++ JNI VM | replaced by `crates/jnivm` (§B) |
@@ -163,7 +179,7 @@ The C++ shims use libjnivm's API; `crates/jnivm` must cover every capability
 before the hooks can port. Capability-by-capability:
 
 | capability the C++ shims use | crates/jnivm status |
-|---|---|
+| --- | --- |
 | class registration, hook registration with **explicit descriptors** | ✓ `register_class`, `register_method(class, name, descriptor, is_static)`, `register_method_handler`. Rust cannot derive descriptors from C++ types — every ported hook carries a descriptor string, verified against the dex by a new tool (§B.1). This converts the "silently dead hook" failure class into a build-time-checked one |
 | `Class::natives` lookup of RegisterNatives-registered engine natives (game_activity.cpp reads back `initializeNativeCode` etc. this way; plain GetMethodID does *not* dispatch to RegisterNatives in libjnivm) | ✓ `register_native` / `find_native`; **verify**: that `Call*Method` on a RegisterNatives-bound name resolves through `find_native` with the same semantics (GetMethodID-not-dispatching is *parity*, not a bug to fix) |
 | `<init>` static-factory rewrite | ✓ jnivm rewrites instance `<init>` lookups to a static factory signature (matches libjnivm's behavior; descriptor check must model it) |
@@ -211,7 +227,7 @@ specification, in `tools/`):
 What the APK needed from the launcher linker, and `crates/linker` status:
 
 | capability | status in crates/linker |
-|---|---|
+| --- | --- |
 | virtual libraries registered by name→symbol table (`roblox_linker_sys::register` ≡ `register_library`) | ✓ `dl::register_library` (+ `register_global_symbols`) |
 | engine `DT_NEEDED` resolution against those tables, nothing on disk | ✓ `MappedLibrary::load` + search dir; **verify**: missing-dependency tolerance matches the C++ path's failure mode (bionic aborts the load; crates/linker tolerates if imports resolve — same net effect, keep it) |
 | `dlopen`/`dlsym`/`dlclose`/`dlerror`/`dladdr`/`dlvsym`/`dl_iterate_phdr` for the guest | ✓ `dl::rust_dlopen`… exist; **verify** they are installed as the guest's `libdl.so` table (the bionic path got these from `linker::init()` loading `libdl.so`; the Rust path must register `dl::linker_symbols()` the same way) — FMOD's `dlopen("libaaudio.so")` must land in the registered table, not the host loader |
@@ -240,7 +256,7 @@ public re-export `roblox_runtime::jni` stable.
 ### `crates/linker-sys` (package roblox-linker-sys) — every call site
 
 | consumer | use today | becomes |
-|---|---|---|
+| --- | --- | --- |
 | `crates/abi` | `roblox_linker_sys::host_symbol` (host dlsym w/ cache) + build.rs link lines | `host_symbol` moves to `crates/linker` (it is pure dlopen/dlsym logic); build.rs link lines deleted; `DEP_ROBLOX_LINKER_SYS_SHIM_ROOT` gone |
 | `crates/android` | build.rs only (link line pulls the C++ archives) | build.rs deleted |
 | `crates/jni-sys` | build.rs only | build.rs deleted |
@@ -253,7 +269,7 @@ pure-Rust type crate" if `elf.rs` finds a new home first.
 ### `crates/jni-sys` (package roblox-jni-sys) — every call site
 
 | consumer | use today | becomes |
-|---|---|---|
+| --- | --- | --- |
 | root `roblox-runtime` | `pub use roblox_jni_sys as jni`; `src/lib.rs` (bootstrap, startup setters, initialize_game_activity…), `src/graphics.rs` | same API surface, now implemented over `jnivm` instead of the C++ shim; the `jni` re-export keeps its path (renamed package, re-export unchanged) |
 | client (parent repo) | `roblox_runtime::jni::game_activity::*` (≈30 distinct fns incl. `RawTextBoxInfo`, `focused_textbox`, `appbridge_call_bare`, IME/gamepad/textbox setters), `roblox_runtime::jni` implicit via facade | path-identical re-export; zero client code changes (see client-migration.md) |
 | internals | `game_activity::{bootstrap,display,surface,input,lifecycle_text,services,accessibility}.rs` call the 18+36+31+7 C++ externs | each extern call site re-points to the Rust port (same signatures, Rust-native errors); `jni::init_compat_bridge` deleted with the C++ fallback |
@@ -294,30 +310,25 @@ The tree builds and tests green at every commit. The C++ path and the Rust path
 coexist, selected the way they already are (env vars), extended with per-area
 selection:
 
-- **P0 — audio completion (crates/audio only; no interface change).**
+- **P0 — audio completion (in progress).**
   1. Consolidate backend selection: `backend/mod.rs` currently carries a stale
      dlopen-probe selector duplicating `backend/host.rs`'s cpal-probe selector
      (the design decision). Delete the stale one, re-export
      `host::{effective_backend_name, host_backend_available, host_backend_name,
      make_output_stream}` from `mod.rs` as the task's hypothesis expects.
      Replace `eprintln!` in cpal_output.rs with `roblox-logging`.
-  2. Port `opensles.cpp` → `crates/audio/opensles/` (engine/player/recorder,
-     IID pointer-identity rule; recorder is real — SL_IID_RECORD reversal kept).
-  3. Port the AAudio stream surface (`aaudio.cpp`): builder, open/start/stop/
-     pause/close, getters-report-what-was-granted, blocking read, input via
-     `input_callback.rs`; the one-way `supportsAAudio()` gate.
-  4. Port the capture stream (cpal input stream wrapper with the C++
-     `CaptureStream` contract: no PipeWire/host resource before `open()` or
-     after `close()`; single process-wide capture chokepoint).
-  5. Port remaining tests: 14 from `aaudio_input_test.cpp`, plus
-     `pipewire_backend_test.cpp`'s remaining sink-selection cases if any are
-     still uncovered (pcm.rs covers 10 of 15 today).
+  2. Implement the OpenSL ABI adapters and replace the C++ OpenSL/audio backend
+     implementation with `crates/audio/opensles/` plus cpal.
+  3. AAudio stream policy, callbacks, FFI exports, backend selection, and Rust
+     probes are implemented; the corresponding native AAudio files are removed.
+  4. Capture policy is implemented in Rust. Wire OpenSL and Java capture paths
+     to the same capture chokepoint.
+  5. Port any remaining `pipewire_backend_test.cpp` sink-selection cases not
+     already covered by Rust audio tests.
   6. Port `audio_classes.cpp` (Java audio classes; microphone rule) — depends on
      P2 (jnivm hooks) for registration, but its logic lands here.
-  7. Probes (`audio_probe`, alsa/pulse probes) → `examples/`.
-  Feature: none needed — the audio crate is inert until wired into symbol
-  registration in P3/P5; the C++ audio path keeps serving `aaudio_overrides()`
-  until the switch flips.
+  Audio AAudio symbol registration now comes from the Rust crate. OpenSL symbols
+  and Java class hooks still come from the native compatibility layer.
 
 - **P1 — libc-compat ports (`crates/abi`, `crates/android`), selectable.**
   liblog, system_paths, netdb, legacy_stdio, thread_trace → Rust, each with its
@@ -338,21 +349,20 @@ selection:
 - **P3 — JNI hook ports into `crates/framework`** (proposed name), group by
   file: platform/unanswered/battery → cookies/clipboard/permissions/deeplink →
   local_storage → accessibility → android_classes → game_activity drivers →
-  init_params. Registered in the Rust VM only; the C++ VM keeps serving the
-  legacy path via its own registration. `USE_EXPERIMENTAL_JNIVM=true` selects
-  the Rust VM; a new env/feature flag (`RBX_RUNTIME_HOOKS=rust`) lets the C++
-  VM also defer to Rust hooks through the existing fallback, so hooks can land
-  before the VM flip. Descriptor check (§B.1) runs per file before its commit.
+  init_params. Register the required hooks in the Rust VM and migrate the
+  existing call sites to those Rust implementations. Do not add backend
+  selection flags or port the companion C++ VM. Descriptor check (§B.1) runs
+  per file before its commit.
 
-- **P4 — linker flip**: complete §C gaps (libdl registration of `rust_dlsym`
-  etc., realpath override), run the engine under the Rust linker, parity-check
-  the symbol table (§Gates). `USE_EXPERIMENTAL_RUST_LINKER` becomes default-on,
-  then the only path.
+- **P4 — linker flip (complete)**: the Rust loader is the only engine loader;
+  the MCP launcher linker, its C shim, build patch, binding crate, and submodule
+  have been removed. Runtime import inspection now comes from
+  `crates/linker::imports`.
 
 - **P5 — removal commits, in this order:**
   1. flip every consumer to the Rust crates (features default to Rust paths);
-  2. delete `crates/jni-sys`'s C++ links + `crates/linker-sys` (after `elf.rs`
-     and `host_symbol` moved), rename package to `roblox-jni`;
+  2. port remaining JNI class/GameActivity hooks to Rust, delete `crates/jni-sys`'s
+     C++ links, and rename the package to `roblox-jni`;
   3. `git rm third_party/`, clean `.gitmodules`;
   4. delete `native/`, all `build.rs` C++ steps, `cmake` dependency,
      `CMakeLists.txt`; update README + docs.
