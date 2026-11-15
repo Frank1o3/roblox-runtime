@@ -6,7 +6,7 @@
 use crate::{MethodDescriptor, Type, parse_field_descriptor, parse_method_descriptor};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
-use std::sync::{Mutex, RwLock};
+use std::sync::{Mutex, OnceLock, RwLock};
 use std::thread::{self, ThreadId};
 
 include!("vm/types.rs");
@@ -466,21 +466,55 @@ impl Vm {
             .class_records
             .get(&class)
             .ok_or_else(|| JniError::UnknownClass(format!("class id {}", class.0)))?;
-        record
+        let found = record.methods.get(&MethodKey {
+            name: name.to_owned(),
+            descriptor: descriptor.to_owned(),
+            is_static,
+        });
+        if let Some(id) = found {
+            return Ok(*id);
+        }
+        // `java/lang/String` is the only `CharSequence` implementation this VM
+        // hands out, so a hook registered under one descriptor and a call
+        // compiled against the other describe the same method. The C++ path
+        // worked around this by registering both descriptors (the original
+        // failure was silent: `getProductName` returning String never matched
+        // the `CharSequence` call the dex compiled, so every device name was
+        // null); matching at lookup time removes the duplicate registration.
+        let normalized = normalize_descriptor(descriptor);
+        let compatible = record
             .methods
-            .get(&MethodKey {
-                name: name.to_owned(),
-                descriptor: descriptor.to_owned(),
-                is_static,
+            .iter()
+            .find(|(key, _)| {
+                key.name == name && key.is_static == is_static && normalize_descriptor(&key.descriptor) == normalized
             })
-            .copied()
-            .ok_or_else(|| {
+            .map(|(_, id)| *id);
+        match compatible {
+            Some(id) => {
+                let registered = state
+                    .method_metadata
+                    .get(&id)
+                    .map(|m| m.descriptor.clone())
+                    .unwrap_or_default();
+                log_once(&format!("{name}{descriptor}~{registered}"), || {
+                    format!(
+                        "[jnivm] {}.{} matched {descriptor} through CharSequence/String descriptor compatibility (registered {registered})",
+                        record.name, name
+                    )
+                });
+                Ok(id)
+            }
+            None => {
                 eprintln!(
                     "[jnivm] unimplemented method lookup: {}.{name}{descriptor}",
                     record.name
                 );
-                JniError::UnknownMethod(format!("{}.{name}{descriptor}", record.name))
-            })
+                Err(JniError::UnknownMethod(format!(
+                    "{}.{name}{descriptor}",
+                    record.name
+                )))
+            }
+        }
     }
 
     /// Resolve a method ID, creating a typed placeholder when the Java method
@@ -1438,6 +1472,33 @@ fn is_throwable_class_name(class_name: &str) -> bool {
         || class_name.ends_with("Throwable")
 }
 
+/// Fold `Ljava/lang/CharSequence;` to `Ljava/lang/String;` for lookup
+/// compatibility: `String` is the only `CharSequence` implementation this VM
+/// hands out, so descriptors differing in exactly that pair name the same
+/// method.
+fn normalize_descriptor(descriptor: &str) -> String {
+    if descriptor.contains("Ljava/lang/CharSequence;") {
+        descriptor.replace("Ljava/lang/CharSequence;", "Ljava/lang/String;")
+    } else {
+        descriptor.to_owned()
+    }
+}
+
+static COMPAT_MATCHES_LOGGED: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+
+/// Emit a diagnostic once per distinct key for the process lifetime, so a
+/// hot lookup path cannot turn the compat note into line noise.
+fn log_once(key: &str, message: impl FnOnce() -> String) {
+    let logged = COMPAT_MATCHES_LOGGED.get_or_init(|| Mutex::new(HashSet::new()));
+    if logged
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .insert(key.to_owned())
+    {
+        eprintln!("{}", message());
+    }
+}
+
 fn validate_member_name(name: &str) -> Result<(), JniError> {
     if name.is_empty() || name.chars().any(|ch| matches!(ch, '/' | '.' | ';' | '[')) {
         return Err(JniError::InvalidMemberName);
@@ -1676,6 +1737,53 @@ mod tests {
         assert!(vm
             .throw_new(&main_env, ClassId(u64::MAX), Some("x"))
             .is_err());
+    }
+
+    #[test]
+    fn test_char_sequence_descriptor_compatibility() {
+        let vm = Vm::new();
+        let env = vm.attach_current_thread();
+        let class = vm.find_or_define_class("android/media/AudioDeviceInfo").unwrap();
+
+        // A hook registered under the String descriptor.
+        let string_method = vm
+            .register_method(class, "getProductName", "()Ljava/lang/String;", false)
+            .unwrap();
+        // The call the dex compiled against CharSequence must find it.
+        assert_eq!(
+            vm.find_method(class, "getProductName", "()Ljava/lang/CharSequence;", false),
+            Ok(string_method)
+        );
+        // And the reverse direction for the parameter case (setText-style).
+        let char_seq_setter = vm
+            .register_method(
+                class,
+                "setText",
+                "(Ljava/lang/CharSequence;)V",
+                false,
+            )
+            .unwrap();
+        assert_eq!(
+            vm.find_method(class, "setText", "(Ljava/lang/String;)V", false),
+            Ok(char_seq_setter)
+        );
+
+        // Compatibility is descriptor-shape specific: other mismatches still
+        // miss, and the exact registered descriptor keeps its fast path.
+        assert!(vm
+            .find_method(class, "getProductName", "()Ljava/lang/Object;", false)
+            .is_err());
+        assert_eq!(
+            vm.find_method(class, "getProductName", "()Ljava/lang/String;", false),
+            Ok(string_method)
+        );
+
+        // resolve_method (the GetMethodID path) also flows through the
+        // compatibility fallback instead of inventing a duplicate method.
+        assert_eq!(
+            vm.resolve_method(class, "getProductName", "()Ljava/lang/CharSequence;", false),
+            Ok(string_method)
+        );
     }
 
     #[test]
