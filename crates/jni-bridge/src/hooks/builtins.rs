@@ -3,9 +3,9 @@ use std::net::UdpSocket;
 use std::time::Instant;
 
 static STARTUP_BOOTSTRAP: OnceLock<extern "C" fn()> = OnceLock::new();
-static TEXT_BOX_INFO: OnceLock<Mutex<HashMap<crate::ObjectId, NativeTextBoxInfo>>> =
+static TEXT_BOX_INFO: OnceLock<Mutex<HashMap<jnivm::ObjectId, NativeTextBoxInfo>>> =
     OnceLock::new();
-static MESSAGEBUS_CONNECTION_HANDLES: OnceLock<Mutex<HashMap<crate::ObjectId, i64>>> =
+static MESSAGEBUS_CONNECTION_HANDLES: OnceLock<Mutex<HashMap<jnivm::ObjectId, i64>>> =
     OnceLock::new();
 
 #[repr(C)]
@@ -30,7 +30,11 @@ struct NativeTextBoxInfo {
 
 unsafe extern "C" {
     fn roblox_textbox_last_built(info: *const NativeTextBoxInfo);
-    fn roblox_textbox_focused(handle: i64, text: *const std::ffi::c_char, info: *const NativeTextBoxInfo);
+    fn roblox_textbox_focused(
+        handle: i64,
+        text: *const std::ffi::c_char,
+        info: *const NativeTextBoxInfo,
+    );
     fn roblox_textbox_blurred();
 }
 
@@ -82,7 +86,13 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
         .register_class("com/roblox/engine/jni/locale/NativeLocaleJavaInterface")
         .map_err(|error| error.to_string())?;
     for method_name in ["getLocale", "getRobloxLocale", "getGameLocale"] {
-        install_builtin(vm, locale, method_name, "()Ljava/lang/String;", locale_method)?;
+        install_builtin(
+            vm,
+            locale,
+            method_name,
+            "()Ljava/lang/String;",
+            locale_method,
+        )?;
     }
 
     let user = vm
@@ -94,9 +104,21 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
     for method_name in ["getIsUnder13", "getHasRobloxSubscription"] {
         install_builtin(vm, user, method_name, "()Z", anonymous_user_boolean)?;
     }
-    install_builtin(vm, user, "getMembershipType", "()I", anonymous_user_membership)?;
+    install_builtin(
+        vm,
+        user,
+        "getMembershipType",
+        "()I",
+        anonymous_user_membership,
+    )?;
     for method_name in ["getUsername", "getDisplayName", "getAlternateName"] {
-        install_builtin(vm, user, method_name, "()Ljava/lang/String;", anonymous_user_string)?;
+        install_builtin(
+            vm,
+            user,
+            method_name,
+            "()Ljava/lang/String;",
+            anonymous_user_string,
+        )?;
     }
     install_builtin(
         vm,
@@ -118,11 +140,20 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
         device_static_params,
     )?;
     for (method_name, descriptor) in [
-        ("showKeyboard", "(JZ[BLcom/roblox/engine/jni/model/NativeTextBoxInfo;)V"),
+        (
+            "showKeyboard",
+            "(JZ[BLcom/roblox/engine/jni/model/NativeTextBoxInfo;)V",
+        ),
         ("hideKeyboard", "()V"),
-        ("promptNativePurchase", "(JLjava/lang/String;Ljava/lang/String;)V"),
+        (
+            "promptNativePurchase",
+            "(JLjava/lang/String;Ljava/lang/String;)V",
+        ),
         ("promptNativePurchase", "(JLjava/lang/String;)V"),
-        ("promptNativePurchaseWithPayload", "(JLjava/lang/String;Ljava/lang/String;)V"),
+        (
+            "promptNativePurchaseWithPayload",
+            "(JLjava/lang/String;Ljava/lang/String;)V",
+        ),
         (
             "promptNativePurchaseWithPaymentSessionId",
             "(JLjava/lang/String;Ljava/lang/String;)V",
@@ -136,14 +167,20 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
         ("onAppShellReloadNeeded", "()V"),
         ("listenToMotionEvents", "(Ljava/lang/String;)V"),
         ("screenOrientationChanged", "(I)V"),
-        ("openNativeOverlay", "(Ljava/lang/String;Ljava/lang/String;)V"),
+        (
+            "openNativeOverlay",
+            "(Ljava/lang/String;Ljava/lang/String;)V",
+        ),
         (
             "onDataModelNotificationCallback",
             "(Ljava/lang/String;Ljava/lang/String;)V",
         ),
         ("onLuaTextBoxChangedCallback", "(Ljava/lang/String;)V"),
         ("onLuaTextBoxPropertyChangedCallback", "()V"),
-        ("onAppBridgeNotification", "(Ljava/lang/String;Ljava/lang/String;)V"),
+        (
+            "onAppBridgeNotification",
+            "(Ljava/lang/String;Ljava/lang/String;)V",
+        ),
         ("onExtendedAnalyticsRecvCallback", "([BI)V"),
         ("saveImageToAlbum", "(Ljava/lang/String;)V"),
         ("onVrSessionStateUpdate", "(I)V"),
@@ -202,13 +239,7 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
     let logging = vm
         .register_class("com/roblox/universalapp/logging/LoggingProtocol")
         .map_err(|error| error.to_string())?;
-    install_builtin(
-        vm,
-        logging,
-        "getProcessTimestamp",
-        "()J",
-        process_timestamp,
-    )?;
+    install_builtin(vm, logging, "getProcessTimestamp", "()J", process_timestamp)?;
 
     let reporter = vm
         .register_class("com/roblox/engine/jni/reporter/SessionReporterJavaInterface")
@@ -220,7 +251,11 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
         "()Ljava/lang/String;",
         reporter_files_dir,
     )?;
-    for method_name in ["getAppVersion", "getLastLoggedInUser", "getLastLoggedInUserId"] {
+    for method_name in [
+        "getAppVersion",
+        "getLastLoggedInUser",
+        "getLastLoggedInUserId",
+    ] {
         install_builtin(
             vm,
             reporter,
@@ -280,13 +315,7 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
         "(Ljava/lang/String;Ljava/lang/String;)V",
         reporter_noop,
     )?;
-    install_instance_builtin(
-        vm,
-        invalid,
-        "run",
-        "(Ljava/lang/String;)V",
-        reporter_noop,
-    )?;
+    install_instance_builtin(vm, invalid, "run", "(Ljava/lang/String;)V", reporter_noop)?;
     install_instance_builtin(vm, invalid, "bootstrapTheApp", "()V", invalid_bootstrap)?;
 
     // GameActivity is the object the runtime supplies to
@@ -332,19 +361,15 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
         "(III)V",
         reporter_noop,
     )?;
-    install_instance_builtin(
-        vm,
-        game_activity,
-        "setWindowFlags",
-        "(II)V",
-        reporter_noop,
-    )?;
+    install_instance_builtin(vm, game_activity, "setWindowFlags", "(II)V", reporter_noop)?;
     vm.register_class("androidx/core/graphics/Insets")
         .map_err(|error| error.to_string())?;
-    let insets = vm.find_or_define_class("androidx/core/graphics/Insets")
+    let insets = vm
+        .find_or_define_class("androidx/core/graphics/Insets")
         .map_err(|error| error.to_string())?;
     for name in ["left", "top", "right", "bottom"] {
-        vm.register_field(insets, name, "I", false).map_err(|error| error.to_string())?;
+        vm.register_field(insets, name, "I", false)
+            .map_err(|error| error.to_string())?;
     }
     install_instance_builtin(
         vm,
@@ -373,12 +398,24 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
         .find_or_define_class("android/content/res/Configuration")
         .map_err(|error| error.to_string())?;
     for (name, descriptor) in [
-        ("colorMode", "I"), ("densityDpi", "I"), ("fontScale", "F"),
-        ("fontWeightAdjustment", "I"), ("hardKeyboardHidden", "I"),
-        ("keyboard", "I"), ("keyboardHidden", "I"), ("mcc", "I"), ("mnc", "I"),
-        ("navigation", "I"), ("navigationHidden", "I"), ("orientation", "I"),
-        ("screenHeightDp", "I"), ("screenLayout", "I"), ("screenWidthDp", "I"),
-        ("smallestScreenWidthDp", "I"), ("touchscreen", "I"), ("uiMode", "I"),
+        ("colorMode", "I"),
+        ("densityDpi", "I"),
+        ("fontScale", "F"),
+        ("fontWeightAdjustment", "I"),
+        ("hardKeyboardHidden", "I"),
+        ("keyboard", "I"),
+        ("keyboardHidden", "I"),
+        ("mcc", "I"),
+        ("mnc", "I"),
+        ("navigation", "I"),
+        ("navigationHidden", "I"),
+        ("orientation", "I"),
+        ("screenHeightDp", "I"),
+        ("screenLayout", "I"),
+        ("screenWidthDp", "I"),
+        ("smallestScreenWidthDp", "I"),
+        ("touchscreen", "I"),
+        ("uiMode", "I"),
     ] {
         vm.register_field(configuration, name, descriptor, false)
             .map_err(|error| error.to_string())?;
@@ -408,26 +445,20 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
         .register_class("java/util/Locale")
         .map_err(|error| error.to_string())?;
     for (method_name, handler) in [
-        ("getLanguage", locale_language as crate::MethodHandler),
+        ("getLanguage", locale_language as jnivm::MethodHandler),
         ("getCountry", locale_country),
         ("getScript", locale_empty_string),
         ("getVariant", locale_empty_string),
         ("toString", locale_to_string),
     ] {
-        install_instance_builtin(
-            vm,
-            locale,
-            method_name,
-            "()Ljava/lang/String;",
-            handler,
-        )?;
+        install_instance_builtin(vm, locale, method_name, "()Ljava/lang/String;", handler)?;
     }
 
     let insets_type = vm
         .register_class("androidx/core/view/WindowInsetsCompat$Type")
         .map_err(|error| error.to_string())?;
     for (method_name, handler) in [
-        ("captionBar", inset_caption_bar as crate::MethodHandler),
+        ("captionBar", inset_caption_bar as jnivm::MethodHandler),
         ("displayCutout", inset_display_cutout),
         ("ime", inset_ime),
         ("mandatorySystemGestures", inset_mandatory_gestures),
@@ -459,29 +490,121 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
         .register_class("com/roblox/client/startup/NativeHelper")
         .map_err(|error| error.to_string())?;
     for (method_name, descriptor, handler) in [
-        ("gameActivity_onFlagsFailed", "()V", native_helper_flags_failed as crate::MethodHandler),
-        ("gameActivity_onFlagsLoaded", "(Ljava/nio/ByteBuffer;)V", native_helper_flags_loaded),
-        ("gameActivity_onAppReady", "(Ljava/lang/String;)V", native_helper_app_ready),
-        ("gameActivity_onExperienceStart", "()V", native_helper_experience_start),
-        ("gameActivity_onGameLoaded", "(J)V", native_helper_game_loaded),
-        ("gameActivity_onLuaTextBoxChanged", "(Ljava/lang/String;)V", native_helper_lua_text_box_changed),
-        ("gameActivity_onLuaTextBoxPropertyChanged", "()V", native_helper_lua_text_box_property_changed),
-        ("gameActivity_onDidLogInReceived", "(Ljava/lang/String;)V", native_helper_logged_in),
-        ("gameActivity_onScreenOrientationChanged", "(IZ)V", native_helper_orientation_changed),
-        ("gameActivity_onEngineInitialized", "()V", native_helper_engine_initialized),
-        ("gameActivity_onDidLogOutReceived", "()V", native_helper_logged_out),
-        ("gameActivity_onDidSwitchAccountReceived", "()V", native_helper_account_switched),
-        ("gameActivity_onLuaAppDidReturn", "()V", native_helper_lua_app_returned),
-        ("gameActivity_onRestartLuaApp", "()V", native_helper_restart_lua_app),
-        ("gameActivity_onScanQrCode", "()V", native_helper_scan_qr_code),
-        ("gameActivity_onDidSignUp", "(Ljava/lang/String;)V", native_helper_signed_up),
-        ("gameActivity_onGameStreamingStatusChanged", "(Ljava/lang/String;)V", native_helper_streaming_status),
-        ("gameActivity_onScreenshotReady", "(Ljava/lang/String;)V", native_helper_screenshot_ready),
-        ("gameActivity_onMotionEventListening", "(Ljava/lang/String;)V", native_helper_motion_listening),
-        ("gameActivity_onExperienceStop", "(D)V", native_helper_experience_stopped),
-        ("gameActivity_setAppUpgradeStatus", "(IILjava/lang/String;Ljava/lang/String;)V", native_helper_upgrade_status),
-        ("gameActivity_showKeyboard", "(JZ[BLcom/roblox/engine/jni/model/NativeTextBoxInfo;)V", native_helper_show_keyboard),
-        ("gameActivity_hideKeyboard", "()V", native_helper_hide_keyboard),
+        (
+            "gameActivity_onFlagsFailed",
+            "()V",
+            native_helper_flags_failed as jnivm::MethodHandler,
+        ),
+        (
+            "gameActivity_onFlagsLoaded",
+            "(Ljava/nio/ByteBuffer;)V",
+            native_helper_flags_loaded,
+        ),
+        (
+            "gameActivity_onAppReady",
+            "(Ljava/lang/String;)V",
+            native_helper_app_ready,
+        ),
+        (
+            "gameActivity_onExperienceStart",
+            "()V",
+            native_helper_experience_start,
+        ),
+        (
+            "gameActivity_onGameLoaded",
+            "(J)V",
+            native_helper_game_loaded,
+        ),
+        (
+            "gameActivity_onLuaTextBoxChanged",
+            "(Ljava/lang/String;)V",
+            native_helper_lua_text_box_changed,
+        ),
+        (
+            "gameActivity_onLuaTextBoxPropertyChanged",
+            "()V",
+            native_helper_lua_text_box_property_changed,
+        ),
+        (
+            "gameActivity_onDidLogInReceived",
+            "(Ljava/lang/String;)V",
+            native_helper_logged_in,
+        ),
+        (
+            "gameActivity_onScreenOrientationChanged",
+            "(IZ)V",
+            native_helper_orientation_changed,
+        ),
+        (
+            "gameActivity_onEngineInitialized",
+            "()V",
+            native_helper_engine_initialized,
+        ),
+        (
+            "gameActivity_onDidLogOutReceived",
+            "()V",
+            native_helper_logged_out,
+        ),
+        (
+            "gameActivity_onDidSwitchAccountReceived",
+            "()V",
+            native_helper_account_switched,
+        ),
+        (
+            "gameActivity_onLuaAppDidReturn",
+            "()V",
+            native_helper_lua_app_returned,
+        ),
+        (
+            "gameActivity_onRestartLuaApp",
+            "()V",
+            native_helper_restart_lua_app,
+        ),
+        (
+            "gameActivity_onScanQrCode",
+            "()V",
+            native_helper_scan_qr_code,
+        ),
+        (
+            "gameActivity_onDidSignUp",
+            "(Ljava/lang/String;)V",
+            native_helper_signed_up,
+        ),
+        (
+            "gameActivity_onGameStreamingStatusChanged",
+            "(Ljava/lang/String;)V",
+            native_helper_streaming_status,
+        ),
+        (
+            "gameActivity_onScreenshotReady",
+            "(Ljava/lang/String;)V",
+            native_helper_screenshot_ready,
+        ),
+        (
+            "gameActivity_onMotionEventListening",
+            "(Ljava/lang/String;)V",
+            native_helper_motion_listening,
+        ),
+        (
+            "gameActivity_onExperienceStop",
+            "(D)V",
+            native_helper_experience_stopped,
+        ),
+        (
+            "gameActivity_setAppUpgradeStatus",
+            "(IILjava/lang/String;Ljava/lang/String;)V",
+            native_helper_upgrade_status,
+        ),
+        (
+            "gameActivity_showKeyboard",
+            "(JZ[BLcom/roblox/engine/jni/model/NativeTextBoxInfo;)V",
+            native_helper_show_keyboard,
+        ),
+        (
+            "gameActivity_hideKeyboard",
+            "()V",
+            native_helper_hide_keyboard,
+        ),
     ] {
         install_instance_builtin(vm, native_helper, method_name, descriptor, handler)?;
     }
@@ -536,26 +659,35 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
         vm.register_field(text_state, name, descriptor, false)
             .map_err(|error| error.to_string())?;
     }
-    let input_connection = vm.register_class("com/google/androidgamesdk/gametextinput/InputConnection")
+    let input_connection = vm
+        .register_class("com/google/androidgamesdk/gametextinput/InputConnection")
         .map_err(|error| error.to_string())?;
     for (name, descriptor) in [
-        ("setState", "(Lcom/google/androidgamesdk/gametextinput/State;)V"),
+        (
+            "setState",
+            "(Lcom/google/androidgamesdk/gametextinput/State;)V",
+        ),
         ("setSoftKeyboardActive", "(ZI)V"),
         ("restartInput", "()V"),
     ] {
         register_unhandled_instance(vm, input_connection, name, descriptor)?;
     }
-    let input_connection_bare = vm.register_class("InputConnection")
+    let input_connection_bare = vm
+        .register_class("InputConnection")
         .map_err(|error| error.to_string())?;
     for (name, descriptor) in [
-        ("setState", "(Lcom/google/androidgamesdk/gametextinput/State;)V"),
+        (
+            "setState",
+            "(Lcom/google/androidgamesdk/gametextinput/State;)V",
+        ),
         ("setSoftKeyboardActive", "(ZI)V"),
         ("restartInput", "()V"),
     ] {
         register_unhandled_instance(vm, input_connection_bare, name, descriptor)?;
     }
 
-    let message_bus = vm.register_class("com/roblox/universalapp/messagebus/MessageBus")
+    let message_bus = vm
+        .register_class("com/roblox/universalapp/messagebus/MessageBus")
         .map_err(|error| error.to_string())?;
     for (name, descriptor) in [
         ("getMessageId", "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;"),
@@ -567,7 +699,8 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
         register_unhandled_static(vm, message_bus, name, descriptor)?;
     }
 
-    let raw_callback = vm.register_class("com/roblox/universalapp/messagebus/RawCallback")
+    let raw_callback = vm
+        .register_class("com/roblox/universalapp/messagebus/RawCallback")
         .map_err(|error| error.to_string())?;
     register_unhandled_instance(vm, raw_callback, "run", "(Ljava/lang/String;)V")?;
 
@@ -576,30 +709,65 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
         "RequestHandlerAsyncRaw",
     ] {
         let async_raw = vm.register_class(name).map_err(|error| error.to_string())?;
-        register_unhandled_instance(vm, async_raw, "run", "(Ljava/lang/String;Ljava/lang/String;)V")?;
+        register_unhandled_instance(
+            vm,
+            async_raw,
+            "run",
+            "(Ljava/lang/String;Ljava/lang/String;)V",
+        )?;
     }
 
     // AGDK resolves these accessors while registering GameActivity, before it
     // receives any input. Runtime-created event objects are backed by the
     // companion C++ VM, whose reference implementations provide their values.
-    let motion = vm.register_class("android/view/MotionEvent").map_err(|e| e.to_string())?;
+    let motion = vm
+        .register_class("android/view/MotionEvent")
+        .map_err(|e| e.to_string())?;
     for (name, descriptor) in [
-        ("getDeviceId", "()I"), ("getSource", "()I"), ("getAction", "()I"),
-        ("getEventTime", "()J"), ("getDownTime", "()J"), ("getFlags", "()I"),
-        ("getMetaState", "()I"), ("getActionButton", "()I"), ("getButtonState", "()I"),
-        ("getClassification", "()I"), ("getEdgeFlags", "()I"), ("getHistorySize", "()I"),
-        ("getHistoricalEventTime", "(I)J"), ("getPointerCount", "()I"),
-        ("getPointerId", "(I)I"), ("getToolType", "(I)I"), ("getRawX", "(I)F"),
-        ("getRawY", "(I)F"), ("getXPrecision", "()F"), ("getYPrecision", "()F"),
-        ("getAxisValue", "(II)F"), ("getHistoricalAxisValue", "(III)F"),
-    ] { register_unhandled_instance(vm, motion, name, descriptor)?; }
-    let key = vm.register_class("android/view/KeyEvent").map_err(|e| e.to_string())?;
+        ("getDeviceId", "()I"),
+        ("getSource", "()I"),
+        ("getAction", "()I"),
+        ("getEventTime", "()J"),
+        ("getDownTime", "()J"),
+        ("getFlags", "()I"),
+        ("getMetaState", "()I"),
+        ("getActionButton", "()I"),
+        ("getButtonState", "()I"),
+        ("getClassification", "()I"),
+        ("getEdgeFlags", "()I"),
+        ("getHistorySize", "()I"),
+        ("getHistoricalEventTime", "(I)J"),
+        ("getPointerCount", "()I"),
+        ("getPointerId", "(I)I"),
+        ("getToolType", "(I)I"),
+        ("getRawX", "(I)F"),
+        ("getRawY", "(I)F"),
+        ("getXPrecision", "()F"),
+        ("getYPrecision", "()F"),
+        ("getAxisValue", "(II)F"),
+        ("getHistoricalAxisValue", "(III)F"),
+    ] {
+        register_unhandled_instance(vm, motion, name, descriptor)?;
+    }
+    let key = vm
+        .register_class("android/view/KeyEvent")
+        .map_err(|e| e.to_string())?;
     for (name, descriptor) in [
-        ("getDeviceId", "()I"), ("getSource", "()I"), ("getAction", "()I"),
-        ("getEventTime", "()J"), ("getDownTime", "()J"), ("getFlags", "()I"),
-        ("getMetaState", "()I"), ("getModifiers", "()I"), ("getRepeatCount", "()I"),
-        ("getKeyCode", "()I"), ("getScanCode", "()I"), ("getUnicodeChar", "()I"),
-    ] { register_unhandled_instance(vm, key, name, descriptor)?; }
+        ("getDeviceId", "()I"),
+        ("getSource", "()I"),
+        ("getAction", "()I"),
+        ("getEventTime", "()J"),
+        ("getDownTime", "()J"),
+        ("getFlags", "()I"),
+        ("getMetaState", "()I"),
+        ("getModifiers", "()I"),
+        ("getRepeatCount", "()I"),
+        ("getKeyCode", "()I"),
+        ("getScanCode", "()I"),
+        ("getUnicodeChar", "()I"),
+    ] {
+        register_unhandled_instance(vm, key, name, descriptor)?;
+    }
 
     install_platform_methods(vm)?;
     install_fmod_methods(vm)?;
@@ -670,7 +838,7 @@ fn install_native_purchase_context(vm: &Vm) -> Result<(), String> {
 
 fn native_purchase_context_create(
     vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     _args: &[JniValue],
 ) -> JniValue {
     new_opaque_local(vm, "com/roblox/engine/jni/autovalue/NativePurchaseContext")
@@ -678,7 +846,7 @@ fn native_purchase_context_create(
 
 fn native_purchase_unavailable(
     _vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     _args: &[JniValue],
 ) -> JniValue {
     eprintln!("[jnivm] native purchase requested, but no purchase provider is configured");
@@ -687,19 +855,18 @@ fn native_purchase_unavailable(
 
 fn messagebus_connection_init(
     vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     args: &[JniValue],
 ) -> JniValue {
     let Some(JniValue::Long(native_handle)) = args.first() else {
         eprintln!("[jnivm] MessageBus Connection factory received no native handle");
         return JniValue::Object(None);
     };
-    let Ok(class) = vm.find_or_define_class("com/roblox/universalapp/messagebus/Connection")
-    else {
+    let Ok(class) = vm.find_or_define_class("com/roblox/universalapp/messagebus/Connection") else {
         return JniValue::Object(None);
     };
     let env = attached_thread_env(vm);
-    match vm.new_local_object(&env, class, crate::ObjectValue::Opaque) {
+    match vm.new_local_object(&env, class, jnivm::ObjectValue::Opaque) {
         Ok(connection) => {
             MESSAGEBUS_CONNECTION_HANDLES
                 .get_or_init(|| Mutex::new(HashMap::new()))
@@ -717,12 +884,12 @@ fn messagebus_connection_init(
 
 fn system_identity_hash_code(
     _vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     args: &[JniValue],
 ) -> JniValue {
     match args.first() {
         Some(JniValue::Object(Some(object))) => {
-            let bits = object.0;
+            let bits = object.raw();
             JniValue::Int((bits ^ (bits >> 32)) as i32)
         }
         Some(JniValue::Object(None)) | None => JniValue::Int(0),
@@ -748,7 +915,7 @@ fn install_system_dialog_singleton(vm: &Vm) -> Result<(), String> {
         .map_err(|error| error.to_string())?;
     let env = attached_thread_env(vm);
     let local_instance = vm
-        .new_local_object(&env, class, crate::ObjectValue::Opaque)
+        .new_local_object(&env, class, jnivm::ObjectValue::Opaque)
         .map_err(|error| error.to_string())?;
     let instance = vm
         .new_global_ref(&env, local_instance)
@@ -769,13 +936,7 @@ fn install_system_dialog_methods(vm: &Vm) -> Result<(), String> {
     let interface = vm
         .register_class(INTERFACE)
         .map_err(|error| error.to_string())?;
-    install_instance_builtin(
-        vm,
-        interface,
-        "isAvailable",
-        "()Z",
-        system_ui_unavailable,
-    )?;
+    install_instance_builtin(vm, interface, "isAvailable", "()Z", system_ui_unavailable)?;
     install_instance_builtin(
         vm,
         interface,
@@ -786,7 +947,9 @@ fn install_system_dialog_methods(vm: &Vm) -> Result<(), String> {
     install_instance_builtin(vm, interface, "dismiss", "(J)V", reporter_noop)?;
     install_instance_builtin(vm, interface, "dismissAll", "()V", reporter_noop)?;
 
-    let proxy = vm.register_class(PROXY).map_err(|error| error.to_string())?;
+    let proxy = vm
+        .register_class(PROXY)
+        .map_err(|error| error.to_string())?;
     vm.register_field(proxy, "nativeRef", "J", false)
         .map_err(|error| error.to_string())?;
     install_builtin(
@@ -862,7 +1025,7 @@ fn install_native_text_box_info(vm: &Vm) -> Result<(), String> {
 
 fn system_ui_unavailable(
     _vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     _args: &[JniValue],
 ) -> JniValue {
     JniValue::Boolean(false)
@@ -870,7 +1033,7 @@ fn system_ui_unavailable(
 
 fn system_dialog_open_unavailable(
     _vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     _args: &[JniValue],
 ) -> JniValue {
     JniValue::Long(0)
@@ -878,7 +1041,7 @@ fn system_dialog_open_unavailable(
 
 fn quote_request_unavailable(
     _vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     _args: &[JniValue],
 ) -> JniValue {
     // This runtime has no quote-response service; preserve the JNI null
@@ -888,7 +1051,7 @@ fn quote_request_unavailable(
 
 fn native_text_box_info_init(
     vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     args: &[JniValue],
 ) -> JniValue {
     let Some(info) = NativeTextBoxInfo::from_args(args) else {
@@ -899,7 +1062,7 @@ fn native_text_box_info_init(
     let Ok(class) = vm.find_or_define_class("com/roblox/engine/jni/model/NativeTextBoxInfo") else {
         return JniValue::Object(None);
     };
-    let Ok(object) = vm.new_local_object(&env, class, crate::ObjectValue::Opaque) else {
+    let Ok(object) = vm.new_local_object(&env, class, jnivm::ObjectValue::Opaque) else {
         return JniValue::Object(None);
     };
     TEXT_BOX_INFO
@@ -966,7 +1129,7 @@ fn bool_arg(args: &[JniValue], index: usize) -> Option<bool> {
 
 fn native_helper_show_keyboard(
     vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     args: &[JniValue],
 ) -> JniValue {
     let handle = match args.first() {
@@ -977,7 +1140,7 @@ fn native_helper_show_keyboard(
         Some(JniValue::Object(Some(array))) => {
             let env = attached_thread_env(vm);
             match vm.object_value(&env, *array) {
-                Ok(crate::ObjectValue::ByteArray(bytes)) => bytes
+                Ok(jnivm::ObjectValue::ByteArray(bytes)) => bytes
                     .into_iter()
                     .map(|byte| byte as u8)
                     .take_while(|byte| *byte != 0)
@@ -1009,7 +1172,7 @@ fn native_helper_show_keyboard(
 
 fn native_helper_hide_keyboard(
     _vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     _args: &[JniValue],
 ) -> JniValue {
     // SAFETY: the C++ callback takes no pointers and updates its focus state.
@@ -1019,7 +1182,7 @@ fn native_helper_hide_keyboard(
 
 fn system_dialog_proxy_init(
     vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     args: &[JniValue],
 ) -> JniValue {
     let Some(JniValue::Long(native_ref)) = args.first() else {
@@ -1031,7 +1194,7 @@ fn system_dialog_proxy_init(
         return JniValue::Object(None);
     };
     let env = attached_thread_env(vm);
-    let Ok(object) = vm.new_local_object(&env, class, crate::ObjectValue::Opaque) else {
+    let Ok(object) = vm.new_local_object(&env, class, jnivm::ObjectValue::Opaque) else {
         return JniValue::Object(None);
     };
     if let Ok(field) = vm.resolve_field(class, "nativeRef", "J", false) {
@@ -1045,7 +1208,7 @@ fn new_opaque_local(vm: &Vm, class_name: &str) -> JniValue {
     let Ok(class) = vm.find_or_define_class(class_name) else {
         return JniValue::Object(None);
     };
-    match vm.new_local_object(&env, class, crate::ObjectValue::Opaque) {
+    match vm.new_local_object(&env, class, jnivm::ObjectValue::Opaque) {
         Ok(object) => JniValue::Object(Some(object)),
         Err(error) => {
             eprintln!("[jnivm] {class_name} allocation failed: {error}");
@@ -1056,55 +1219,51 @@ fn new_opaque_local(vm: &Vm, class_name: &str) -> JniValue {
 
 fn configuration_get_locales(
     vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     _args: &[JniValue],
 ) -> JniValue {
     new_opaque_local(vm, "android/os/LocaleList")
 }
 
-fn locale_list_size(_vm: &Vm, _receiver: Option<crate::ObjectId>, _args: &[JniValue]) -> JniValue {
+fn locale_list_size(_vm: &Vm, _receiver: Option<jnivm::ObjectId>, _args: &[JniValue]) -> JniValue {
     JniValue::Int(1)
 }
 
 fn locale_list_is_empty(
     _vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     _args: &[JniValue],
 ) -> JniValue {
     JniValue::Boolean(false)
 }
 
-fn locale_list_get(
-    vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
-    _args: &[JniValue],
-) -> JniValue {
+fn locale_list_get(vm: &Vm, _receiver: Option<jnivm::ObjectId>, _args: &[JniValue]) -> JniValue {
     new_opaque_local(vm, "java/util/Locale")
 }
 
-fn locale_language(vm: &Vm, _receiver: Option<crate::ObjectId>, _args: &[JniValue]) -> JniValue {
+fn locale_language(vm: &Vm, _receiver: Option<jnivm::ObjectId>, _args: &[JniValue]) -> JniValue {
     java_string(vm, "en", "java/util/Locale")
 }
 
-fn locale_country(vm: &Vm, _receiver: Option<crate::ObjectId>, _args: &[JniValue]) -> JniValue {
+fn locale_country(vm: &Vm, _receiver: Option<jnivm::ObjectId>, _args: &[JniValue]) -> JniValue {
     java_string(vm, "US", "java/util/Locale")
 }
 
 fn locale_empty_string(
     vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     _args: &[JniValue],
 ) -> JniValue {
     java_string(vm, "", "java/util/Locale")
 }
 
-fn locale_to_string(vm: &Vm, _receiver: Option<crate::ObjectId>, _args: &[JniValue]) -> JniValue {
+fn locale_to_string(vm: &Vm, _receiver: Option<jnivm::ObjectId>, _args: &[JniValue]) -> JniValue {
     java_string(vm, "en_US", "java/util/Locale")
 }
 
 macro_rules! inset_mask_handler {
     ($name:ident, $mask:expr) => {
-        fn $name(_vm: &Vm, _receiver: Option<crate::ObjectId>, _args: &[JniValue]) -> JniValue {
+        fn $name(_vm: &Vm, _receiver: Option<jnivm::ObjectId>, _args: &[JniValue]) -> JniValue {
             JniValue::Int($mask)
         }
     };
@@ -1122,7 +1281,7 @@ inset_mask_handler!(inset_tappable_element, 256);
 
 fn invalid_get_resources(
     vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     _args: &[JniValue],
 ) -> JniValue {
     new_opaque_local(vm, "android/content/res/Resources")
@@ -1130,7 +1289,7 @@ fn invalid_get_resources(
 
 fn invalid_get_display_metrics(
     vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     _args: &[JniValue],
 ) -> JniValue {
     let value = new_opaque_local(vm, "android/util/DisplayMetrics");
@@ -1148,17 +1307,13 @@ fn invalid_get_display_metrics(
 
 fn invalid_get_native_helper(
     vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     _args: &[JniValue],
 ) -> JniValue {
     new_opaque_local(vm, "com/roblox/client/startup/NativeHelper")
 }
 
-fn invalid_bootstrap(
-    _vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
-    _args: &[JniValue],
-) -> JniValue {
+fn invalid_bootstrap(_vm: &Vm, _receiver: Option<jnivm::ObjectId>, _args: &[JniValue]) -> JniValue {
     if let Some(callback) = STARTUP_BOOTSTRAP.get() {
         callback();
     } else {
@@ -1167,12 +1322,12 @@ fn invalid_bootstrap(
     JniValue::Void
 }
 
-fn zero_insets(vm: &Vm, _receiver: Option<crate::ObjectId>, _args: &[JniValue]) -> JniValue {
+fn zero_insets(vm: &Vm, _receiver: Option<jnivm::ObjectId>, _args: &[JniValue]) -> JniValue {
     let Ok(class) = vm.find_or_define_class("androidx/core/graphics/Insets") else {
         return JniValue::Object(None);
     };
     let env = attached_thread_env(vm);
-    vm.new_local_object(&env, class, crate::ObjectValue::Opaque)
+    vm.new_local_object(&env, class, jnivm::ObjectValue::Opaque)
         .ok()
         .map_or(JniValue::Object(None), |object| {
             for name in ["left", "top", "right", "bottom"] {
@@ -1184,20 +1339,12 @@ fn zero_insets(vm: &Vm, _receiver: Option<crate::ObjectId>, _args: &[JniValue]) 
         })
 }
 
-fn process_timestamp(
-    _vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
-    _args: &[JniValue],
-) -> JniValue {
+fn process_timestamp(_vm: &Vm, _receiver: Option<jnivm::ObjectId>, _args: &[JniValue]) -> JniValue {
     static START: OnceLock<Instant> = OnceLock::new();
     JniValue::Long(START.get_or_init(Instant::now).elapsed().as_millis() as i64)
 }
 
-fn reporter_files_dir(
-    vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
-    _args: &[JniValue],
-) -> JniValue {
+fn reporter_files_dir(vm: &Vm, _receiver: Option<jnivm::ObjectId>, _args: &[JniValue]) -> JniValue {
     let path = std::env::var("RBX_RUNTIME_FILES_DIR")
         .ok()
         .filter(|path| !path.is_empty())
@@ -1221,34 +1368,22 @@ fn default_files_dir() -> String {
 
 fn reporter_empty_string(
     vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     _args: &[JniValue],
 ) -> JniValue {
     java_string(vm, "", "SessionReporterJavaInterface")
 }
 
-fn reporter_noop(
-    _vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
-    _args: &[JniValue],
-) -> JniValue {
+fn reporter_noop(_vm: &Vm, _receiver: Option<jnivm::ObjectId>, _args: &[JniValue]) -> JniValue {
     JniValue::Void
 }
 
-fn no_hardware_codec(
-    _vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
-    _args: &[JniValue],
-) -> JniValue {
+fn no_hardware_codec(_vm: &Vm, _receiver: Option<jnivm::ObjectId>, _args: &[JniValue]) -> JniValue {
     // C++ reports false because this runtime has no Android MediaCodec.
     JniValue::Boolean(false)
 }
 
-fn empty_video_codecs(
-    vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
-    _args: &[JniValue],
-) -> JniValue {
+fn empty_video_codecs(vm: &Vm, _receiver: Option<jnivm::ObjectId>, _args: &[JniValue]) -> JniValue {
     let env = attached_thread_env(vm);
     match vm.new_local_object_array(&env, 0, None) {
         Ok(array) => JniValue::Object(Some(array)),
@@ -1261,7 +1396,7 @@ fn empty_video_codecs(
 
 fn network_ipv4_address(
     vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     _args: &[JniValue],
 ) -> JniValue {
     // Match the C++ handler's local-address semantics without contacting a
@@ -1279,14 +1414,14 @@ fn network_ipv4_address(
 
 fn class_get_class_loader(
     vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     _args: &[JniValue],
 ) -> JniValue {
     let env = attached_thread_env(vm);
     let Ok(class) = vm.find_or_define_class("java/lang/ClassLoader") else {
         return JniValue::Object(None);
     };
-    match vm.new_local_object(&env, class, crate::ObjectValue::Opaque) {
+    match vm.new_local_object(&env, class, jnivm::ObjectValue::Opaque) {
         Ok(object) => JniValue::Object(Some(object)),
         Err(error) => {
             eprintln!("[jnivm] Class.getClassLoader failed: {error}");
@@ -1297,14 +1432,14 @@ fn class_get_class_loader(
 
 fn class_loader_find_class(
     vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     args: &[JniValue],
 ) -> JniValue {
     let Some(JniValue::Object(Some(name))) = args.first() else {
         return JniValue::Object(None);
     };
     let env = attached_thread_env(vm);
-    let Ok(crate::ObjectValue::String(units)) = vm.object_value(&env, *name) else {
+    let Ok(jnivm::ObjectValue::String(units)) = vm.object_value(&env, *name) else {
         eprintln!("[jnivm] ClassLoader class lookup received a non-string name");
         return JniValue::Object(None);
     };
@@ -1313,7 +1448,7 @@ fn class_loader_find_class(
     match vm.find_or_define_class(&name) {
         Ok(class) => {
             eprintln!("[jnivm] ClassLoader resolved {requested} as {name}");
-            JniValue::Object(Some(crate::ObjectId(class.0)))
+            JniValue::Object(Some(vm.class_object(class)))
         }
         Err(error) => {
             eprintln!("[jnivm] ClassLoader class lookup failed for {name}: {error}");
@@ -1324,20 +1459,21 @@ fn class_loader_find_class(
 
 fn device_static_params(
     vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     _args: &[JniValue],
 ) -> JniValue {
     let env = attached_thread_env(vm);
-    let Ok(class) = vm.find_or_define_class("com/roblox/engine/jni/model/DeviceStaticParams") else {
+    let Ok(class) = vm.find_or_define_class("com/roblox/engine/jni/model/DeviceStaticParams")
+    else {
         return JniValue::Object(None);
     };
-    let Ok(object) = vm.new_local_object(&env, class, crate::ObjectValue::Opaque) else {
+    let Ok(object) = vm.new_local_object(&env, class, jnivm::ObjectValue::Opaque) else {
         return JniValue::Object(None);
     };
-    let profile = std::env::var("RBX_RUNTIME_DEVICE_PROFILE")
-        .unwrap_or_else(|_| "pc-windows-11".to_owned());
-    let device_name = std::env::var("RBX_RUNTIME_DEVICE_NAME")
-        .unwrap_or_else(|_| "Roblox Runtime".to_owned());
+    let profile =
+        std::env::var("RBX_RUNTIME_DEVICE_PROFILE").unwrap_or_else(|_| "pc-windows-11".to_owned());
+    let device_name =
+        std::env::var("RBX_RUNTIME_DEVICE_NAME").unwrap_or_else(|_| "Roblox Runtime".to_owned());
     let fields = [
         ("osVersion", "33"),
         ("deviceName", device_name.as_str()),
@@ -1366,10 +1502,10 @@ fn device_static_params(
 
 fn install_builtin(
     vm: &Vm,
-    class: crate::ClassId,
+    class: jnivm::ClassId,
     name: &str,
     descriptor: &str,
-    handler: crate::MethodHandler,
+    handler: jnivm::MethodHandler,
 ) -> Result<(), String> {
     let method = vm
         .register_method(class, name, descriptor, true)
@@ -1380,10 +1516,10 @@ fn install_builtin(
 
 fn install_instance_builtin(
     vm: &Vm,
-    class: crate::ClassId,
+    class: jnivm::ClassId,
     name: &str,
     descriptor: &str,
-    handler: crate::MethodHandler,
+    handler: jnivm::MethodHandler,
 ) -> Result<(), String> {
     let method = vm
         .register_method(class, name, descriptor, false)
@@ -1392,19 +1528,29 @@ fn install_instance_builtin(
         .map_err(|error| error.to_string())
 }
 
-fn register_unhandled_instance(vm: &Vm, class: crate::ClassId, name: &str, descriptor: &str) -> Result<(), String> {
+fn register_unhandled_instance(
+    vm: &Vm,
+    class: jnivm::ClassId,
+    name: &str,
+    descriptor: &str,
+) -> Result<(), String> {
     vm.register_method(class, name, descriptor, false)
         .map(|_| ())
         .map_err(|error| error.to_string())
 }
 
-fn register_unhandled_static(vm: &Vm, class: crate::ClassId, name: &str, descriptor: &str) -> Result<(), String> {
+fn register_unhandled_static(
+    vm: &Vm,
+    class: jnivm::ClassId,
+    name: &str,
+    descriptor: &str,
+) -> Result<(), String> {
     vm.register_method(class, name, descriptor, true)
         .map(|_| ())
         .map_err(|error| error.to_string())
 }
 
-fn locale_method(vm: &Vm, _receiver: Option<crate::ObjectId>, _args: &[JniValue]) -> JniValue {
+fn locale_method(vm: &Vm, _receiver: Option<jnivm::ObjectId>, _args: &[JniValue]) -> JniValue {
     let mut locale = std::env::var("LC_ALL")
         .ok()
         .filter(|value| !value.is_empty())
@@ -1425,13 +1571,13 @@ fn locale_method(vm: &Vm, _receiver: Option<crate::ObjectId>, _args: &[JniValue]
     java_string(vm, &locale, "NativeLocaleJavaInterface")
 }
 
-fn anonymous_user_id(_vm: &Vm, _receiver: Option<crate::ObjectId>, _args: &[JniValue]) -> JniValue {
+fn anonymous_user_id(_vm: &Vm, _receiver: Option<jnivm::ObjectId>, _args: &[JniValue]) -> JniValue {
     JniValue::Long(0)
 }
 
 fn anonymous_user_boolean(
     _vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     _args: &[JniValue],
 ) -> JniValue {
     JniValue::Boolean(false)
@@ -1439,7 +1585,7 @@ fn anonymous_user_boolean(
 
 fn anonymous_user_membership(
     _vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     _args: &[JniValue],
 ) -> JniValue {
     JniValue::Int(0)
@@ -1447,7 +1593,7 @@ fn anonymous_user_membership(
 
 fn anonymous_user_string(
     vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     _args: &[JniValue],
 ) -> JniValue {
     java_string(vm, "", "NativeUserJavaInterface")
@@ -1455,7 +1601,7 @@ fn anonymous_user_string(
 
 fn platform_name_string(
     vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     _args: &[JniValue],
 ) -> JniValue {
     let name = if let Ok(name) = std::env::var("RBX_RUNTIME_PLATFORM_NAME") {
@@ -1475,7 +1621,7 @@ fn platform_name_string(
     java_string(vm, &name, "NativeUserJavaInterface")
 }
 
-fn theme_string(vm: &Vm, _receiver: Option<crate::ObjectId>, _args: &[JniValue]) -> JniValue {
+fn theme_string(vm: &Vm, _receiver: Option<jnivm::ObjectId>, _args: &[JniValue]) -> JniValue {
     java_string(vm, "Dark", "NativeUserJavaInterface")
 }
 
@@ -1487,7 +1633,7 @@ fn java_string(vm: &Vm, value: &str, source: &str) -> JniValue {
     match vm.new_local_object(
         &env,
         class,
-        crate::ObjectValue::String(value.encode_utf16().collect()),
+        jnivm::ObjectValue::String(value.encode_utf16().collect()),
     ) {
         Ok(object) => JniValue::Object(Some(object)),
         Err(error) => {

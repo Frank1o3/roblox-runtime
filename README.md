@@ -22,6 +22,21 @@ The runtime is designed as an embeddable component rather than a standalone
 launcher. It does not download or discover Roblox builds itself; the embedding
 application supplies the APKs and runtime directories through `RuntimeConfig`.
 
+### Manual runtime observations
+
+On 2026-11-15, the embedding `rusty-blox` client was run with `cargo run
+--release`. The build completed, the user signed in, and an experience loaded
+and ran. This is a manual smoke test of the release build; the equivalent debug
+build is still reported to fail during game loading, and the cause of that
+configuration difference is unknown.
+
+When the client was stopped, the process exited with signal 11 (`SIGSEGV`)
+instead of shutting down gracefully. The log also showed Wayland
+`wl_shm.create_pool` requests failing with `Bad file descriptor` before exit;
+the available log does not establish whether those messages are related to the
+shutdown crash. Clean shutdown remains unverified and should be treated as a
+known runtime limitation.
+
 The active engine loader is the Rust ELF mapper in `crates/linker`, and the
 runtime creates its JavaVM with the pure-Rust `jnivm` crate. Android class hooks
 and GameActivity drivers still use the native compatibility layer while their
@@ -42,7 +57,7 @@ Rust implementations are completed.
           roblox-runtime
                 │
                 ├── ABI compatibility
-                ├── Android framework compatibility
+                ├── Android platform compatibility
                 ├── JNI / GameActivity bridge
                 ├── Rust ELF loading
                 ├── pthread / bionic compatibility
@@ -59,7 +74,7 @@ allowing the client to control paths, configuration and the host window.
 The `abi` crate provides the Android/bionic ABI surface required by the client,
 including bionic pthread primitives and generated fallback symbols.
 
-The `android` crate supplies Android framework behavior that has to exist on the
+The `android` crate supplies Android platform behavior that has to exist on the
 Linux host, including assets, storage, loopers, native windows and system APIs.
 
 ### Native loading

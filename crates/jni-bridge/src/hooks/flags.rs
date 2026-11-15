@@ -6,12 +6,12 @@
 struct RustFlagResult {
     provider_id: i32,
     entries: HashMap<String, bool>,
-    map: Option<crate::ObjectId>,
+    map: Option<jnivm::ObjectId>,
 }
 
-static RUST_FLAG_RESULTS: OnceLock<Mutex<HashMap<crate::ObjectId, RustFlagResult>>> =
+static RUST_FLAG_RESULTS: OnceLock<Mutex<HashMap<jnivm::ObjectId, RustFlagResult>>> =
     OnceLock::new();
-static RUST_FLAG_MAP_OWNERS: OnceLock<Mutex<HashMap<crate::ObjectId, crate::ObjectId>>> =
+static RUST_FLAG_MAP_OWNERS: OnceLock<Mutex<HashMap<jnivm::ObjectId, jnivm::ObjectId>>> =
     OnceLock::new();
 
 fn install_flags_methods(vm: &Vm) -> Result<(), String> {
@@ -32,7 +32,13 @@ fn install_flags_methods(vm: &Vm) -> Result<(), String> {
         "(Ljava/lang/String;ZZ)V",
         flags_add_boolean,
     )?;
-    install_instance_builtin(vm, flags, "getNativeFlagProviderId", "()I", flags_provider_id)?;
+    install_instance_builtin(
+        vm,
+        flags,
+        "getNativeFlagProviderId",
+        "()I",
+        flags_provider_id,
+    )?;
     install_instance_builtin(
         vm,
         flags,
@@ -67,8 +73,10 @@ fn rust_java_string(vm: &Vm, value: &JniValue) -> Option<String> {
     Some(String::from_utf16_lossy(&units))
 }
 
-fn flags_create(vm: &Vm, _receiver: Option<crate::ObjectId>, args: &[JniValue]) -> JniValue {
-    let JniValue::Object(Some(result)) = new_opaque_local(vm, "com/roblox/client/flags/NativeFlagsInitResult") else {
+fn flags_create(vm: &Vm, _receiver: Option<jnivm::ObjectId>, args: &[JniValue]) -> JniValue {
+    let JniValue::Object(Some(result)) =
+        new_opaque_local(vm, "com/roblox/client/flags/NativeFlagsInitResult")
+    else {
         return JniValue::Object(None);
     };
     let JniValue::Object(Some(map)) = new_opaque_local(vm, "java/util/Map") else {
@@ -98,11 +106,7 @@ fn flags_create(vm: &Vm, _receiver: Option<crate::ObjectId>, args: &[JniValue]) 
     JniValue::Object(Some(result))
 }
 
-fn flags_add_boolean(
-    vm: &Vm,
-    receiver: Option<crate::ObjectId>,
-    args: &[JniValue],
-) -> JniValue {
+fn flags_add_boolean(vm: &Vm, receiver: Option<jnivm::ObjectId>, args: &[JniValue]) -> JniValue {
     let (Some(receiver), Some(name), Some(JniValue::Boolean(value))) = (
         receiver,
         args.first().and_then(|value| rust_java_string(vm, value)),
@@ -121,11 +125,7 @@ fn flags_add_boolean(
     JniValue::Void
 }
 
-fn flags_provider_id(
-    _vm: &Vm,
-    receiver: Option<crate::ObjectId>,
-    _args: &[JniValue],
-) -> JniValue {
+fn flags_provider_id(_vm: &Vm, receiver: Option<jnivm::ObjectId>, _args: &[JniValue]) -> JniValue {
     let provider_id = receiver
         .and_then(|receiver| {
             RUST_FLAG_RESULTS
@@ -139,11 +139,7 @@ fn flags_provider_id(
     JniValue::Int(provider_id)
 }
 
-fn flags_boolean_map(
-    _vm: &Vm,
-    receiver: Option<crate::ObjectId>,
-    _args: &[JniValue],
-) -> JniValue {
+fn flags_boolean_map(_vm: &Vm, receiver: Option<jnivm::ObjectId>, _args: &[JniValue]) -> JniValue {
     let map = receiver.and_then(|receiver| {
         RUST_FLAG_RESULTS
             .get_or_init(Default::default)
@@ -155,11 +151,7 @@ fn flags_boolean_map(
     JniValue::Object(map)
 }
 
-fn flags_resolve(
-    vm: &Vm,
-    receiver: Option<crate::ObjectId>,
-    args: &[JniValue],
-) -> JniValue {
+fn flags_resolve(vm: &Vm, receiver: Option<jnivm::ObjectId>, args: &[JniValue]) -> JniValue {
     let value = receiver
         .zip(args.first().and_then(|value| rust_java_string(vm, value)))
         .and_then(|(receiver, name)| {
@@ -174,11 +166,7 @@ fn flags_resolve(
     JniValue::Boolean(value)
 }
 
-fn flags_map_size(
-    _vm: &Vm,
-    receiver: Option<crate::ObjectId>,
-    _args: &[JniValue],
-) -> JniValue {
+fn flags_map_size(_vm: &Vm, receiver: Option<jnivm::ObjectId>, _args: &[JniValue]) -> JniValue {
     let size = receiver
         .and_then(|map| {
             let owner = RUST_FLAG_MAP_OWNERS
@@ -198,11 +186,7 @@ fn flags_map_size(
     JniValue::Int(size)
 }
 
-fn flags_map_is_empty(
-    vm: &Vm,
-    receiver: Option<crate::ObjectId>,
-    args: &[JniValue],
-) -> JniValue {
+fn flags_map_is_empty(vm: &Vm, receiver: Option<jnivm::ObjectId>, args: &[JniValue]) -> JniValue {
     let JniValue::Int(size) = flags_map_size(vm, receiver, args) else {
         unreachable!()
     };

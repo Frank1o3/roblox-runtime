@@ -2,7 +2,7 @@
 //! message bus for microphone permission; Android's checkSelfPermission shim
 //! alone does not answer that protocol request.
 
-use std::ffi::{CString, c_void};
+use std::ffi::c_void;
 
 const PROTOCOL: &str = "PermissionsProtocol";
 const MICROPHONE: &str = "MICROPHONE_ACCESS";
@@ -149,7 +149,15 @@ fn async_handler_run(
                 return jnivm::JniValue::Void;
             };
             unsafe {
-                publish_fn(env, class, proto_ref, method_ref, resp_ref, 0, telemetry_ref);
+                publish_fn(
+                    env,
+                    class,
+                    proto_ref,
+                    method_ref,
+                    resp_ref,
+                    0,
+                    telemetry_ref,
+                );
             }
         }
     }
@@ -167,12 +175,7 @@ fn async_handler_run(
     jnivm::JniValue::Void
 }
 
-fn arm_rust(
-    set: *mut c_void,
-    publish: Option<*mut c_void>,
-    respond: *mut c_void,
-    dual: bool,
-) {
+fn arm_rust(set: *mut c_void, publish: Option<*mut c_void>, respond: *mut c_void, dual: bool) {
     const ASYNC_HANDLER: &str = "com/roblox/universalapp/messagebus/RequestHandlerAsyncRaw";
     const MESSAGE_BUS: &str = "com/roblox/universalapp/messagebus/MessageBus";
 
@@ -187,13 +190,8 @@ fn arm_rust(
         }
     }
 
-    type SetHandler = unsafe extern "system" fn(
-        *mut c_void,
-        *mut c_void,
-        *mut c_void,
-        *mut c_void,
-        *mut c_void,
-    );
+    type SetHandler =
+        unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, *mut c_void, *mut c_void);
     // SAFETY: set native was resolved from the engine library and passed into arm
     let set_fn: SetHandler = unsafe { std::mem::transmute(set) };
 
@@ -218,7 +216,9 @@ fn arm_rust(
         let callback = match jnivm::new_opaque_object(ASYNC_HANDLER) {
             Ok(cb) => cb,
             Err(e) => {
-                eprintln!("[runtime-permissions] could not create callback object for {method}: {e}");
+                eprintln!(
+                    "[runtime-permissions] could not create callback object for {method}: {e}"
+                );
                 continue;
             }
         };
@@ -236,9 +236,6 @@ fn arm_rust(
                 .lock()
                 .unwrap_or_else(|p| p.into_inner());
             guard.insert(callback_id, entry);
-            if let Ok(mirror) = jnivm::cpp_fallback_reference(callback) {
-                guard.insert(mirror as usize as u64, entry);
-            }
         }
 
         let Ok(protocol_ref) = jnivm::new_string_ref(PROTOCOL) else {

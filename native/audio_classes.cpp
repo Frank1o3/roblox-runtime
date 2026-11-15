@@ -136,8 +136,8 @@ inline std::shared_ptr<String> str(const std::string& v) {
 /// returned object still be a real Java string to everything downstream —
 /// `GetStringUTFChars` and friends recover it by `dynamic_cast`, and a
 /// `CharSequence` that was not one would be a null name again by a longer
-/// route. This is the same trick `accessibility.cpp` uses for the parameter
-/// direction, in the one direction that file did not need.
+/// route. The Rust JNI bridge now treats String as the VM's CharSequence
+/// implementation in both parameter and return descriptors.
 class CharSequence : public String {
 public:
     explicit CharSequence(const std::string& v) : String(v) {}
@@ -310,9 +310,8 @@ public:
     }
 
     /// The same answer under the `()Ljava/lang/String;` descriptor. Registered
-    /// alongside the declared `CharSequence` one for the reason
-    /// `accessibility.cpp` registers both of its `setClassName` overloads: it
-    /// costs one line, and the failure it prevents is silent.
+    /// alongside the declared `CharSequence` one for compatibility with dex
+    /// descriptors where the exact declared return type varies.
     static std::shared_ptr<String> getProductNameStr(ENV*, Object* self) {
         return str(self_of(self)->productName);
     }

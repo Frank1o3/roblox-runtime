@@ -280,7 +280,8 @@ pub unsafe extern "C" fn rust_dladdr(addr: *mut c_void, info: *mut libc::Dl_info
 
                 if let Some((best_name, best_addr)) = best_sym {
                     let c_best_name = CString::new(best_name.as_str()).unwrap_or_default();
-                    (*info).dli_sname = Box::into_raw(c_best_name.into_boxed_c_str()) as *const c_char;
+                    (*info).dli_sname =
+                        Box::into_raw(c_best_name.into_boxed_c_str()) as *const c_char;
                     (*info).dli_saddr = best_addr as *mut c_void;
                 } else {
                     (*info).dli_sname = std::ptr::null();
@@ -349,6 +350,9 @@ pub fn linker_symbols() -> BTreeMap<String, usize> {
     symbols.insert("dlerror".to_owned(), rust_dlerror as *const () as usize);
     symbols.insert("dladdr".to_owned(), rust_dladdr as *const () as usize);
     symbols.insert("dlvsym".to_owned(), rust_dlvsym as *const () as usize);
-    symbols.insert("dl_iterate_phdr".to_owned(), rust_dl_iterate_phdr as *const () as usize);
+    symbols.insert(
+        "dl_iterate_phdr".to_owned(),
+        rust_dl_iterate_phdr as *const () as usize,
+    );
     symbols
 }

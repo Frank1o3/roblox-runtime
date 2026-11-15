@@ -10,6 +10,11 @@ pub mod game_activity {
     /// harmlessly reported as unknown by the engine.
     pub const NATIVE_FLAG_NAMES: &str = include_str!("../../data/native-flag-names.txt");
 
+    pub use crate::battery::{
+        BatteryStatusFields, report_battery_state_changed, report_battery_status,
+        state_changed_args,
+    };
+
     include!("bootstrap.rs");
     include!("services.rs");
     include!("display.rs");

@@ -31,7 +31,7 @@
 // The runtime owns the cross-thread request slot. The embedding UI consumes
 // it later on its own event-loop thread, where toolkit calls are safe.
 extern "C" void roblox_runtime_webview_open(const char* url, const char* title);
-extern "C" const char* roblox_framework_files_dir();
+extern "C" const char* roblox_android_files_dir();
 
 // ------------------------------------------------------- focused text box
 //
@@ -1209,7 +1209,7 @@ public:
 /// share a files directory can never share a session.
 /// See docs/design/instances-and-launch.md §4.
 const char* files_dir() {
-    return roblox_framework_files_dir();
+    return roblox_android_files_dir();
 }
 
 /// `com.roblox.engine.jni.reporter.SessionReporterJavaInterface`
@@ -1318,15 +1318,6 @@ jint BuildVersion::SDK_INT = 33;
 
 } // namespace roblox_runtime
 
-// Defined in accessibility.cpp — kept in its own file rather than added to
-// this one because it answers a platform surface (`android.view.accessibility.*`)
-// nothing else here touches, and because its own header comment is long
-// enough (the push-vs-pull accessibility-tree question) that folding it into
-// this file's already-long one would bury it.
-namespace roblox_runtime {
-void register_accessibility_classes(jnivm::ENV* env);
-}
-
 // Defined in cookies.cpp, and in its own file for the same reason: it answers
 // one surface (`com.roblox.universalapp.cookie.*`) whose header comment has to
 // carry the measurement that a session is not persisted anywhere on disk by
@@ -1372,15 +1363,6 @@ void register_local_storage_classes(jnivm::ENV* env);
 // found absent, neither of which belongs buried in this file's preamble.
 namespace roblox_runtime {
 void register_platform_classes(jnivm::ENV* env);
-}
-
-// Defined in battery.cpp. Separate because its header comment has to carry
-// where `BatteryStatus`'s field names came from (`tools/dex_fields.py`, a
-// declaration-only reader this task added alongside `dex_method.py`) and what
-// is and is not confirmed about them without a live run to watch, neither of
-// which belongs buried in this file's preamble.
-namespace roblox_runtime {
-void register_battery_classes(jnivm::ENV* env);
 }
 
 // -------------------------------------------------------- the identity, in and out
@@ -1877,7 +1859,6 @@ extern "C" void roblox_register_android_classes(void* env_ptr) {
     roblox_runtime::VideoCodecCapability::Register(env);
     roblox_runtime::MediaCodecInfoUtils::Register(env);
     roblox_runtime::BuildVersion::Register(env);
-    roblox_runtime::register_accessibility_classes(env);
     roblox_runtime::register_cookie_classes(env);
     roblox_runtime::register_audio_classes(env);
     roblox_runtime::register_clipboard_classes(env);
@@ -1885,7 +1866,6 @@ extern "C" void roblox_register_android_classes(void* env_ptr) {
     roblox_runtime::register_permission_checks(env);
     roblox_runtime::register_local_storage_classes(env);
     roblox_runtime::register_platform_classes(env);
-    roblox_runtime::register_battery_classes(env);
     if (getenv("RBX_RUNTIME_JNI_TRACE")) {
         fprintf(stderr, "[classes] Android Java compatibility classes registered\n");
     }

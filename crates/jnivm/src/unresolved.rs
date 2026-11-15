@@ -25,18 +25,19 @@ static RECORD: OnceLock<Option<RecordFn>> = OnceLock::new();
 const KIND_JNI: u32 = 0;
 
 fn record() -> Option<&'static RecordFn> {
-    RECORD.get_or_init(|| {
-        let name = CString::new("roblox_unimplemented_record").ok()?;
-        // SAFETY: `name` is a live NUL-terminated string for this call; the
-        // result is only transmuted when it is non-null, and the recorder is
-        // an `unsafe extern "C" fn(u32, *const c_char)` exactly as declared.
-        let address = unsafe { libc::dlsym(libc::RTLD_DEFAULT, name.as_ptr()) };
-        if address.is_null() {
-            return None;
-        }
-        Some(unsafe { std::mem::transmute::<*mut std::ffi::c_void, RecordFn>(address) })
-    })
-    .as_ref()
+    RECORD
+        .get_or_init(|| {
+            let name = CString::new("roblox_unimplemented_record").ok()?;
+            // SAFETY: `name` is a live NUL-terminated string for this call; the
+            // result is only transmuted when it is non-null, and the recorder is
+            // an `unsafe extern "C" fn(u32, *const c_char)` exactly as declared.
+            let address = unsafe { libc::dlsym(libc::RTLD_DEFAULT, name.as_ptr()) };
+            if address.is_null() {
+                return None;
+            }
+            Some(unsafe { std::mem::transmute::<*mut std::ffi::c_void, RecordFn>(address) })
+        })
+        .as_ref()
 }
 
 /// libjnivm's exact marker wording, kept so a Rust-VM report reads the same

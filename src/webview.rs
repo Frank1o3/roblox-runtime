@@ -47,7 +47,6 @@ static EVENT: OnceLock<Mutex<Option<WebViewEvent>>> = OnceLock::new();
 static OPEN_WINDOW_KEYS: OnceLock<OpenWindowKeys> = OnceLock::new();
 type MessageSink = extern "C" fn(*const c_char);
 static RUST_SINKS: OnceLock<Mutex<HashMap<u64, MessageSink>>> = OnceLock::new();
-static RUST_MIRRORS: OnceLock<Mutex<Vec<(u64, MessageSink)>>> = OnceLock::new();
 
 fn event_slot() -> &'static Mutex<Option<WebViewEvent>> {
     EVENT.get_or_init(|| Mutex::new(None))
@@ -219,25 +218,11 @@ fn subscribe_raw_rust(
     let message_id_ref = jnivm::new_string_ref(message_id)?;
     let callback = jnivm::new_opaque_object(RAW_CALLBACK)?;
     let callback_id = callback as usize as u64;
-    let callback_mirror = jnivm::cpp_fallback_reference(callback)? as usize as u64;
     RUST_SINKS
         .get_or_init(|| Mutex::new(HashMap::new()))
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
         .insert(callback_id, sink);
-    // The JNI fallback bridge passes its C++ mirror of this callback into
-    // MessageBus. Depending on which VM dispatches `run`, the receiver is
-    // reported as either the Rust handle or that mirror's JNI reference.
-    RUST_SINKS
-        .get_or_init(|| Mutex::new(HashMap::new()))
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-        .insert(callback_mirror, sink);
-    RUST_MIRRORS
-        .get_or_init(|| Mutex::new(Vec::new()))
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-        .push((callback_mirror, sink));
 
     type Subscribe = unsafe extern "system" fn(
         *mut c_void,
@@ -275,7 +260,7 @@ fn raw_callback_run(
         eprintln!("[runtime-webview] MessageBus callback payload is not a Rust VM String");
         return jnivm::JniValue::Void;
     };
-    let direct_sink = RUST_SINKS.get().and_then(|sinks| {
+    let sink = RUST_SINKS.get().and_then(|sinks| {
         let sinks = sinks
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -284,35 +269,6 @@ fn raw_callback_run(
                 vm.same_object(receiver, jnivm::ObjectId::from_raw(*candidate))
                     .then_some(*sink)
             })
-        })
-    });
-    let receiver_reference = match vm.object_value(
-        &vm.get_env().unwrap_or_else(|| vm.attach_current_thread()),
-        receiver,
-    ) {
-        Ok(jnivm::ObjectValue::CppObject(reference)) => Some(reference as *mut c_void),
-        // A valid Rust-owned object ID is not a C++ JNI handle. Do not pass
-        // it into the companion VM's IsSameObject implementation.
-        Ok(_) => None,
-        // Untracked references can be JNI handles from the companion VM.
-        Err(_) => Some(receiver.raw() as usize as *mut c_void),
-    };
-    let sink = direct_sink.or_else(|| {
-        let receiver_reference = receiver_reference?;
-        let mirrors = RUST_MIRRORS.get()?;
-        let mirrors = mirrors
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .clone();
-        mirrors.into_iter().find_map(|(mirror, sink)| {
-            // SAFETY: both values live in the companion C++ VM's handle
-            // space — `receiver_reference` is either a CppObject mirror
-            // issued by that VM or an untracked raw JNI handle, and each
-            // `mirror` was registered from `cpp_fallback_reference`, which
-            // only returns companion-VM handles.
-            unsafe { jnivm::cpp_fallback_same_object(receiver_reference, mirror as usize as *mut c_void) }
-                .filter(|same| *same)
-                .map(|_| sink)
         })
     });
     let Some(sink) = sink else {

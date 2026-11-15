@@ -14,7 +14,7 @@ pub fn set_game_loaded_callback(callback: extern "C" fn(i64)) -> Result<(), &'st
 
 fn native_helper_flags_failed(
     _vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     _args: &[JniValue],
 ) -> JniValue {
     eprintln!("[roblox] flags: engine reported onFlagsFailed");
@@ -23,17 +23,16 @@ fn native_helper_flags_failed(
 
 fn native_helper_flags_loaded(
     vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     args: &[JniValue],
 ) -> JniValue {
     let capacity = match args.first() {
-        Some(JniValue::Object(Some(buffer))) => match vm.object_value(
-            &attached_thread_env(vm),
-            *buffer,
-        ) {
-            Ok(crate::ObjectValue::DirectByteBuffer { capacity, .. }) => capacity,
-            _ => -1,
-        },
+        Some(JniValue::Object(Some(buffer))) => {
+            match vm.object_value(&attached_thread_env(vm), *buffer) {
+                Ok(jnivm::ObjectValue::DirectByteBuffer { capacity, .. }) => capacity,
+                _ => -1,
+            }
+        }
         _ => -1,
     };
     eprintln!("[roblox] flags loaded ({capacity} bytes)");
@@ -42,7 +41,7 @@ fn native_helper_flags_loaded(
 
 fn native_helper_app_ready(
     vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     args: &[JniValue],
 ) -> JniValue {
     eprintln!("[roblox] app ready: {}", native_helper_string(vm, args, 0));
@@ -51,7 +50,7 @@ fn native_helper_app_ready(
 
 fn native_helper_experience_start(
     _vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     _args: &[JniValue],
 ) -> JniValue {
     eprintln!("[roblox] experience start");
@@ -60,7 +59,7 @@ fn native_helper_experience_start(
 
 fn native_helper_game_loaded(
     _vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     args: &[JniValue],
 ) -> JniValue {
     let place_id = match args.first() {
@@ -80,7 +79,7 @@ fn native_helper_game_loaded(
 /// it as an ordinary user edit would be incorrect.
 fn native_helper_lua_text_box_changed(
     _vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     _args: &[JniValue],
 ) -> JniValue {
     JniValue::Void
@@ -90,7 +89,7 @@ fn native_helper_lua_text_box_changed(
 /// geometry dirty so the host window refreshes it on its own UI thread.
 fn native_helper_lua_text_box_property_changed(
     _vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     _args: &[JniValue],
 ) -> JniValue {
     // SAFETY: this callback only increments the runtime's atomic textbox
@@ -101,7 +100,7 @@ fn native_helper_lua_text_box_property_changed(
 
 fn native_helper_logged_in(
     vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     args: &[JniValue],
 ) -> JniValue {
     // This is a session identifier; mirror the C++ bridge and never print it.
@@ -114,7 +113,7 @@ fn native_helper_logged_in(
 
 fn native_helper_orientation_changed(
     _vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     args: &[JniValue],
 ) -> JniValue {
     let orientation = match args.first() {
@@ -131,7 +130,7 @@ fn native_helper_orientation_changed(
 
 macro_rules! native_helper_notice {
     ($name:ident, $message:literal) => {
-        fn $name(_vm: &Vm, _receiver: Option<crate::ObjectId>, _args: &[JniValue]) -> JniValue {
+        fn $name(_vm: &Vm, _receiver: Option<jnivm::ObjectId>, _args: &[JniValue]) -> JniValue {
             eprintln!("[roblox] {}", $message);
             JniValue::Void
         }
@@ -150,7 +149,7 @@ native_helper_notice!(
 
 fn native_helper_signed_up(
     vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     args: &[JniValue],
 ) -> JniValue {
     eprintln!(
@@ -162,7 +161,7 @@ fn native_helper_signed_up(
 
 fn native_helper_streaming_status(
     vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     args: &[JniValue],
 ) -> JniValue {
     eprintln!(
@@ -174,7 +173,7 @@ fn native_helper_streaming_status(
 
 fn native_helper_screenshot_ready(
     vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     args: &[JniValue],
 ) -> JniValue {
     eprintln!(
@@ -186,7 +185,7 @@ fn native_helper_screenshot_ready(
 
 fn native_helper_motion_listening(
     vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     args: &[JniValue],
 ) -> JniValue {
     eprintln!(
@@ -198,7 +197,7 @@ fn native_helper_motion_listening(
 
 fn native_helper_experience_stopped(
     _vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     args: &[JniValue],
 ) -> JniValue {
     let seconds = match args.first() {
@@ -211,7 +210,7 @@ fn native_helper_experience_stopped(
 
 fn native_helper_upgrade_status(
     vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     args: &[JniValue],
 ) -> JniValue {
     let status = match args.first() {
@@ -236,7 +235,7 @@ fn native_helper_string(vm: &Vm, args: &[JniValue], index: usize) -> String {
     };
     let env = attached_thread_env(vm);
     match vm.object_value(&env, *object) {
-        Ok(crate::ObjectValue::String(units)) => String::from_utf16_lossy(&units),
+        Ok(jnivm::ObjectValue::String(units)) => String::from_utf16_lossy(&units),
         _ => String::new(),
     }
 }

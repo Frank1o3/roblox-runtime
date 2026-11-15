@@ -141,7 +141,7 @@ interception → `crates/abi/bionic/*`; Android filesystem/system → `crates/an
 | `aaudio.cpp/.h` (1,398) | 25 AAudio symbols and backend selection | **Ported and wired** through `crates/audio/src/aaudio/ffi.rs`; native AAudio implementation and callback sources removed |
 | `aaudio_input_callback.cpp/.h` (173) | C++ `InputCallbackDriver` | `input_callback.rs` ✓; native callback sources removed |
 | `opensles.cpp` (1,655) | `slCreateEngine` + 7 `SL_IID_*` **data** symbols via `roblox_opensles_symbols` | **TODO** → `crates/audio/opensles/` |
-| `audio_classes.cpp` (2,195) | Java hooks: AudioManager/AudioDeviceInfo, AudioRecord, WebRtcAudioManager/Record/Track, org/fmod/AudioDevice; the microphone-rule chokepoint | **TODO** → `crates/audio` JNI hooks module (they *are* the audio policy; registered via `jnivm::register_method_handler`) — or `crates/framework` if Q1 answers "one hooks crate for everything" |
+| `audio_classes.cpp` | Java hook registration belongs in `crates/jni-bridge`; device, capture, and microphone policy delegates to `crates/audio` | TODO: move observed Java hooks to Rust; leave unobserved classes unanswered |
 | `liblog.cpp` (231) | `__android_log_write/buf_write/print/vprint/assert`, `android_set_abort_message` via `roblox_liblog_symbols` | **TODO** → `crates/abi/bionic/liblog.rs` (variadic constraint: see §Variadic) |
 | `system_paths.cpp` (350) | 13-symbol table (`stat lstat access opendir realpath readlink fopen statvfs open __open_2 mkdir unlink rename`), `roblox_set_system_root`, `roblox_set_path_trace` | **TODO** → `crates/android/src/system.rs` (it already owns `roblox_set_system_root`) |
 | `netdb_compat.cpp` (206) | `roblox_getaddrinfo/freeaddrinfo` table | **TODO** → `crates/abi/bionic/netdb.rs` |
@@ -154,17 +154,18 @@ interception → `crates/abi/bionic/*`; Android filesystem/system → `crates/an
 
 | C++ file | exports | target |
 | --- | --- | --- |
-| `jni_shim.cpp` (697) | 18 `roblox_jni_*` externs; owns process VM, `reserved0`, exception barriers, compat-bridge side | replaced by `crates/jni-bridge`'s `jni.rs` calling `jnivm` directly; `init_compat_bridge` and the whole C++ fallback disappear |
+| `jni_shim.cpp` | Rust now owns JavaVM creation, `JNIEnv` access, and `JNI_OnLoad`; removed the obsolete traced-VM wrappers and dormant method/field fallback exports | **Remaining:** compatibility VM class hooks, `RegisterNatives` mirroring for C++ GameActivity drivers, class-dump diagnostics, and target-ABI `va_list` decoding still use this shim/libjnivm |
 | `android_classes.cpp` (2,037) | `roblox_register_android_classes` + 20 textbox/identity/app-ready exports; 10+ classes (StringBridge, DeviceStaticParams, NativeTextBoxInfo, NativeGL/Locale/UserJavaInterface, LoggingProtocol, SessionReporter, VideoCodecCapability, MediaCodecInfoUtils, BuildVersion…) | port reached Java hooks to `crates/jni-bridge`; state sinks remain in their subsystem APIs where applicable |
 | `game_activity.cpp` (2,134) | 36 externs driving AGDK lifecycle/input/IME/gamepad; registers GameActivity/MotionEvent/KeyEvent/State/InputConnection/AssetManager/Configuration/ClassLoader; reads back RegisterNatives entries via `Class::natives` | keep Rust caller drivers in `crates/jni-bridge/game_activity`; move required class behavior and native lookup to the Rust VM/bridge based on observed calls |
 | `init_params.cpp` (3,100) | 31 externs; ~19 classes (DisplayMetrics, Configuration, Point, DeviceUtils, Insets, Surface, Map/ArrayList/List, Locale, LocaleList, NativeFlagsInitResult, JSONObject, ClientLocalFlags, NativeHelper, LocalStorageManager, Resources, Activity, DeviceParams, PlatformParams, InitParams, StartAppParams) | port only reached hooks to `crates/jni-bridge`; verify descriptors against dex and runtime traces |
-| `accessibility.cpp` (802) | 7 externs + AT-SPI bridge structs; measured dead on Android (header records it) | preserve AT-SPI transport in the client; implement JNI hooks in `crates/jni-bridge` only for the explicitly retained compatibility behavior |
-| `cookies.cpp` (280) | 3 externs; JNICookieProtocol classes | port → `crates/framework`; privacy rule (never log a cookie) preserved |
-| `deeplink.cpp` (269) | 5 externs; attacker-shape rules | port → `crates/framework` (deeplink.rs in root src already exists client-side) |
-| `clipboard.cpp` (641) | 5 messagebus externs (root `src/webview.rs` and `src/permissions.rs` call `roblox_messagebus_subscribe/set_request_handler_async`) | port → `crates/framework` |
-| `permissions_transport.h/.cpp` (54) | dual-response delivery logic + 4 tests | port → `crates/framework` with its tests |
-| `local_storage.cpp` (705) | `roblox_local_storage_set_platform_impl`, `roblox_update_screen_orientation`; consumes 4 Rust exports that already exist in `crates/android/src/local_storage.rs` | port → `crates/framework` (or `crates/android` — it is storage policy; Q1 covers) |
-| `legacy_stdio.cpp`, `platform_classes.cpp` (205), `battery.cpp` (349), `unanswered_classes.cpp` (343) | platform classes (ActivityThread/Application), BatteryStatus mirror + 2 externs, unanswered classes (NetworkUtils with the engine's misspelled `getPublicIPv4Addresseses`, AppRtcDeviceWrapper, memstorage/Connection, BuildInfo) | port → `crates/framework`; battery *data* already comes from `crates/android/src/battery.rs` |
+| `accessibility.cpp` (802) | 7 externs + AT-SPI bridge structs; measured dead on Android | **Ported to Rust** in `crates/jni-bridge/src/accessibility.rs`; its node/event state and JNI hooks are Rust-owned, and the C++ translation unit is removed. The client AT-SPI transport remains separate. |
+| `cookies.cpp` (280) | 3 externs; JNICookieProtocol classes | port JNI registration to `crates/jni-bridge`; cookie handling remains in the owning session/service API and must never log cookie values |
+| `deeplink.cpp` (269) | 5 externs; attacker-shape rules | port reached JNI hooks to `crates/jni-bridge`; URL validation stays in the existing Rust `src/deeplink.rs` |
+| `clipboard.cpp` (641) | 5 messagebus externs (root `src/webview.rs` and `src/permissions.rs` call `roblox_messagebus_subscribe/set_request_handler_async`) | port JNI registrations to `crates/jni-bridge`; route payloads to existing Rust services |
+| `permissions_transport.h/.cpp` (54) | dual-response delivery logic + 4 tests | port JNI registrations to `crates/jni-bridge`; route payloads to existing Rust services with its tests |
+| `local_storage.cpp` (705) | `roblox_local_storage_set_platform_impl`, `roblox_update_screen_orientation`; consumes 4 Rust exports that already exist in `crates/android/src/local_storage.rs` | port JNI registrations to `crates/jni-bridge`; route payloads to existing Rust services (or `crates/android` — it is storage policy; Q1 covers) |
+| `legacy_stdio.cpp`, `platform_classes.cpp` (205), `unanswered_classes.cpp` (343) | platform classes (ActivityThread/Application), unanswered classes (NetworkUtils with the engine's misspelled `getPublicIPv4Addresseses`, AppRtcDeviceWrapper, memstorage/Connection, BuildInfo) | port JNI registrations to `crates/jni-bridge`; route payloads to existing Rust services |
+| `battery.cpp` (349) | BatteryStatus boxed fields + two native-call helpers | ported to `crates/jni-bridge/src/battery.rs`; reads are shared from `crates/android/src/battery.rs`; report natives remain unobserved and have no caller |
 | `insets.h` (81) | shared Insets class so a hook can return it | becomes a plain Rust hook returning an object — the C++ descriptor-derivation reason for its existence disappears |
 | `jnivm_logger/log.cpp` (112) | `Log::debug` seam capturing "Constructed Unresolved symbol" | replaced by `crates/logging` + a `jnivm` unresolved-report hook (jnivm already logs through roblox-logging; needs the same `crate::unimplemented` recording) |
 
@@ -182,8 +183,9 @@ interception → `crates/abi/bionic/*`; Android filesystem/system → `crates/an
 
 ## B. jnivm parity
 
-The C++ shims use libjnivm's API; `crates/jnivm` must cover every capability
-before the hooks can port. Capability-by-capability:
+The remaining C++ compatibility hooks use libjnivm's API; `crates/jnivm` owns
+Roblox's JavaVM and implements only the observed JNI surface. Rust method/field
+lookups no longer dispatch to C++ fallback hooks. Capability-by-capability:
 
 | capability the C++ shims use | crates/jnivm status |
 | --- | --- |
@@ -202,9 +204,28 @@ before the hooks can port. Capability-by-capability:
 | GetStatic*/SetStatic* fields, all types | ✓ fields.rs (all 8 types, instance+static) |
 | `NewObjectV/A`, AllocObject | ~ `<init>` factory trick works; `AllocObject` falls to descriptor-correct zero values — acceptable unless the dex check shows use |
 | JNI table completeness | ~ `env_table()` leaves unlisted entries null; enumerate engine's used entries from the dump-classes inventory and fill |
-| GC (`gc()`, GcStats) | ✓ (mark-and-sweep, C++ ref release, string-buffer pruning) |
+| GC (`gc()`, GcStats) | ✓ (Rust mark-and-sweep and string-buffer pruning) |
 | unresolved reporting ("Constructed Unresolved symbol") | ~ jnivm logs unresolved via roblox-logging; **gap**: feed the same inventory the C++ `logger` fed `crate::unimplemented` (kind=JNI), so `unimplemented::report` stays populated |
 | VM lifecycle | ~ `DestroyJavaVM` → JNI_ERR (parity with libjnivm's behavior here is fine); `JNI_VERSION_1_6` ✓ |
+
+
+
+### Latest JNI migration progress (2026-11-15)
+
+- Removed the disabled Rust-to-C++ method and field fallback dispatcher,
+  companion object mirroring APIs, and their C++ exports. Unimplemented methods
+  and fields now stay within the Rust VM and use its descriptor-correct default
+  behavior.
+- `roblox-jni-bridge::jni` now forwards JavaVM creation, `JNIEnv` access, and
+  `JNI_OnLoad` directly to `jnivm`. Removed the obsolete C++ traced-VM wrappers.
+- The C++ compatibility VM is **still required** by the native GameActivity and
+  Android hook drivers. In particular, Rust `RegisterNatives` registrations are
+  mirrored into that VM so its lifecycle/input callbacks can find engine native
+  function pointers. This is a remaining migration task; `libjnivm`, CMake, and
+  `roblox-native-sys` have not been removed.
+- Manual release-build observation: the user reported a signed-in session and
+  loaded experience; stopping the client ended in SIGSEGV. See `README.md` for
+  the shutdown observation and its limits.
 
 ### B.1 Descriptor verification
 
@@ -353,13 +374,11 @@ selection:
   dispatch are complete; the remaining gap is unifying `env_token` vs
   `attached_thread_env` attach semantics.
 
-- **P3 — JNI hook ports into `crates/framework`** (proposed name), group by
-  file: platform/unanswered/battery → cookies/clipboard/permissions/deeplink →
-  local_storage → accessibility → android_classes → game_activity drivers →
-  init_params. Register the required hooks in the Rust VM and migrate the
-  existing call sites to those Rust implementations. Do not add backend
-  selection flags or port the companion C++ VM. Descriptor check (§B.1) runs
-  per file before its commit.
+- **P3 — JNI hook ports into `crates/jni-bridge`**, grouped by dependency:
+  Android platform and GameActivity objects, init params, then only reached
+  service hooks (cookies, clipboard, permissions, deep links, audio). Service
+  policy remains in its existing Rust crate. Keep referenced-but-unreached
+  methods unanswered. Descriptor check (§B.1) runs on observed registrations.
 
 - **P4 — linker flip (complete)**: the Rust loader is the only engine loader;
   the MCP launcher linker, its C shim, build patch, binding crate, and submodule
@@ -455,26 +474,12 @@ trampoline and compare against the same call on host libc semantics).
 - **Descriptor tooling**: fresh implementation from the public dex spec;
   cordial's GPL `tools/hook_descriptors.py` is not read as a porting source.
 
-## I. Open questions (all blocking)
+## I. Remaining decisions
 
-1. **Q1 — home of the JNI class hooks.** Proposal: one new dedicated crate
-   `crates/framework` (`roblox-framework`) holding every Java class hook port
-   (android/game-activity/init-params/cookies/clipboard/…), depending on
-   `jnivm` + `roblox-android` + `roblox-audio`. Alternative: audio hooks in
-   `crates/audio` and the rest split between `crates/android` and the renamed
-   `crates/jni`. The dedicated crate keeps "the VM" (jnivm) free of Roblox
-   policy and keeps policy in one place; it does add a crate.
-2. **Q2 — `elf.rs` and `host_symbol` disposition** when linker-sys dies: move
-   into `crates/linker`, or a small standalone `roblox-elf` crate? (Root crate
-   re-export path stays `roblox_runtime::…` either way.)
-3. **Q3 — variadic strategy** (§Variadic): naked-asm trampolines are the only
-   stable-Rust way to receive `open`/`fprintf`/`__android_log_print`. OK to
-   embed per-ISA assembly, or would you rather keep exactly those three
-   variadic functions as tiny C (violating the 100%-Rust goal, but
-   honest-by-test)?
-4. **Q4 — license** (§License finding): how do you want to handle the
-   cordial-derived `native/` body? This gates every port commit.
-5. **Q5 — dead-hook policy**: C++ hooks whose descriptors mismatched the dex
-   are silently dead today (§B.1). Confirm the Rust ports bind per the dex and
-   *change* that behavior (engine gets the hook it asked for), with per-hook
-   notes — rather than preserving the dead state.
+The hook boundary is settled: `jnivm` owns the VM, `roblox-jni-bridge` owns JNI
+hooks, and platform behavior stays in subsystem crates. No `roblox-framework`
+crate is needed; its former path bridge has moved into `roblox-android`.
+
+The remaining linker and variadic-ABI implementation details are tracked in
+§C and §Variadic. JNI descriptors must match the supplied APK dex where
+available; behavior mismatches should be called out in hook migration notes.

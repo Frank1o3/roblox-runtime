@@ -2,6 +2,13 @@
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct ClassId(pub(crate) u64);
 
+impl ClassId {
+    /// Stable opaque JNI handle value used by this VM's function table.
+    pub fn raw(self) -> u64 {
+        self.0
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct MethodId(pub(crate) u64);
 
@@ -115,10 +122,6 @@ pub enum ObjectValue {
     /// A `java/nio/ByteBuffer` wrapper over native memory, matching
     /// libjnivm's `ByteBuffer { void* buffer; jlong capacity; }`.
     DirectByteBuffer { address: usize, capacity: i64 },
-    /// A global object reference owned by the companion C++ libjnivm VM.
-    /// This is only used for values returned from the experimental fallback
-    /// bridge; Rust code must not dereference the pointer directly.
-    CppObject(usize),
     /// A `java/lang/Throwable` instance. `Some` mirrors the Java
     /// `getMessage()` result; `None` is a throwable constructed without a
     /// detail message (JNI `ThrowNew` allows a null message). The Java class

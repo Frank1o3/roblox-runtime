@@ -18,8 +18,8 @@ struct PreferenceEditor {
 #[derive(Default)]
 struct PreferenceState {
     stores: HashMap<String, HashMap<String, String>>,
-    preference_objects: HashMap<crate::ObjectId, String>,
-    editors: HashMap<crate::ObjectId, PreferenceEditor>,
+    preference_objects: HashMap<jnivm::ObjectId, String>,
+    editors: HashMap<jnivm::ObjectId, PreferenceEditor>,
 }
 
 static PREFERENCES: OnceLock<Mutex<PreferenceState>> = OnceLock::new();
@@ -87,7 +87,7 @@ fn install_platform_methods(vm: &Vm) -> Result<(), String> {
         (
             "getString",
             "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;",
-            preferences_get_string as crate::MethodHandler,
+            preferences_get_string as jnivm::MethodHandler,
         ),
         ("getInt", "(Ljava/lang/String;I)I", preferences_get_int),
         ("getLong", "(Ljava/lang/String;J)J", preferences_get_long),
@@ -109,7 +109,7 @@ fn install_platform_methods(vm: &Vm) -> Result<(), String> {
         (
             "putString",
             "(Ljava/lang/String;Ljava/lang/String;)Landroid/content/SharedPreferences$Editor;",
-            editor_put_string as crate::MethodHandler,
+            editor_put_string as jnivm::MethodHandler,
         ),
         (
             "putInt",
@@ -179,7 +179,7 @@ fn install_platform_methods(vm: &Vm) -> Result<(), String> {
 
 fn device_utils_physical_size(
     vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     _args: &[JniValue],
 ) -> JniValue {
     let mut width_mm = 0;
@@ -196,7 +196,7 @@ fn device_utils_physical_size(
     let Ok(class) = vm.find_class("android/graphics/Point") else {
         return JniValue::Object(None);
     };
-    let Ok(point) = vm.new_local_object(&env, class, crate::ObjectValue::Opaque) else {
+    let Ok(point) = vm.new_local_object(&env, class, jnivm::ObjectValue::Opaque) else {
         return JniValue::Object(None);
     };
     for (name, value) in [("x", width_mm), ("y", height_mm)] {
@@ -243,7 +243,7 @@ fn install_fmod_methods(vm: &Vm) -> Result<(), String> {
 
 fn activity_thread_current(
     vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     _args: &[JniValue],
 ) -> JniValue {
     new_opaque_local(vm, "android/app/ActivityThread")
@@ -251,7 +251,7 @@ fn activity_thread_current(
 
 fn activity_thread_application(
     vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     _args: &[JniValue],
 ) -> JniValue {
     new_opaque_local(vm, "android/app/Application")
@@ -259,7 +259,7 @@ fn activity_thread_application(
 
 fn context_get_shared_preferences(
     vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     args: &[JniValue],
 ) -> JniValue {
     let name = java_string_arg(vm, args, 0).unwrap_or_else(|| "default".to_owned());
@@ -275,7 +275,7 @@ fn context_get_shared_preferences(
     JniValue::Object(Some(object))
 }
 
-fn preferences_edit(vm: &Vm, receiver: Option<crate::ObjectId>, _args: &[JniValue]) -> JniValue {
+fn preferences_edit(vm: &Vm, receiver: Option<jnivm::ObjectId>, _args: &[JniValue]) -> JniValue {
     let Some(owner_id) = receiver else {
         return JniValue::Object(None);
     };
@@ -302,7 +302,7 @@ fn preferences_edit(vm: &Vm, receiver: Option<crate::ObjectId>, _args: &[JniValu
 
 fn preferences_get_string(
     vm: &Vm,
-    receiver: Option<crate::ObjectId>,
+    receiver: Option<jnivm::ObjectId>,
     args: &[JniValue],
 ) -> JniValue {
     let Some(value) = preference_get(vm, receiver, args) else {
@@ -311,14 +311,14 @@ fn preferences_get_string(
     java_string(vm, &value, "SharedPreferences")
 }
 
-fn preferences_get_int(vm: &Vm, receiver: Option<crate::ObjectId>, args: &[JniValue]) -> JniValue {
+fn preferences_get_int(vm: &Vm, receiver: Option<jnivm::ObjectId>, args: &[JniValue]) -> JniValue {
     preference_get(vm, receiver, args)
         .and_then(|v| v.parse().ok())
         .map(JniValue::Int)
         .unwrap_or_else(|| args.get(1).cloned().unwrap_or(JniValue::Int(0)))
 }
 
-fn preferences_get_long(vm: &Vm, receiver: Option<crate::ObjectId>, args: &[JniValue]) -> JniValue {
+fn preferences_get_long(vm: &Vm, receiver: Option<jnivm::ObjectId>, args: &[JniValue]) -> JniValue {
     preference_get(vm, receiver, args)
         .and_then(|v| v.parse().ok())
         .map(JniValue::Long)
@@ -327,7 +327,7 @@ fn preferences_get_long(vm: &Vm, receiver: Option<crate::ObjectId>, args: &[JniV
 
 fn preferences_get_float(
     vm: &Vm,
-    receiver: Option<crate::ObjectId>,
+    receiver: Option<jnivm::ObjectId>,
     args: &[JniValue],
 ) -> JniValue {
     preference_get(vm, receiver, args)
@@ -338,7 +338,7 @@ fn preferences_get_float(
 
 fn preferences_get_boolean(
     vm: &Vm,
-    receiver: Option<crate::ObjectId>,
+    receiver: Option<jnivm::ObjectId>,
     args: &[JniValue],
 ) -> JniValue {
     preference_get(vm, receiver, args)
@@ -346,7 +346,7 @@ fn preferences_get_boolean(
         .unwrap_or_else(|| args.get(1).cloned().unwrap_or(JniValue::Boolean(false)))
 }
 
-fn preferences_contains(vm: &Vm, receiver: Option<crate::ObjectId>, args: &[JniValue]) -> JniValue {
+fn preferences_contains(vm: &Vm, receiver: Option<jnivm::ObjectId>, args: &[JniValue]) -> JniValue {
     let key = java_string_arg(vm, args, 0);
     let found =
         receiver
@@ -363,7 +363,7 @@ fn preferences_contains(vm: &Vm, receiver: Option<crate::ObjectId>, args: &[JniV
     JniValue::Boolean(found)
 }
 
-fn preference_get(vm: &Vm, receiver: Option<crate::ObjectId>, args: &[JniValue]) -> Option<String> {
+fn preference_get(vm: &Vm, receiver: Option<jnivm::ObjectId>, args: &[JniValue]) -> Option<String> {
     let key = java_string_arg(vm, args, 0)?;
     let state = preference_state()
         .lock()
@@ -372,13 +372,13 @@ fn preference_get(vm: &Vm, receiver: Option<crate::ObjectId>, args: &[JniValue])
     state.stores.get(owner)?.get(&key).cloned()
 }
 
-fn editor_put_string(vm: &Vm, receiver: Option<crate::ObjectId>, args: &[JniValue]) -> JniValue {
+fn editor_put_string(vm: &Vm, receiver: Option<jnivm::ObjectId>, args: &[JniValue]) -> JniValue {
     let key = java_string_arg(vm, args, 0);
     let value = java_string_arg(vm, args, 1).unwrap_or_default();
     editor_stage(receiver, key, value)
 }
 
-fn editor_put_int(vm: &Vm, receiver: Option<crate::ObjectId>, args: &[JniValue]) -> JniValue {
+fn editor_put_int(vm: &Vm, receiver: Option<jnivm::ObjectId>, args: &[JniValue]) -> JniValue {
     let key = java_string_arg(vm, args, 0);
     let value = match args.get(1) {
         Some(JniValue::Int(v)) => v.to_string(),
@@ -387,7 +387,7 @@ fn editor_put_int(vm: &Vm, receiver: Option<crate::ObjectId>, args: &[JniValue])
     editor_stage(receiver, key, value)
 }
 
-fn editor_put_long(vm: &Vm, receiver: Option<crate::ObjectId>, args: &[JniValue]) -> JniValue {
+fn editor_put_long(vm: &Vm, receiver: Option<jnivm::ObjectId>, args: &[JniValue]) -> JniValue {
     let key = java_string_arg(vm, args, 0);
     let value = match args.get(1) {
         Some(JniValue::Long(v)) => v.to_string(),
@@ -396,7 +396,7 @@ fn editor_put_long(vm: &Vm, receiver: Option<crate::ObjectId>, args: &[JniValue]
     editor_stage(receiver, key, value)
 }
 
-fn editor_put_float(vm: &Vm, receiver: Option<crate::ObjectId>, args: &[JniValue]) -> JniValue {
+fn editor_put_float(vm: &Vm, receiver: Option<jnivm::ObjectId>, args: &[JniValue]) -> JniValue {
     let key = java_string_arg(vm, args, 0);
     let value = match args.get(1) {
         Some(JniValue::Float(v)) => v.to_string(),
@@ -405,13 +405,13 @@ fn editor_put_float(vm: &Vm, receiver: Option<crate::ObjectId>, args: &[JniValue
     editor_stage(receiver, key, value)
 }
 
-fn editor_put_boolean(vm: &Vm, receiver: Option<crate::ObjectId>, args: &[JniValue]) -> JniValue {
+fn editor_put_boolean(vm: &Vm, receiver: Option<jnivm::ObjectId>, args: &[JniValue]) -> JniValue {
     let key = java_string_arg(vm, args, 0);
     let value = matches!(args.get(1), Some(JniValue::Boolean(true)));
     editor_stage(receiver, key, value.to_string())
 }
 
-fn editor_remove(vm: &Vm, receiver: Option<crate::ObjectId>, args: &[JniValue]) -> JniValue {
+fn editor_remove(vm: &Vm, receiver: Option<jnivm::ObjectId>, args: &[JniValue]) -> JniValue {
     let key = java_string_arg(vm, args, 0);
     if let (Some(receiver), Some(key)) = (receiver, key) {
         let mut state = preference_state()
@@ -424,7 +424,7 @@ fn editor_remove(vm: &Vm, receiver: Option<crate::ObjectId>, args: &[JniValue]) 
     JniValue::Object(receiver)
 }
 
-fn editor_clear(_vm: &Vm, receiver: Option<crate::ObjectId>, _args: &[JniValue]) -> JniValue {
+fn editor_clear(_vm: &Vm, receiver: Option<jnivm::ObjectId>, _args: &[JniValue]) -> JniValue {
     if let Some(receiver) = receiver {
         let mut state = preference_state()
             .lock()
@@ -436,19 +436,19 @@ fn editor_clear(_vm: &Vm, receiver: Option<crate::ObjectId>, _args: &[JniValue])
     JniValue::Object(receiver)
 }
 
-fn editor_apply(_vm: &Vm, receiver: Option<crate::ObjectId>, _args: &[JniValue]) -> JniValue {
+fn editor_apply(_vm: &Vm, receiver: Option<jnivm::ObjectId>, _args: &[JniValue]) -> JniValue {
     if let Some(receiver) = receiver {
         flush_editor(receiver);
     }
     JniValue::Void
 }
 
-fn editor_commit(_vm: &Vm, receiver: Option<crate::ObjectId>, _args: &[JniValue]) -> JniValue {
+fn editor_commit(_vm: &Vm, receiver: Option<jnivm::ObjectId>, _args: &[JniValue]) -> JniValue {
     let committed = receiver.is_some_and(flush_editor);
     JniValue::Boolean(committed)
 }
 
-fn editor_stage(receiver: Option<crate::ObjectId>, key: Option<String>, value: String) -> JniValue {
+fn editor_stage(receiver: Option<jnivm::ObjectId>, key: Option<String>, value: String) -> JniValue {
     if let (Some(receiver), Some(key)) = (receiver, key) {
         let mut state = preference_state()
             .lock()
@@ -460,7 +460,7 @@ fn editor_stage(receiver: Option<crate::ObjectId>, key: Option<String>, value: S
     JniValue::Object(receiver)
 }
 
-fn flush_editor(receiver: crate::ObjectId) -> bool {
+fn flush_editor(receiver: jnivm::ObjectId) -> bool {
     let mut state = preference_state()
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -591,19 +591,19 @@ fn java_string_arg(vm: &Vm, args: &[JniValue], index: usize) -> Option<String> {
     };
     let env = attached_thread_env(vm);
     match vm.object_value(&env, *id) {
-        Ok(crate::ObjectValue::String(units)) => Some(String::from_utf16_lossy(&units)),
+        Ok(jnivm::ObjectValue::String(units)) => Some(String::from_utf16_lossy(&units)),
         _ => None,
     }
 }
 
-fn fmod_check_init(_vm: &Vm, _receiver: Option<crate::ObjectId>, _args: &[JniValue]) -> JniValue {
+fn fmod_check_init(_vm: &Vm, _receiver: Option<jnivm::ObjectId>, _args: &[JniValue]) -> JniValue {
     eprintln!("[jnivm] FMOD.checkInit -> true");
     JniValue::Boolean(true)
 }
 
 fn fmod_supports_low_latency(
     _vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     _args: &[JniValue],
 ) -> JniValue {
     eprintln!("[jnivm] FMOD.supportsLowLatency -> false");
@@ -612,7 +612,7 @@ fn fmod_supports_low_latency(
 
 fn fmod_supports_aaudio(
     _vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     _args: &[JniValue],
 ) -> JniValue {
     let supported = FMOD_AAUDIO_SUPPORTED
@@ -624,7 +624,7 @@ fn fmod_supports_aaudio(
 
 fn fmod_audio_device_create(
     vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     _args: &[JniValue],
 ) -> JniValue {
     new_opaque_local(vm, "org/fmod/AudioDevice")
@@ -632,7 +632,7 @@ fn fmod_audio_device_create(
 
 fn fmod_audio_device_init(
     _vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     args: &[JniValue],
 ) -> JniValue {
     let channels = match args.first() {
@@ -651,7 +651,7 @@ fn fmod_audio_device_init(
 
 fn fmod_audio_device_write(
     _vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     _args: &[JniValue],
 ) -> JniValue {
     // `init` refuses this Java fallback, so there is no active sink to write.
@@ -660,7 +660,7 @@ fn fmod_audio_device_write(
 
 fn fmod_audio_device_close(
     _vm: &Vm,
-    _receiver: Option<crate::ObjectId>,
+    _receiver: Option<jnivm::ObjectId>,
     _args: &[JniValue],
 ) -> JniValue {
     JniValue::Void

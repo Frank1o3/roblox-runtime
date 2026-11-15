@@ -1,10 +1,10 @@
 #![allow(unsafe_code)]
 
+use rustix::mm::{MapFlags, ProtFlags, mmap_anonymous};
 use std::collections::BTreeMap;
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use std::sync::Mutex;
-use rustix::mm::{MapFlags, ProtFlags, mmap_anonymous};
 
 macro_rules! eprintln {
     () => {{

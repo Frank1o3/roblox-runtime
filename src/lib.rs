@@ -499,9 +499,9 @@ impl LoadedEngine {
                 delivered: AtomicBool::new(false),
             })
             .map_err(|_| JniError::BootstrapAlreadyInstalled)?;
-        jnivm::set_startup_bootstrap(run_startup_bootstrap)
+        roblox_jni_bridge::hooks::set_startup_bootstrap(run_startup_bootstrap)
             .map_err(|_| JniError::BootstrapAlreadyInstalled)?;
-        jnivm::set_game_loaded_callback(report_rust_game_loaded)
+        roblox_jni_bridge::hooks::set_game_loaded_callback(report_rust_game_loaded)
             .map_err(|_| JniError::BootstrapAlreadyInstalled)?;
         roblox_jni_bridge::game_activity::set_bootstrap(Some(run_startup_bootstrap));
         // This host does not have Android's framework Activity to guarantee
@@ -659,8 +659,13 @@ impl LoadedEngine {
             )
         }
         .map_err(JniError::SurfaceUpdate)?;
-        roblox_jni_bridge::game_activity::surface_resized(game_activity, format, width_i32, height_i32)
-            .map_err(JniError::SurfaceUpdate)
+        roblox_jni_bridge::game_activity::surface_resized(
+            game_activity,
+            format,
+            width_i32,
+            height_i32,
+        )
+        .map_err(JniError::SurfaceUpdate)
     }
 }
 
@@ -671,12 +676,12 @@ extern "C" fn report_rust_game_loaded(place_id: i64) {
 fn create_java_vm() -> Result<(), JniError> {
     // FMOD can query its static Java capabilities during JNI_OnLoad, before
     // the later startup-bootstrap installation point.
-    jnivm::set_fmod_aaudio_support(|| {
-        roblox_abi::bionic::aaudio_selected()
-            && roblox_abi::bionic::audio_host_backend_available()
+    roblox_jni_bridge::hooks::set_fmod_aaudio_support(|| {
+        roblox_abi::bionic::aaudio_selected() && roblox_abi::bionic::audio_host_backend_available()
     })
     .map_err(|_| JniError::BootstrapAlreadyInstalled)?;
     jnivm::create_vm().map_err(JniError::JniVm)?;
+    roblox_jni_bridge::register_rust_hooks().map_err(JniError::JniVm)?;
     // Temporary compatibility bridge for the Java classes that are still
     // registered by the native framework layer; removed with those ports.
     roblox_jni_bridge::jni::init_compat_bridge().map_err(JniError::JniVm)

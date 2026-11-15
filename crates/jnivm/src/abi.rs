@@ -1,9 +1,8 @@
 //! JNI C ABI tables and process/thread handles.
 //!
-//! Only ABI entries with defined behavior are installed. A missing Java
-//! method or field is logged and offered to the companion C++ libjnivm bridge;
-//! handlers that cannot be mirrored safely return descriptor-correct defaults.
-//! The remaining function-table surface is filled from runtime observations.
+//! The Rust VM owns the JNI ABI table and dispatches methods and fields only
+//! to Rust registrations. Missing methods and fields return descriptor-correct
+//! defaults and can be recorded for later hook coverage.
 
 #![allow(unsafe_code)]
 
@@ -23,15 +22,7 @@ static UTF8_BUFFERS: OnceLock<Mutex<HashMap<usize, CString>>> = OnceLock::new();
 static UTF16_BUFFERS: OnceLock<Mutex<HashMap<usize, Box<[u16]>>>> = OnceLock::new();
 
 unsafe extern "C" {
-    fn roblox_jni_fallback_promote_reference(
-        object: *mut c_void,
-        class_name: *mut c_char,
-        class_name_capacity: usize,
-        global_reference: *mut *mut c_void,
-    ) -> i32;
-    fn roblox_jni_fallback_release_ref(object: *mut c_void);
-    fn roblox_jni_fallback_same_object(left: *mut c_void, right: *mut c_void) -> i32;
-    fn roblox_jni_fallback_register_native(
+    fn roblox_jni_register_native(
         class_name: *const c_char,
         name: *const c_char,
         signature: *const c_char,
@@ -65,10 +56,11 @@ fn vm() -> Option<&'static Vm> {
     VM.get()
 }
 
-include!("abi/builtins.rs");
-include!("abi/flags.rs");
-include!("abi/platform.rs");
-include!("abi/native_helper.rs");
+/// Return the process VM after [`create_vm`] succeeds.
+pub fn process_vm() -> Option<&'static Vm> {
+    vm()
+}
+
 include!("abi/arrays.rs");
 include!("abi/direct_buffer.rs");
 
@@ -256,7 +248,6 @@ pub fn create_vm() -> Result<*mut c_void, String> {
     }
     VM.set(Vm::new())
         .map_err(|_| "a Rust JavaVM already exists")?;
-    install_builtin_methods(vm().expect("VM was just initialized"))?;
     let _ = env_table();
     let _ = vm_table();
     let _ = thread_env(vm().expect("VM was just initialized"));
@@ -293,41 +284,6 @@ pub fn new_opaque_object(class_name: &str) -> Result<*mut c_void, String> {
     Ok(object.0 as usize as *mut c_void)
 }
 
-/// Return the companion C++ VM reference used when this Rust VM object is
-/// passed through JNI fallback. Callers that correlate a Rust object with a
-/// callback invoked through the fallback bridge can register both identities.
-pub fn cpp_fallback_reference(object: *mut c_void) -> Result<*mut c_void, String> {
-    if object.is_null() {
-        return Err("cannot mirror a null Rust VM object".into());
-    }
-    let vm = vm().ok_or("Rust JavaVM has not been created")?;
-    let id = crate::ObjectId(object as usize as u64);
-    let class_name = vm
-        .object_class_name(id.raw())
-        .ok_or("Rust VM object has no class")?;
-    let reference = cpp_reference_for(vm, id, &class_name)
-        .ok_or_else(|| format!("could not mirror Rust VM object of class {class_name}"))?;
-    Ok(reference as *mut c_void)
-}
-
-/// # Safety
-///
-/// Both handles must either be null or valid handles previously issued by the
-/// companion C++ JNI VM. Passing any other pointer is undefined behavior.
-pub unsafe fn cpp_fallback_same_object(left: *mut c_void, right: *mut c_void) -> Option<bool> {
-    if left.is_null() || right.is_null() {
-        return Some(left.is_null() && right.is_null());
-    }
-    // SAFETY: the bridge validates both handles through the companion VM's
-    // JNI IsSameObject implementation and returns -1 if it cannot compare;
-    // the caller upholds the safety contract documented above.
-    match unsafe { roblox_jni_fallback_same_object(left, right) } {
-        0 => Some(false),
-        1 => Some(true),
-        _ => None,
-    }
-}
-
 /// Return a class reference from the Rust VM, creating the class placeholder
 /// when the Android class is supplied by the loaded client.
 pub fn class_ref(class_name: &str) -> Result<*mut c_void, String> {
@@ -356,6 +312,7 @@ pub fn register_method_handler(
         .map_err(|error| error.to_string())
 }
 
+/// Install a Rust implementation for a static method on a client class.
 /// Read a Rust VM string object supplied to a Rust method handler.
 pub fn string_object(object: crate::ObjectId) -> Result<String, String> {
     let vm = vm().ok_or("Rust JavaVM has not been created")?;
@@ -805,7 +762,7 @@ unsafe extern "system" fn register_natives(
             // through its companion libjnivm class table. Keep that table in
             // sync with the selected Rust JavaVM's RegisterNatives calls.
             let status = unsafe {
-                roblox_jni_fallback_register_native(
+                roblox_jni_register_native(
                     class_name.as_ptr(),
                     name.as_ptr(),
                     signature.as_ptr(),
@@ -813,7 +770,7 @@ unsafe extern "system" fn register_natives(
                 )
             };
             if status != 0 {
-                eprintln!("[jnivm:fallback] could not mirror native registration");
+                eprintln!("[jnivm] compatibility VM could not record native registration");
             }
         }
     }
@@ -891,7 +848,6 @@ unsafe extern "system" fn delete_local_ref(env: *mut jni::JNIEnv, object: jni::j
         return;
     };
     let id = crate::ObjectId(object as usize as u64);
-    remove_cpp_reference(id);
     if let Err(error) = vm.delete_local_ref(&env, id) {
         eprintln!("[jnivm] DeleteLocalRef failed: {error}");
     }
@@ -914,15 +870,6 @@ unsafe extern "system" fn new_global_ref(
         return ptr::null_mut();
     };
     let id = crate::ObjectId(object as usize as u64);
-    if let Ok(crate::ObjectValue::CppObject(reference)) = vm.object_value(&env, id) {
-        if let Some(global) = promote_companion_reference(vm, &env, reference as *mut c_void) {
-            return global.0 as usize as jni::jobject;
-        }
-    } else if vm.object_class_name(id.0).is_none() {
-        if let Some(global) = promote_companion_reference(vm, &env, object as *mut c_void) {
-            return global.0 as usize as jni::jobject;
-        }
-    }
     match vm.new_global_ref(&env, id) {
         Ok(reference) => reference.0 as usize as jni::jobject,
         Err(error) => {
@@ -938,50 +885,6 @@ unsafe extern "system" fn new_global_ref(
     }
 }
 
-fn promote_companion_reference(
-    vm: &Vm,
-    env: &crate::ThreadEnv,
-    object: *mut c_void,
-) -> Option<crate::ObjectId> {
-    let mut class_name = vec![0 as c_char; 1024];
-    let mut global_reference = ptr::null_mut();
-    // SAFETY: output buffers are writable for this synchronous bridge call;
-    // C++ validates and promotes the companion VM's object reference.
-    let status = unsafe {
-        roblox_jni_fallback_promote_reference(
-            object,
-            class_name.as_mut_ptr(),
-            class_name.len(),
-            &mut global_reference,
-        )
-    };
-    if status != 0 || global_reference.is_null() {
-        eprintln!("[jnivm:fallback] could not import companion VM object (status {status})");
-        return None;
-    }
-    // SAFETY: successful C++ return writes a NUL-terminated class name into
-    // the supplied fixed-size buffer.
-    let class_name = unsafe { CStr::from_ptr(class_name.as_ptr()) }.to_string_lossy();
-    let result = (|| {
-        let class = vm.find_or_define_class(&class_name).ok()?;
-        let local = vm
-            .new_local_object(
-                env,
-                class,
-                ObjectValue::CppObject(global_reference as usize),
-            )
-            .ok()?;
-        let global = vm.new_global_ref(env, local).ok()?;
-        let _ = vm.delete_local_ref(env, local);
-        Some(global)
-    })();
-    if result.is_none() {
-        // SAFETY: the C++ bridge returned this owned global reference above.
-        unsafe { roblox_jni_fallback_release_ref(global_reference) };
-    }
-    result
-}
-
 unsafe extern "system" fn delete_global_ref(_env: *mut jni::JNIEnv, object: jni::jobject) {
     if object.is_null() {
         return;
@@ -991,14 +894,6 @@ unsafe extern "system" fn delete_global_ref(_env: *mut jni::JNIEnv, object: jni:
             return;
         }
         let id = crate::ObjectId(object as usize as u64);
-        remove_cpp_reference(id);
-        if let Some(env) = vm.get_env() {
-            if let Ok(crate::ObjectValue::CppObject(reference)) = vm.object_value(&env, id) {
-                // SAFETY: imported C++ references own a matching C++ global
-                // reference and this JNI operation releases that same handle.
-                unsafe { roblox_jni_fallback_release_ref(reference as *mut c_void) };
-            }
-        }
         if let Err(error) = vm.delete_global_ref(id) {
             eprintln!("[jnivm] DeleteGlobalRef failed: {error}");
         }
@@ -1034,39 +929,9 @@ unsafe extern "system" fn is_same_object(
     ) {
         return jni::JNI_TRUE;
     }
-    let env = attached_thread_env(vm);
-    let left_id = crate::ObjectId(left_raw);
-    let right_id = crate::ObjectId(right_raw);
-    let left_value = vm.object_value(&env, left_id).ok();
-    let right_value = vm.object_value(&env, right_id).ok();
-
-    match (left_value, right_value) {
-        (Some(ObjectValue::CppObject(left_ref)), Some(ObjectValue::CppObject(right_ref))) => {
-            cpp_references_are_same(left_ref, right_ref)
-        }
-        (Some(_), Some(_)) => false,
-        // A reference unknown to Rust may be a local C++ JNI handle for an
-        // object whose global handle is stored as ObjectValue::CppObject.
-        (Some(ObjectValue::CppObject(reference)), None) => {
-            cpp_references_are_same(reference, right as usize)
-        }
-        (None, Some(ObjectValue::CppObject(reference))) => {
-            cpp_references_are_same(left as usize, reference)
-        }
-        // Unknown references are not automatically safe to pass to the
-        // companion VM. They can be stale handles or Rust class IDs.
-        (None, None) => false,
-        (Some(_), None) | (None, Some(_)) => false,
-    }
-    .then_some(jni::JNI_TRUE)
-    .unwrap_or(jni::JNI_FALSE)
-}
-
-fn cpp_references_are_same(left: usize, right: usize) -> bool {
-    // SAFETY: both values are handles the bridge previously issued through the
-    // companion C++ JNI VM, so they satisfy `cpp_fallback_same_object`'s
-    // safety contract.
-    unsafe { cpp_fallback_same_object(left as *mut c_void, right as *mut c_void) }.unwrap_or(false)
+    vm.same_object(crate::ObjectId(left_raw), crate::ObjectId(right_raw))
+        .then_some(jni::JNI_TRUE)
+        .unwrap_or(jni::JNI_FALSE)
 }
 
 unsafe extern "system" fn exception_check(_env: *mut jni::JNIEnv) -> jni::jboolean {
@@ -1109,7 +974,10 @@ unsafe extern "system" fn exception_describe(_env: *mut jni::JNIEnv) {
             eprintln!("[jnivm] Exception in thread: {description}");
         }
         None => {
-            eprintln!("[jnivm] ExceptionDescribe on non-throwable {:#x}", exception.0);
+            eprintln!(
+                "[jnivm] ExceptionDescribe on non-throwable {:#x}",
+                exception.0
+            );
         }
     }
     // OpenJDK's ExceptionDescribe prints the exception and then clears the
@@ -1276,10 +1144,7 @@ pub fn gc() -> crate::GcStats {
     let Some(vm) = vm() else {
         return crate::GcStats::default();
     };
-    let (stats, collected_ids) = vm.gc();
-    for id in collected_ids {
-        remove_cpp_reference(id);
-    }
+    let (stats, _) = vm.gc();
     prune_string_buffers();
     stats
 }

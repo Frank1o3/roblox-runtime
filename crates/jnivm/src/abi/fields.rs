@@ -24,12 +24,9 @@ fn read_field(field: jni::jfieldID, receiver: Option<crate::ObjectId>) -> Option
             }
         };
     }
-    if let Some(value) = fallback_cpp_field_get(vm, field, receiver) {
-        return Some(value);
-    }
     if let Some((class_name, name, descriptor, _)) = vm.field_info(field) {
         eprintln!(
-            "[jnivm:fallback] no C++ getter for {class_name}.{name}:{descriptor}; returning JNI default"
+            "[jnivm] unimplemented field getter for {class_name}.{name}:{descriptor}; returning JNI default"
         );
     }
     vm.field_value(field, receiver).ok()
@@ -102,20 +99,6 @@ fn write_field(field: jni::jfieldID, receiver: Option<crate::ObjectId>, value: J
     {
         eprintln!("[jnivm] unimplemented field access: {error}");
         return;
-    }
-    if !fallback_cpp_field_set(
-        vm,
-        crate::FieldId(field as usize as u64),
-        receiver,
-        &value,
-    ) {
-        if let Some((class_name, name, descriptor, _)) =
-            vm.field_info(crate::FieldId(field as usize as u64))
-        {
-            eprintln!(
-                "[jnivm:fallback] C++ setter unavailable for {class_name}.{name}:{descriptor}; Rust value retained"
-            );
-        }
     }
 }
 

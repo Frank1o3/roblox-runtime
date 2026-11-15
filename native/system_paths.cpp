@@ -41,7 +41,7 @@ namespace {
 
 /// The Rust-owned Android framework context supplies the directory standing in
 /// for `/system`. A missing/empty directory disables the redirect.
-extern "C" size_t roblox_framework_copy_system_root(char* output, size_t capacity);
+extern "C" size_t roblox_android_copy_system_root(char* output, size_t capacity);
 
 /// `RBX_RUNTIME_TRACE_PATHS=1`. Every function here is fixed-arity except `open`,
 /// which is forwarded properly, so this is safe to leave on — unlike
@@ -86,7 +86,7 @@ const char* remap(const char* path, char* buf, size_t n) {
         return nullptr;
     }
     char root[PATH_MAX];
-    const size_t root_len = roblox_framework_copy_system_root(root, sizeof root);
+    const size_t root_len = roblox_android_copy_system_root(root, sizeof root);
     if (root_len == 0 || root_len >= sizeof root) {
         return nullptr;
     }

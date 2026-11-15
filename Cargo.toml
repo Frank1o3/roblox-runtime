@@ -1,6 +1,6 @@
 [workspace]
     default-members=["."]
-    members=[".", "crates/abi", "crates/android", "crates/audio", "crates/framework", "crates/graphics-vulkan", "crates/jni-bridge", "crates/jnivm", "crates/linker", "crates/logging", "crates/native-sys"]
+    members=[".", "crates/abi", "crates/android", "crates/audio", "crates/graphics-vulkan", "crates/jni-bridge", "crates/jnivm", "crates/linker", "crates/logging", "crates/native-sys"]
     resolver="3"
 
     [workspace.package]
@@ -18,7 +18,6 @@
         roblox-abi={path="crates/abi"}
         roblox-android={path="crates/android"}
         roblox-audio={path="crates/audio"}
-        roblox-framework={path="crates/framework"}
         roblox-graphics-vulkan={path="crates/graphics-vulkan"}
         roblox-jni-bridge={path="crates/jni-bridge"}
         roblox-linker={path="crates/linker"}

@@ -2,9 +2,7 @@ use std::ffi::c_void;
 use std::ptr::NonNull;
 use std::time::{Duration, Instant};
 
-use rustix::mm::{
-    Advice, MapFlags, MprotectFlags, ProtFlags, madvise, mmap_anonymous, mprotect,
-};
+use rustix::mm::{Advice, MapFlags, MprotectFlags, ProtFlags, madvise, mmap_anonymous, mprotect};
 
 use super::elf::{ElfError, ElfImage, LoadSegment, PF_R, PF_W, PF_X, RelroSegment};
 use super::reloc::{self, RelocError, RelocImage, RelocKind, SymbolResolver};

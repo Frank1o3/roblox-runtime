@@ -262,8 +262,7 @@ impl Vm {
         if let Some(previous) = state.pending_exceptions.get(&env.owner) {
             eprintln!(
                 "[jnivm] Throw replaced pending exception {:#x} with {:#x}",
-                previous.0,
-                exception.0
+                previous.0, exception.0
             );
         }
         state.pending_exceptions.insert(env.owner, exception);
@@ -284,11 +283,13 @@ impl Vm {
             .class_name(class)
             .ok_or_else(|| JniError::UnknownClass(format!("class id {}", class.0)))?;
         if !is_throwable_class_name(&class_name) {
-            eprintln!(
-                "[jnivm] ThrowNew on non-Throwable class {class_name}; throwing it anyway"
-            );
+            eprintln!("[jnivm] ThrowNew on non-Throwable class {class_name}; throwing it anyway");
         }
-        let exception = self.new_local_object(env, class, ObjectValue::Throwable(message.map(String::from)))?;
+        let exception = self.new_local_object(
+            env,
+            class,
+            ObjectValue::Throwable(message.map(String::from)),
+        )?;
         self.throw(env, exception)?;
         Ok(exception)
     }
@@ -406,6 +407,12 @@ impl Vm {
             .map(|record| record.name.clone())
     }
 
+    /// Return the opaque reference used by this VM to pass a class through
+    /// `java/lang/Class`-typed JNI values.
+    pub fn class_object(&self, class: ClassId) -> ObjectId {
+        ObjectId(class.0)
+    }
+
     pub fn register_method(
         &self,
         class: ClassId,
@@ -486,7 +493,9 @@ impl Vm {
             .methods
             .iter()
             .find(|(key, _)| {
-                key.name == name && key.is_static == is_static && normalize_descriptor(&key.descriptor) == normalized
+                key.name == name
+                    && key.is_static == is_static
+                    && normalize_descriptor(&key.descriptor) == normalized
             })
             .map(|(_, id)| *id);
         match compatible {
@@ -534,8 +543,15 @@ impl Vm {
                 // The VM is inventing a registration the engine will call
                 // through; that is exactly the moment the C++ path logged
                 // `Constructed Unresolved symbol` and this report should name.
-                let class_name = self.class_name(class).unwrap_or_else(|| format!("class id {}", class.0));
-                crate::unresolved::record_unresolved_method(&class_name, name, descriptor, is_static);
+                let class_name = self
+                    .class_name(class)
+                    .unwrap_or_else(|| format!("class id {}", class.0));
+                crate::unresolved::record_unresolved_method(
+                    &class_name,
+                    name,
+                    descriptor,
+                    is_static,
+                );
                 self.register_method(class, name, descriptor, is_static)
             }
             Err(error) => Err(error),
@@ -768,8 +784,15 @@ impl Vm {
         match self.find_field(class, name, descriptor, is_static) {
             Ok(id) => Ok(id),
             Err(JniError::UnknownField(_)) => {
-                let class_name = self.class_name(class).unwrap_or_else(|| format!("class id {}", class.0));
-                crate::unresolved::record_unresolved_field(&class_name, name, descriptor, is_static);
+                let class_name = self
+                    .class_name(class)
+                    .unwrap_or_else(|| format!("class id {}", class.0));
+                crate::unresolved::record_unresolved_field(
+                    &class_name,
+                    name,
+                    descriptor,
+                    is_static,
+                );
                 self.register_field(class, name, descriptor, is_static)
             }
             Err(error) => Err(error),
@@ -1530,7 +1553,10 @@ mod tests {
             [0, 7, 8, 9]
         );
         // Partial reads respect the requested range.
-        assert_eq!(vm.primitive_array_region::<i32>(&env, ints, 2, 2).unwrap(), [8, 9]);
+        assert_eq!(
+            vm.primitive_array_region::<i32>(&env, ints, 2, 2).unwrap(),
+            [8, 9]
+        );
 
         // Direct element access sees the same storage and can mutate it.
         let elements = vm.primitive_array_elements::<i32>(&env, ints).unwrap();
@@ -1552,9 +1578,11 @@ mod tests {
         macro_rules! roundtrip {
             ($ty:ty, $values:expr) => {{
                 let array = vm.new_primitive_array::<$ty>(&env, $values.len()).unwrap();
-                vm.set_primitive_array_region(&env, array, 0, &$values).unwrap();
+                vm.set_primitive_array_region(&env, array, 0, &$values)
+                    .unwrap();
                 assert_eq!(
-                    vm.primitive_array_region::<$ty>(&env, array, 0, $values.len()).unwrap(),
+                    vm.primitive_array_region::<$ty>(&env, array, 0, $values.len())
+                        .unwrap(),
                     $values
                 );
             }};
@@ -1618,9 +1646,7 @@ mod tests {
             .find_or_define_class("java/lang/IllegalArgumentException")
             .unwrap();
 
-        let exception = vm
-            .throw_new(&env, class, Some("bad input"))
-            .unwrap();
+        let exception = vm.throw_new(&env, class, Some("bad input")).unwrap();
         // ThrowNew creates the throwable as a live local reference.
         assert!(vm.object_value(&env, exception).is_ok());
         assert_eq!(vm.pending_exception(&env), Some(exception));
@@ -1645,7 +1671,9 @@ mod tests {
     fn test_throw_new_without_message() {
         let vm = Vm::new();
         let env = vm.attach_current_thread();
-        let class = vm.find_or_define_class("java/lang/IllegalStateException").unwrap();
+        let class = vm
+            .find_or_define_class("java/lang/IllegalStateException")
+            .unwrap();
 
         // JNI ThrowNew allows a null message pointer.
         let exception = vm.throw_new(&env, class, None).unwrap();
@@ -1660,9 +1688,15 @@ mod tests {
     fn test_throw_roundtrip_and_thread_visibility() {
         let vm = Vm::new();
         let env = vm.attach_current_thread();
-        let class = vm.find_or_define_class("java/lang/RuntimeException").unwrap();
+        let class = vm
+            .find_or_define_class("java/lang/RuntimeException")
+            .unwrap();
         let thrown = vm
-            .new_local_object(&env, class, ObjectValue::Throwable(Some("via Throw".into())))
+            .new_local_object(
+                &env,
+                class,
+                ObjectValue::Throwable(Some("via Throw".into())),
+            )
             .unwrap();
 
         vm.throw(&env, thrown).unwrap();
@@ -1678,7 +1712,9 @@ mod tests {
         let vm2 = vm_clone.clone();
         let foreign = std::thread::spawn(move || {
             let env = vm2.attach_current_thread();
-            let class = vm2.find_or_define_class("java/lang/RuntimeException").unwrap();
+            let class = vm2
+                .find_or_define_class("java/lang/RuntimeException")
+                .unwrap();
             let object = vm2
                 .new_local_object(&env, class, ObjectValue::Throwable(None))
                 .unwrap();
@@ -1714,7 +1750,9 @@ mod tests {
 
         let exception = std::thread::spawn(move || {
             let env = vm_clone.attach_current_thread();
-            let class = vm_clone.find_or_define_class("java/lang/Exception").unwrap();
+            let class = vm_clone
+                .find_or_define_class("java/lang/Exception")
+                .unwrap();
             let thrown = vm_clone
                 .throw_new(&env, class, Some("dies with thread"))
                 .unwrap();
@@ -1734,16 +1772,19 @@ mod tests {
         assert_eq!(vm.pending_exception(&main_env), None);
 
         // An unregistered class id cannot be thrown.
-        assert!(vm
-            .throw_new(&main_env, ClassId(u64::MAX), Some("x"))
-            .is_err());
+        assert!(
+            vm.throw_new(&main_env, ClassId(u64::MAX), Some("x"))
+                .is_err()
+        );
     }
 
     #[test]
     fn test_char_sequence_descriptor_compatibility() {
         let vm = Vm::new();
         let env = vm.attach_current_thread();
-        let class = vm.find_or_define_class("android/media/AudioDeviceInfo").unwrap();
+        let class = vm
+            .find_or_define_class("android/media/AudioDeviceInfo")
+            .unwrap();
 
         // A hook registered under the String descriptor.
         let string_method = vm
@@ -1756,12 +1797,7 @@ mod tests {
         );
         // And the reverse direction for the parameter case (setText-style).
         let char_seq_setter = vm
-            .register_method(
-                class,
-                "setText",
-                "(Ljava/lang/CharSequence;)V",
-                false,
-            )
+            .register_method(class, "setText", "(Ljava/lang/CharSequence;)V", false)
             .unwrap();
         assert_eq!(
             vm.find_method(class, "setText", "(Ljava/lang/String;)V", false),
@@ -1770,9 +1806,10 @@ mod tests {
 
         // Compatibility is descriptor-shape specific: other mismatches still
         // miss, and the exact registered descriptor keeps its fast path.
-        assert!(vm
-            .find_method(class, "getProductName", "()Ljava/lang/Object;", false)
-            .is_err());
+        assert!(
+            vm.find_method(class, "getProductName", "()Ljava/lang/Object;", false)
+                .is_err()
+        );
         assert_eq!(
             vm.find_method(class, "getProductName", "()Ljava/lang/String;", false),
             Ok(string_method)
