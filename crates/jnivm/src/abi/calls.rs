@@ -361,6 +361,114 @@ unsafe extern "system" fn call_static_void_a(
     let _ = invoke_a(method, None, args);
 }
 
+/// Generate the Call\*MethodV/A entries for a primitive return type, for the
+/// instance and static forms. A mismatched result (the handler returned a
+/// different variant than the slot's descriptor return type) falls back to
+/// the JNI zero default for that type.
+macro_rules! primitive_call_abi {
+    ($call_v:ident, $call_static_v:ident, $call_a:ident, $call_static_a:ident, $variant:ident, $jtype:ty, $default:expr) => {
+        unsafe extern "system" fn $call_v(
+            _env: *mut jni::JNIEnv,
+            object: jni::jobject,
+            method: jni::jmethodID,
+            args: jni::va_list,
+        ) -> $jtype {
+            invoke(
+                method,
+                (!object.is_null()).then_some(crate::ObjectId(object as usize as u64)),
+                args,
+            )
+            .and_then(|value| match value {
+                JniValue::$variant(value) => Some(value),
+                _ => None,
+            })
+            .unwrap_or($default)
+        }
+        unsafe extern "system" fn $call_static_v(
+            _env: *mut jni::JNIEnv,
+            _class: jni::jclass,
+            method: jni::jmethodID,
+            args: jni::va_list,
+        ) -> $jtype {
+            invoke(method, None, args)
+                .and_then(|value| match value {
+                    JniValue::$variant(value) => Some(value),
+                    _ => None,
+                })
+                .unwrap_or($default)
+        }
+        unsafe extern "system" fn $call_a(
+            _env: *mut jni::JNIEnv,
+            object: jni::jobject,
+            method: jni::jmethodID,
+            args: *const jni::jvalue,
+        ) -> $jtype {
+            invoke_a(
+                method,
+                (!object.is_null()).then_some(crate::ObjectId(object as usize as u64)),
+                args,
+            )
+            .and_then(|value| match value {
+                JniValue::$variant(value) => Some(value),
+                _ => None,
+            })
+            .unwrap_or($default)
+        }
+        unsafe extern "system" fn $call_static_a(
+            _env: *mut jni::JNIEnv,
+            _class: jni::jclass,
+            method: jni::jmethodID,
+            args: *const jni::jvalue,
+        ) -> $jtype {
+            invoke_a(method, None, args)
+                .and_then(|value| match value {
+                    JniValue::$variant(value) => Some(value),
+                    _ => None,
+                })
+                .unwrap_or($default)
+        }
+    };
+}
+
+// init_params reads floats (`dpiScale`, `refreshRate`) and battery reads
+// Float; char/short/double complete the primitive return surface.
+primitive_call_abi!(
+    call_char_v,
+    call_static_char_v,
+    call_char_a,
+    call_static_char_a,
+    Char,
+    jni::jchar,
+    0
+);
+primitive_call_abi!(
+    call_short_v,
+    call_static_short_v,
+    call_short_a,
+    call_static_short_a,
+    Short,
+    jni::jshort,
+    0
+);
+primitive_call_abi!(
+    call_float_v,
+    call_static_float_v,
+    call_float_a,
+    call_static_float_a,
+    Float,
+    jni::jfloat,
+    0.0
+);
+primitive_call_abi!(
+    call_double_v,
+    call_static_double_v,
+    call_double_a,
+    call_static_double_a,
+    Double,
+    jni::jdouble,
+    0.0
+);
+
 fn object_result(value: JniValue) -> Option<jni::jobject> {
     match value {
         JniValue::Object(Some(id)) => Some(id.0 as usize as jni::jobject),

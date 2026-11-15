@@ -201,21 +201,37 @@ fn env_table() -> *const jni::JNINativeInterface_ {
         slots.CallIntMethodV = call_int_v;
         slots.CallLongMethodV = call_long_v;
         slots.CallVoidMethodV = call_void_v;
+        slots.CallCharMethodV = call_char_v;
+        slots.CallShortMethodV = call_short_v;
+        slots.CallFloatMethodV = call_float_v;
+        slots.CallDoubleMethodV = call_double_v;
         slots.CallStaticObjectMethodV = call_static_object_v;
         slots.CallStaticBooleanMethodV = call_static_boolean_v;
         slots.CallStaticIntMethodV = call_static_int_v;
         slots.CallStaticLongMethodV = call_static_long_v;
         slots.CallStaticVoidMethodV = call_static_void_v;
+        slots.CallStaticCharMethodV = call_static_char_v;
+        slots.CallStaticShortMethodV = call_static_short_v;
+        slots.CallStaticFloatMethodV = call_static_float_v;
+        slots.CallStaticDoubleMethodV = call_static_double_v;
         slots.CallObjectMethodA = call_object_a;
         slots.CallBooleanMethodA = call_boolean_a;
         slots.CallIntMethodA = call_int_a;
         slots.CallLongMethodA = call_long_a;
         slots.CallVoidMethodA = call_void_a;
+        slots.CallCharMethodA = call_char_a;
+        slots.CallShortMethodA = call_short_a;
+        slots.CallFloatMethodA = call_float_a;
+        slots.CallDoubleMethodA = call_double_a;
         slots.CallStaticObjectMethodA = call_static_object_a;
         slots.CallStaticBooleanMethodA = call_static_boolean_a;
         slots.CallStaticIntMethodA = call_static_int_a;
         slots.CallStaticLongMethodA = call_static_long_a;
         slots.CallStaticVoidMethodA = call_static_void_a;
+        slots.CallStaticCharMethodA = call_static_char_a;
+        slots.CallStaticShortMethodA = call_static_short_a;
+        slots.CallStaticFloatMethodA = call_static_float_a;
+        slots.CallStaticDoubleMethodA = call_static_double_a;
         Box::into_raw(Box::new(table)) as usize
     }) as *const jni::JNINativeInterface_
 }
