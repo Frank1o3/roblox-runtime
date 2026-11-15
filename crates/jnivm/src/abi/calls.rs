@@ -636,6 +636,14 @@ fn cpp_reference_for(vm: &Vm, object: crate::ObjectId, class_name: &str) -> Opti
             // SAFETY: the class name remains alive for the synchronous call.
             unsafe { roblox_jni_fallback_new_object(class.as_ptr()) as usize }
         }
+        crate::ObjectValue::Throwable(_) => {
+            // The companion VM cannot reconstruct a Rust throwable; mirror
+            // it as an opaque instance of the same class so identity checks
+            // keep working across the bridge.
+            let class = std::ffi::CString::new(class_name).ok()?;
+            // SAFETY: the class name remains alive for the synchronous call.
+            unsafe { roblox_jni_fallback_new_object(class.as_ptr()) as usize }
+        }
         crate::ObjectValue::ByteArray(_)
         | crate::ObjectValue::BooleanArray(_)
         | crate::ObjectValue::CharArray(_)

@@ -236,7 +236,108 @@ impl Vm {
             }
         }
         state.local_frames.remove(&owner);
+        state.pending_exceptions.remove(&owner);
         Ok(())
+    }
+
+    /// Make `exception` the calling thread's pending throwable, as JNI
+    /// `Throw` does. The reference must already be visible to the thread
+    /// (local or global); a previously pending throwable is replaced, with a
+    /// diagnostic in case a hook lost track of one.
+    pub fn throw(&self, env: &ThreadEnv, exception: ObjectId) -> Result<(), JniError> {
+        self.check_env(env)?;
+        let mut state = self.state.write().unwrap_or_else(|p| p.into_inner());
+        let record = state
+            .objects
+            .get(&exception)
+            .ok_or(JniError::UnknownReference)?;
+        if !record.global
+            && !state
+                .locals
+                .get(&env.owner)
+                .is_some_and(|locals| locals.contains(&exception))
+        {
+            return Err(JniError::ReferenceNotLocal);
+        }
+        if let Some(previous) = state.pending_exceptions.get(&env.owner) {
+            eprintln!(
+                "[jnivm] Throw replaced pending exception {:#x} with {:#x}",
+                previous.0,
+                exception.0
+            );
+        }
+        state.pending_exceptions.insert(env.owner, exception);
+        Ok(())
+    }
+
+    /// Construct a `java/lang/Throwable` instance of `class` carrying
+    /// `message` and make it pending, as JNI `ThrowNew` does. Returns the
+    /// created local reference, which keeps the throwable alive until the
+    /// thread deletes it or detaches.
+    pub fn throw_new(
+        &self,
+        env: &ThreadEnv,
+        class: ClassId,
+        message: Option<&str>,
+    ) -> Result<ObjectId, JniError> {
+        let class_name = self
+            .class_name(class)
+            .ok_or_else(|| JniError::UnknownClass(format!("class id {}", class.0)))?;
+        if !is_throwable_class_name(&class_name) {
+            eprintln!(
+                "[jnivm] ThrowNew on non-Throwable class {class_name}; throwing it anyway"
+            );
+        }
+        let exception = self.new_local_object(env, class, ObjectValue::Throwable(message.map(String::from)))?;
+        self.throw(env, exception)?;
+        Ok(exception)
+    }
+
+    /// The calling thread's pending throwable, if one was thrown and not
+    /// cleared. JNI-wise this is what `ExceptionOccurred` exposes.
+    pub fn pending_exception(&self, env: &ThreadEnv) -> Option<ObjectId> {
+        if self.check_env(env).is_err() {
+            return None;
+        }
+        self.state
+            .read()
+            .unwrap_or_else(|p| p.into_inner())
+            .pending_exceptions
+            .get(&env.owner)
+            .copied()
+    }
+
+    /// Clear the calling thread's pending throwable, returning whether one
+    /// was pending (JNI `ExceptionClear` discards the status without touching
+    /// the caller's references).
+    pub fn clear_pending_exception(&self, env: &ThreadEnv) -> bool {
+        if self.check_env(env).is_err() {
+            return false;
+        }
+        self.state
+            .write()
+            .unwrap_or_else(|p| p.into_inner())
+            .pending_exceptions
+            .remove(&env.owner)
+            .is_some()
+    }
+
+    /// The Java class name and detail message of a throwable object, for
+    /// `ExceptionDescribe`-style reporting. Returns `None` for non-throwable
+    /// objects.
+    pub fn exception_description(&self, exception: ObjectId) -> Option<String> {
+        let state = self.state.read().unwrap_or_else(|p| p.into_inner());
+        let record = state.objects.get(&exception)?;
+        let message = match &record.value {
+            ObjectValue::Throwable(message) => message.clone(),
+            _ => return None,
+        };
+        let class_name = state.class_records.get(&record.class)?.name.clone();
+        let display = class_name.replace('/', ".");
+        Some(match message {
+            Some(message) => format!("{display}: {message}"),
+            None => display,
+        })
     }
 
     pub fn register_class(&self, name: &str) -> Result<ClassId, JniError> {
@@ -1317,6 +1418,19 @@ fn validate_class_name(name: &str) -> Result<(), JniError> {
     Ok(())
 }
 
+/// Whether a JNI class name names a `java/lang/Throwable` descendant. JNI
+/// class names use `/` separators; Java's hierarchy has no multiple
+/// inheritance of classes, so matching the well-known Throwable descendants
+/// by suffix covers the exception classes the runtime registers.
+fn is_throwable_class_name(class_name: &str) -> bool {
+    class_name == "java/lang/Throwable"
+        || class_name == "java/lang/Exception"
+        || class_name == "java/lang/Error"
+        || class_name.ends_with("Exception")
+        || class_name.ends_with("Error")
+        || class_name.ends_with("Throwable")
+}
+
 fn validate_member_name(name: &str) -> Result<(), JniError> {
     if name.is_empty() || name.chars().any(|ch| matches!(ch, '/' | '.' | ';' | '[')) {
         return Err(JniError::InvalidMemberName);
@@ -1426,6 +1540,135 @@ mod tests {
         // Unknown references fail for every accessor.
         let missing = ObjectId::from_raw(u64::MAX);
         assert!(vm.primitive_array_elements::<i8>(&env, missing).is_err());
+    }
+
+    #[test]
+    fn test_throw_new_pending_and_clear() {
+        let vm = Vm::new();
+        let env = vm.attach_current_thread();
+        let class = vm
+            .find_or_define_class("java/lang/IllegalArgumentException")
+            .unwrap();
+
+        let exception = vm
+            .throw_new(&env, class, Some("bad input"))
+            .unwrap();
+        // ThrowNew creates the throwable as a live local reference.
+        assert!(vm.object_value(&env, exception).is_ok());
+        assert_eq!(vm.pending_exception(&env), Some(exception));
+
+        // ExceptionDescribe-style reporting shows class and message with
+        // Java-style dots.
+        assert_eq!(
+            vm.exception_description(exception).as_deref(),
+            Some("java.lang.IllegalArgumentException: bad input")
+        );
+
+        // Clearing makes the exception pending no more; the local reference
+        // survives because clearing does not free caller-owned references.
+        assert!(vm.clear_pending_exception(&env));
+        assert_eq!(vm.pending_exception(&env), None);
+        assert!(vm.object_value(&env, exception).is_ok());
+        // Clearing again reports there was nothing to clear.
+        assert!(!vm.clear_pending_exception(&env));
+    }
+
+    #[test]
+    fn test_throw_new_without_message() {
+        let vm = Vm::new();
+        let env = vm.attach_current_thread();
+        let class = vm.find_or_define_class("java/lang/IllegalStateException").unwrap();
+
+        // JNI ThrowNew allows a null message pointer.
+        let exception = vm.throw_new(&env, class, None).unwrap();
+        assert_eq!(vm.pending_exception(&env), Some(exception));
+        assert_eq!(
+            vm.exception_description(exception).as_deref(),
+            Some("java.lang.IllegalStateException")
+        );
+    }
+
+    #[test]
+    fn test_throw_roundtrip_and_thread_visibility() {
+        let vm = Vm::new();
+        let env = vm.attach_current_thread();
+        let class = vm.find_or_define_class("java/lang/RuntimeException").unwrap();
+        let thrown = vm
+            .new_local_object(&env, class, ObjectValue::Throwable(Some("via Throw".into())))
+            .unwrap();
+
+        vm.throw(&env, thrown).unwrap();
+        assert_eq!(vm.pending_exception(&env), Some(thrown));
+        assert_eq!(
+            vm.exception_description(thrown).as_deref(),
+            Some("java.lang.RuntimeException: via Throw")
+        );
+        vm.clear_pending_exception(&env);
+
+        // Pending exceptions are per-thread: another attached thread sees none.
+        let vm_clone = std::sync::Arc::new(Vm::new());
+        let vm2 = vm_clone.clone();
+        let foreign = std::thread::spawn(move || {
+            let env = vm2.attach_current_thread();
+            let class = vm2.find_or_define_class("java/lang/RuntimeException").unwrap();
+            let object = vm2
+                .new_local_object(&env, class, ObjectValue::Throwable(None))
+                .unwrap();
+            assert_eq!(vm2.pending_exception(&env), None);
+            object
+        })
+        .join()
+        .unwrap();
+        let main_env = vm_clone.attach_current_thread();
+
+        // A foreign thread's local reference cannot be thrown from here.
+        assert_eq!(
+            vm_clone.throw(&main_env, foreign),
+            Err(JniError::ReferenceNotLocal)
+        );
+        // Unknown references fail too.
+        assert_eq!(
+            vm_clone.throw(&main_env, ObjectId::from_raw(u64::MAX)),
+            Err(JniError::UnknownReference)
+        );
+        // And a non-throwable object has no description.
+        let opaque_class = vm_clone.find_or_define_class("com/test/Plain").unwrap();
+        let opaque = vm_clone
+            .new_local_object(&main_env, opaque_class, ObjectValue::Opaque)
+            .unwrap();
+        assert_eq!(vm_clone.exception_description(opaque), None);
+    }
+
+    #[test]
+    fn test_throw_unknown_class_and_detach_clears_pending() {
+        let vm = std::sync::Arc::new(Vm::new());
+        let vm_clone = vm.clone();
+
+        let exception = std::thread::spawn(move || {
+            let env = vm_clone.attach_current_thread();
+            let class = vm_clone.find_or_define_class("java/lang/Exception").unwrap();
+            let thrown = vm_clone
+                .throw_new(&env, class, Some("dies with thread"))
+                .unwrap();
+            assert_eq!(vm_clone.pending_exception(&env), Some(thrown));
+            // Detaching with a pending exception clears the status.
+            vm_clone.detach_current_thread().unwrap();
+            assert_eq!(vm_clone.pending_exception(&env), None);
+            thrown
+        })
+        .join()
+        .unwrap();
+
+        // The detached thread's pending status is gone and the throwable
+        // object died with its local scope.
+        let main_env = vm.attach_current_thread();
+        assert!(vm.object_value(&main_env, exception).is_err());
+        assert_eq!(vm.pending_exception(&main_env), None);
+
+        // An unregistered class id cannot be thrown.
+        assert!(vm
+            .throw_new(&main_env, ClassId(u64::MAX), Some("x"))
+            .is_err());
     }
 
     #[test]

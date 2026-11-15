@@ -1054,32 +1054,106 @@ fn cpp_references_are_same(left: usize, right: usize) -> bool {
 }
 
 unsafe extern "system" fn exception_check(_env: *mut jni::JNIEnv) -> jni::jboolean {
-    jni::JNI_FALSE
+    let Some(vm) = vm() else {
+        return jni::JNI_FALSE;
+    };
+    let env = attached_thread_env(vm);
+    vm.pending_exception(&env)
+        .is_some()
+        .then_some(jni::JNI_TRUE)
+        .unwrap_or(jni::JNI_FALSE)
 }
 
 unsafe extern "system" fn exception_occurred(_env: *mut jni::JNIEnv) -> jni::jthrowable {
-    ptr::null_mut()
+    let Some(vm) = vm() else {
+        return ptr::null_mut();
+    };
+    let env = attached_thread_env(vm);
+    // The same identity handle is returned on repeated calls: this VM's
+    // object handles are stable identities, so unlike a duplicating VM there
+    // is exactly one local reference to delete.
+    vm.pending_exception(&env)
+        .map(|id| id.0 as usize as jni::jthrowable)
+        .unwrap_or_else(ptr::null_mut)
 }
 
 unsafe extern "system" fn exception_describe(_env: *mut jni::JNIEnv) {
-    eprintln!("[jnivm] ExceptionDescribe called with no pending exception");
+    let Some(vm) = vm() else {
+        return;
+    };
+    let env = attached_thread_env(vm);
+    let Some(exception) = vm.pending_exception(&env) else {
+        eprintln!("[jnivm] ExceptionDescribe called with no pending exception");
+        return;
+    };
+    match vm.exception_description(exception) {
+        Some(description) => {
+            // No backtrace exists in this VM: hooks run as Rust handlers, so
+            // the throwable's class and message are the available report.
+            eprintln!("[jnivm] Exception in thread: {description}");
+        }
+        None => {
+            eprintln!("[jnivm] ExceptionDescribe on non-throwable {:#x}", exception.0);
+        }
+    }
+    // OpenJDK's ExceptionDescribe prints the exception and then clears the
+    // pending status; keep the same behavior.
+    vm.clear_pending_exception(&env);
 }
 
-unsafe extern "system" fn throw(_env: *mut jni::JNIEnv, _exception: jni::jthrowable) -> jni::jint {
-    eprintln!("[jnivm] unimplemented JNI method: Throw");
-    jni::JNI_ERR
+unsafe extern "system" fn throw(_env: *mut jni::JNIEnv, exception: jni::jthrowable) -> jni::jint {
+    let Some(vm) = vm() else {
+        return jni::JNI_ERR;
+    };
+    if exception.is_null() {
+        eprintln!("[jnivm] Throw(null) rejected");
+        return jni::JNI_ERR;
+    }
+    let env = attached_thread_env(vm);
+    let exception = ObjectId(exception as usize as u64);
+    match vm.throw(&env, exception) {
+        Ok(()) => 0,
+        Err(error) => {
+            eprintln!("[jnivm] Throw failed: {error}");
+            jni::JNI_ERR
+        }
+    }
 }
 
 unsafe extern "system" fn throw_new(
     _env: *mut jni::JNIEnv,
-    _class: jni::jclass,
-    _message: *const c_char,
+    class: jni::jclass,
+    message: *const c_char,
 ) -> jni::jint {
-    eprintln!("[jnivm] unimplemented JNI method: ThrowNew");
-    jni::JNI_ERR
+    let Some(vm) = vm() else {
+        return jni::JNI_ERR;
+    };
+    if class.is_null() {
+        eprintln!("[jnivm] ThrowNew(null class) rejected");
+        return jni::JNI_ERR;
+    }
+    let env = attached_thread_env(vm);
+    // A null message pointer is valid JNI: it throws without a detail
+    // message, mirroring `new Exception((String) null)`.
+    let message = unsafe { c_string(message) };
+    match vm.throw_new(&env, ClassId(class as usize as u64), message.as_deref()) {
+        Ok(_) => 0,
+        Err(error) => {
+            eprintln!("[jnivm] ThrowNew failed: {error}");
+            jni::JNI_ERR
+        }
+    }
 }
 
-unsafe extern "system" fn exception_clear(_env: *mut jni::JNIEnv) {}
+unsafe extern "system" fn exception_clear(_env: *mut jni::JNIEnv) {
+    let Some(vm) = vm() else {
+        return;
+    };
+    let env = attached_thread_env(vm);
+    if !vm.clear_pending_exception(&env) {
+        eprintln!("[jnivm] ExceptionClear called with no pending exception");
+    }
+}
 
 include!("abi/strings.rs");
 include!("abi/fields.rs");

@@ -173,7 +173,7 @@ before the hooks can port. Capability-by-capability:
 | strings | ✓ UTF-16 String objects, `Get/ReleaseStringChars`, `Get/ReleaseStringUTFChars` with buffer pools; `NewStringUTF(null)→""` parity |
 | arrays | ✓ byte arrays complete (AudioRecord path); object arrays complete; all eight primitive element types (boolean, char, short, int, long, float, double) now have full JNI ABI entries — New/Get/Release/GetRegion/SetRegion — driven by a sealed `PrimitiveElement` trait and generic VM methods, covered by VM-level unit tests. Needed by init_params (`Map`/`List` paths, `getSupportedRefreshRates` int arrays) |
 | CharSequence | **gap**: no interface dispatch; a hook declared `()Ljava/lang/CharSequence;` must match String objects (the C++ bug story: `getProductName` returning String vs CharSequence descriptor mismatch → null device names) |
-| exceptions | **gap**: `Throw`/`ThrowNew` are no-ops, `ExceptionCheck` always false, `ExceptionOccurred` null. C++ code *throws* (`permissions_transport` throws `std::invalid_argument`; cookies, local_storage rely on cleared exceptions). Ported hooks need: a pending-exception slot in `Vm`, `ExceptionCheck/Occurred/Clear/Describe` truthfulness, and hooks returning `JniError`-style results. Affects: permissions_transport, cookies, local_storage, any hook the engine probes with exceptions swallowed |
+| exceptions | ✓ per-thread pending-throwable model: `Vm::throw`/`throw_new` (ThrowNew builds a `Throwable` object with optional detail message), `pending_exception`/`clear_pending_exception`, and truthful ABI `Throw`/`ThrowNew`/`ExceptionOccurred`/`ExceptionCheck`/`ExceptionClear`/`ExceptionDescribe` (describe prints class+message then clears, matching OpenJDK). Ported hooks still need to translate their failures into these calls |
 | Call*MethodV/A return variants | ~ Object/Boolean/Int/Long/Void implemented; **gap**: Char/Short/Float/Double (init_params reads floats: `dpiScale`, `refreshRate`; battery reads Float) |
 | GetStatic*/SetStatic* fields, all types | ✓ fields.rs (all 8 types, instance+static) |
 | `NewObjectV/A`, AllocObject | ~ `<init>` factory trick works; `AllocObject` falls to descriptor-correct zero values — acceptable unless the dex check shows use |
@@ -326,12 +326,14 @@ selection:
   can even coexist under different symbol names during bring-up. Variadic
   constraint handling per §Variadic below.
 
-- **P2 — jnivm gap closure** (§B gaps: exception model, remaining Call variants,
+- **P2 — jnivm gap closure** (§B gaps: remaining Call variants,
   CharSequence dispatch, unresolved-report hook, auto-attach). Each with unit
   tests; no behavior change for the C++ path. Progress: the primitive-array ABI
-  entries are complete (commit `95131b1`); remaining gaps are the exception
-  model, Call\* Char/Short/Float/Double return variants, CharSequence interface
-  dispatch, auto-attach for engine threads, and the unresolved-report hook.
+  entries are complete (commit `95131b1`) and the exception model is complete
+  (per-thread pending throwables with truthful Throw/ThrowNew/
+  ExceptionOccurred/Check/Clear/Describe); remaining gaps are Call\*
+  Char/Short/Float/Double return variants, CharSequence interface dispatch,
+  auto-attach for engine threads, and the unresolved-report hook.
 
 - **P3 — JNI hook ports into `crates/framework`** (proposed name), group by
   file: platform/unanswered/battery → cookies/clipboard/permissions/deeplink →

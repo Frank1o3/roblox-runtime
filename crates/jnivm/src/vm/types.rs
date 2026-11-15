@@ -119,6 +119,11 @@ pub enum ObjectValue {
     /// This is only used for values returned from the experimental fallback
     /// bridge; Rust code must not dereference the pointer directly.
     CppObject(usize),
+    /// A `java/lang/Throwable` instance. `Some` mirrors the Java
+    /// `getMessage()` result; `None` is a throwable constructed without a
+    /// detail message (JNI `ThrowNew` allows a null message). The Java class
+    /// is tracked separately on the object record.
+    Throwable(Option<String>),
     Opaque,
 }
 
@@ -205,6 +210,9 @@ struct State {
     objects: HashMap<ObjectId, ObjectRecord>,
     locals: HashMap<ThreadId, HashSet<ObjectId>>,
     local_frames: HashMap<ThreadId, Vec<HashSet<ObjectId>>>,
+    /// Per-thread pending throwable (JNI "pending exception"), stored as an
+    /// object reference visible to the owning thread.
+    pending_exceptions: HashMap<ThreadId, ObjectId>,
     method_metadata: HashMap<MethodId, MethodMeta>,
     field_metadata: HashMap<FieldId, FieldMeta>,
 }
