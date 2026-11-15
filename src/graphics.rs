@@ -80,7 +80,7 @@ pub fn install_surface(surface: HostSurface) {
     };
     roblox_graphics_vulkan::set_surface(Some(vulkan_surface));
     roblox_android::native_window::install(surface);
-    roblox_jni_sys::game_activity::set_display_size(width as i32, height as i32);
+    roblox_jni_bridge::game_activity::set_display_size(width as i32, height as i32);
 }
 
 /// Release the process-wide host-surface descriptor after the engine stops.
@@ -94,7 +94,7 @@ pub fn clear_surface() {
 pub fn resize_surface(width: u32, height: u32) -> Result<(), SurfaceError> {
     roblox_android::native_window::resize(width, height)?;
     roblox_graphics_vulkan::resize_surface(width, height);
-    roblox_jni_sys::game_activity::set_display_size(width as i32, height as i32);
+    roblox_jni_bridge::game_activity::set_display_size(width as i32, height as i32);
     Ok(())
 }
 

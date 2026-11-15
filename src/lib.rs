@@ -18,7 +18,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 pub use roblox_abi as abi;
 pub use roblox_android as android;
-pub use roblox_jni_sys as jni;
+pub use roblox_jni_bridge as jni;
 pub use roblox_linker::imports::{Binding as ImportBinding, Imports as EngineImports};
 pub mod deeplink;
 pub mod graphics;
@@ -57,7 +57,7 @@ extern "C" fn run_startup_bootstrap() {
             // SAFETY: this symbol is from the mapped engine; JSON remains alive
             // for the duration of the JNI call.
             match unsafe {
-                roblox_jni_sys::game_activity::preload_flag_overrides(
+                roblox_jni_bridge::game_activity::preload_flag_overrides(
                     plan.preload_native as *mut std::ffi::c_void,
                     &plan.fast_flags,
                 )
@@ -70,7 +70,7 @@ extern "C" fn run_startup_bootstrap() {
             // SAFETY: this symbol is from the mapped engine, which remains
             // loaded for the process lifetime; JNI is active before callback.
             match unsafe {
-                roblox_jni_sys::game_activity::init_client_settings(
+                roblox_jni_bridge::game_activity::init_client_settings(
                     plan.settings_native as *mut std::ffi::c_void,
                     &plan.settings,
                     "",
@@ -86,9 +86,9 @@ extern "C" fn run_startup_bootstrap() {
             // values still come from the client settings and overrides above.
             // SAFETY: same mapped-library and live-JNI guarantees as above.
             match unsafe {
-                roblox_jni_sys::game_activity::init_flags(
+                roblox_jni_bridge::game_activity::init_flags(
                     plan.flags_native as *mut std::ffi::c_void,
-                    roblox_jni_sys::game_activity::NATIVE_FLAG_NAMES,
+                    roblox_jni_bridge::game_activity::NATIVE_FLAG_NAMES,
                 )
             } {
                 Ok(()) => eprintln!("[runtime] nativeInitializeNativeFlags completed"),
@@ -463,7 +463,7 @@ impl LoadedEngine {
             // SAFETY: constructors have run, the VM is live, and this export
             // belongs to the engine mapped for this RuntimeConfig.
             unsafe {
-                roblox_jni_sys::game_activity::call_static_strings(native, SETTINGS_CLASS, &args)
+                roblox_jni_bridge::game_activity::call_static_strings(native, SETTINGS_CLASS, &args)
             }
             .map_err(|error| JniError::StartupNative(format!("{name}: {error}")))?;
         }
@@ -503,7 +503,7 @@ impl LoadedEngine {
             .map_err(|_| JniError::BootstrapAlreadyInstalled)?;
         jnivm::set_game_loaded_callback(report_rust_game_loaded)
             .map_err(|_| JniError::BootstrapAlreadyInstalled)?;
-        roblox_jni_sys::game_activity::set_bootstrap(Some(run_startup_bootstrap));
+        roblox_jni_bridge::game_activity::set_bootstrap(Some(run_startup_bootstrap));
         // This host does not have Android's framework Activity to guarantee
         // that GameActivity.bootstrapTheApp is dispatched before the engine's
         // flags verdict. Deliver synchronously now, after JNI_OnLoad and before
@@ -574,7 +574,7 @@ impl LoadedEngine {
         // SAFETY: all JNI references and the native export belong to the
         // mapped engine and Rust VM, and remain live during the call.
         unsafe {
-            roblox_jni_sys::game_activity::initialize_with_vm_refs(
+            roblox_jni_bridge::game_activity::initialize_with_vm_refs(
                 native,
                 env,
                 activity,
@@ -607,7 +607,7 @@ impl LoadedEngine {
             .map_err(|_| JniError::GameActivity("surface width exceeds Android limits".into()))?;
         let height = i32::try_from(height)
             .map_err(|_| JniError::GameActivity("surface height exceeds Android limits".into()))?;
-        roblox_jni_sys::game_activity::start(handle, width, height, format)
+        roblox_jni_bridge::game_activity::start(handle, width, height, format)
             .map_err(JniError::GameActivity)
     }
 
@@ -647,25 +647,25 @@ impl LoadedEngine {
         // SAFETY: both addresses are exports from this mapped library and the
         // live JavaVM was checked above. `assets` remains valid for each call.
         unsafe {
-            roblox_jni_sys::game_activity::appbridge_update_surface(
+            roblox_jni_bridge::game_activity::appbridge_update_surface(
                 app, assets, width_i32, height_i32, false,
             )
         }
         .map_err(JniError::SurfaceUpdate)?;
         // SAFETY: same conditions as the app surface update above.
         unsafe {
-            roblox_jni_sys::game_activity::appbridge_update_surface(
+            roblox_jni_bridge::game_activity::appbridge_update_surface(
                 game, assets, width_i32, height_i32, true,
             )
         }
         .map_err(JniError::SurfaceUpdate)?;
-        roblox_jni_sys::game_activity::surface_resized(game_activity, format, width_i32, height_i32)
+        roblox_jni_bridge::game_activity::surface_resized(game_activity, format, width_i32, height_i32)
             .map_err(JniError::SurfaceUpdate)
     }
 }
 
 extern "C" fn report_rust_game_loaded(place_id: i64) {
-    roblox_jni_sys::game_activity::note_game_loaded(place_id);
+    roblox_jni_bridge::game_activity::note_game_loaded(place_id);
 }
 
 fn create_java_vm() -> Result<(), JniError> {
@@ -679,7 +679,7 @@ fn create_java_vm() -> Result<(), JniError> {
     jnivm::create_vm().map_err(JniError::JniVm)?;
     // Temporary compatibility bridge for the Java classes that are still
     // registered by the native framework layer; removed with those ports.
-    roblox_jni_sys::jni::init_compat_bridge().map_err(JniError::JniVm)
+    roblox_jni_bridge::jni::init_compat_bridge().map_err(JniError::JniVm)
 }
 
 fn current_jni_env() -> Option<*mut std::ffi::c_void> {

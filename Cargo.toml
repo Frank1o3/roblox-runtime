@@ -1,17 +1,6 @@
 [workspace]
     default-members=["."]
-    members=[
-        ".",
-        "crates/abi",
-        "crates/android",
-        "crates/audio", "crates/framework",
-        "crates/graphics-vulkan",
-        "crates/jni-sys",
-        "crates/jnivm",
-        "crates/linker",
-        "crates/native-sys",
-        "crates/logging"
-    ]
+    members=[".", "crates/abi", "crates/android", "crates/audio", "crates/framework", "crates/graphics-vulkan", "crates/jni-bridge", "crates/jnivm", "crates/linker", "crates/logging", "crates/native-sys"]
     resolver="3"
 
     [workspace.package]
@@ -24,20 +13,20 @@
         cmake="0.1.58"
         cpal={version="0.18.2", default-features=false}
         jni-sys="0.4.1"
-        libc="0.2.191"
-        rustix={version="1", default-features=false, features=["mm", "param", "std"]}
-        serde_json="1.0.154"
-        zip={version="9.5.1", default-features=false, features=["deflate"]}
         jnivm={path="crates/jnivm"}
-        roblox-framework={path="crates/framework"}
+        libc="0.2.191"
         roblox-abi={path="crates/abi"}
         roblox-android={path="crates/android"}
         roblox-audio={path="crates/audio"}
+        roblox-framework={path="crates/framework"}
         roblox-graphics-vulkan={path="crates/graphics-vulkan"}
-        roblox-jni-sys={path="crates/jni-sys"}
+        roblox-jni-bridge={path="crates/jni-bridge"}
         roblox-linker={path="crates/linker"}
-        roblox-native-sys={path="crates/native-sys"}
         roblox-logging={path="crates/logging"}
+        roblox-native-sys={path="crates/native-sys"}
+        rustix={version="1", default-features=false, features=["mm", "param", "std"]}
+        serde_json="1.0.154"
+        zip={version="9.5.1", default-features=false, features=["deflate"]}
 
 [package]
     description="Embeddable Roblox Android runtime for Linux"
@@ -52,7 +41,7 @@
     roblox-android.workspace=true
     roblox-audio.workspace=true
     roblox-graphics-vulkan.workspace=true
-    roblox-jni-sys.workspace=true
+    roblox-jni-bridge.workspace=true
     roblox-linker.workspace=true
     roblox-logging.workspace=true
     serde_json.workspace=true

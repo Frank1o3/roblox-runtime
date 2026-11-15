@@ -947,9 +947,9 @@ checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 name = "roblox-abi"
 version = "0.1.3"
 dependencies = [
-	"roblox-audio",
-	"roblox-native-sys",
+ "roblox-audio",
  "roblox-logging",
+ "roblox-native-sys",
 ]
 
 [[package]]
@@ -984,10 +984,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "roblox-jni-sys"
+name = "roblox-jni-bridge"
 version = "0.1.3"
 dependencies = [
-	"roblox-native-sys",
+ "roblox-native-sys",
 ]
 
 [[package]]
@@ -1000,15 +1000,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "roblox-logging"
+version = "0.1.3"
+
+[[package]]
 name = "roblox-native-sys"
 version = "0.1.3"
 dependencies = [
  "cmake",
 ]
-
-[[package]]
-name = "roblox-logging"
-version = "0.1.3"
 
 [[package]]
 name = "roblox-runtime"
@@ -1019,7 +1019,7 @@ dependencies = [
  "roblox-android",
  "roblox-audio",
  "roblox-graphics-vulkan",
- "roblox-jni-sys",
+ "roblox-jni-bridge",
  "roblox-linker",
  "roblox-logging",
  "serde_json",

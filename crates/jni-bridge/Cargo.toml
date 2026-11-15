@@ -1,0 +1,17 @@
+[package]
+build = "build.rs"
+description = "Roblox Android JNI bridge and compatibility hooks"
+name = "roblox-jni-bridge"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+roblox-native-sys.workspace = true
+
+[lints.rust]
+unsafe_code = "allow"
+unsafe_op_in_unsafe_fn = "deny"
+
+[lints.clippy]
+undocumented_unsafe_blocks = "warn"

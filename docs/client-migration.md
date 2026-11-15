@@ -28,10 +28,11 @@ the linker removal. The engine import types are now re-exported from
 `crates/linker::imports` as `roblox_runtime::EngineImports` and
 `ImportBinding`.
 
-The `roblox_runtime::jni` path remains stable while its implementation moves
-from C++ compatibility shims to Rust VM calls and registered Rust hooks. The
-crate has not yet been renamed from `roblox-jni-sys`; that rename belongs with
-removal of its remaining C++ bindings.
+The `roblox_runtime::jni` path remains stable and is backed by the
+`roblox-jni-bridge` crate. JNI hook modules such as accessibility and
+GameActivity live in that bridge; the pure Rust `jnivm` crate owns VM state and
+thread attachment. C++ compatibility bindings remain temporarily while hooks
+are ported.
 
 ## Follow-up
 
