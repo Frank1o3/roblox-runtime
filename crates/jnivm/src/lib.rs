@@ -13,6 +13,7 @@ macro_rules! eprintln {
 
 mod abi;
 mod descriptor;
+mod unresolved;
 mod vm;
 
 use std::sync::OnceLock;

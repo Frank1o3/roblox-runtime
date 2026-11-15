@@ -497,6 +497,11 @@ impl Vm {
         match self.find_method(class, name, descriptor, is_static) {
             Ok(id) => Ok(id),
             Err(JniError::UnknownMethod(_)) => {
+                // The VM is inventing a registration the engine will call
+                // through; that is exactly the moment the C++ path logged
+                // `Constructed Unresolved symbol` and this report should name.
+                let class_name = self.class_name(class).unwrap_or_else(|| format!("class id {}", class.0));
+                crate::unresolved::record_unresolved_method(&class_name, name, descriptor, is_static);
                 self.register_method(class, name, descriptor, is_static)
             }
             Err(error) => Err(error),
@@ -729,6 +734,8 @@ impl Vm {
         match self.find_field(class, name, descriptor, is_static) {
             Ok(id) => Ok(id),
             Err(JniError::UnknownField(_)) => {
+                let class_name = self.class_name(class).unwrap_or_else(|| format!("class id {}", class.0));
+                crate::unresolved::record_unresolved_field(&class_name, name, descriptor, is_static);
                 self.register_field(class, name, descriptor, is_static)
             }
             Err(error) => Err(error),
