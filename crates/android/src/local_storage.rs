@@ -114,6 +114,10 @@ fn log_failure(operation: &str, error: &str) {
 
 /// Read one value. Returns zero for a completed lookup, with `found` and
 /// `out_len` carrying the result; a nonzero status means the request failed.
+// This is a C ABI entry point: the pointer contract is enforced by the
+// validation above (null checks plus the `out_capacity` bound), which Rust's
+// type system cannot express on `extern "C"` exports.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[unsafe(no_mangle)]
 pub extern "C" fn roblox_local_storage_get(
     user_id: c_longlong,

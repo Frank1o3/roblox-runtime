@@ -325,7 +325,12 @@ fn raw_callback_run(
             .unwrap_or_else(|poisoned| poisoned.into_inner())
             .clone();
         mirrors.into_iter().find_map(|(mirror, sink)| {
-            jnivm::cpp_fallback_same_object(receiver_reference, mirror as usize as *mut c_void)
+            // SAFETY: both values live in the companion C++ VM's handle
+            // space — `receiver_reference` is either a CppObject mirror
+            // issued by that VM or an untracked raw JNI handle, and each
+            // `mirror` was registered from `cpp_fallback_reference`, which
+            // only returns companion-VM handles.
+            unsafe { jnivm::cpp_fallback_same_object(receiver_reference, mirror as usize as *mut c_void) }
                 .filter(|same| *same)
                 .map(|_| sink)
         })
@@ -439,6 +444,10 @@ const MAX_TITLE_BYTES: usize = 1024;
 /// the shim and remain valid for the duration of this call. Query strings are
 /// intentionally neither logged nor normalized here; the host must apply its
 /// browser navigation policy before loading the URL.
+/// This is a C ABI entry point: the pointer contract is enforced by the null
+/// checks above and the documented lifetime of the borrowed strings, which
+/// Rust's type system cannot express on `extern "C"` exports.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[allow(unsafe_code)]
 #[unsafe(no_mangle)]
 pub extern "C" fn roblox_runtime_webview_open(url: *const c_char, title: *const c_char) {
