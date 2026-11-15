@@ -11,6 +11,181 @@ use std::thread::{self, ThreadId};
 
 include!("vm/types.rs");
 
+/// The element type of a primitive JNI array, over the [`ObjectValue`]
+/// variants the VM stores them as.
+///
+/// Sealed: the implementors are exactly Java's primitive element types.
+pub trait PrimitiveElement: private_arrays::Sealed + Copy + Default + 'static {
+    const LOG_NAME: &'static str;
+    fn slot(value: &ObjectValue) -> Option<&Vec<Self>>;
+    fn slot_mut(value: &mut ObjectValue) -> Option<&mut Vec<Self>>;
+    fn value(values: Vec<Self>) -> ObjectValue;
+}
+
+mod private_arrays {
+    pub trait Sealed {}
+    impl Sealed for i8 {}
+    impl Sealed for bool {}
+    impl Sealed for u16 {}
+    impl Sealed for i16 {}
+    impl Sealed for i32 {}
+    impl Sealed for i64 {}
+    impl Sealed for f32 {}
+    impl Sealed for f64 {}
+}
+
+impl PrimitiveElement for i8 {
+    const LOG_NAME: &'static str = "byte";
+    fn slot(value: &ObjectValue) -> Option<&Vec<Self>> {
+        match value {
+            ObjectValue::ByteArray(v) => Some(v),
+            _ => None,
+        }
+    }
+    fn slot_mut(value: &mut ObjectValue) -> Option<&mut Vec<Self>> {
+        match value {
+            ObjectValue::ByteArray(v) => Some(v),
+            _ => None,
+        }
+    }
+    fn value(values: Vec<Self>) -> ObjectValue {
+        ObjectValue::ByteArray(values)
+    }
+}
+
+impl PrimitiveElement for bool {
+    const LOG_NAME: &'static str = "boolean";
+    fn slot(value: &ObjectValue) -> Option<&Vec<Self>> {
+        match value {
+            ObjectValue::BooleanArray(v) => Some(v),
+            _ => None,
+        }
+    }
+    fn slot_mut(value: &mut ObjectValue) -> Option<&mut Vec<Self>> {
+        match value {
+            ObjectValue::BooleanArray(v) => Some(v),
+            _ => None,
+        }
+    }
+    fn value(values: Vec<Self>) -> ObjectValue {
+        ObjectValue::BooleanArray(values)
+    }
+}
+
+impl PrimitiveElement for u16 {
+    const LOG_NAME: &'static str = "char";
+    fn slot(value: &ObjectValue) -> Option<&Vec<Self>> {
+        match value {
+            ObjectValue::CharArray(v) => Some(v),
+            _ => None,
+        }
+    }
+    fn slot_mut(value: &mut ObjectValue) -> Option<&mut Vec<Self>> {
+        match value {
+            ObjectValue::CharArray(v) => Some(v),
+            _ => None,
+        }
+    }
+    fn value(values: Vec<Self>) -> ObjectValue {
+        ObjectValue::CharArray(values)
+    }
+}
+
+impl PrimitiveElement for i16 {
+    const LOG_NAME: &'static str = "short";
+    fn slot(value: &ObjectValue) -> Option<&Vec<Self>> {
+        match value {
+            ObjectValue::ShortArray(v) => Some(v),
+            _ => None,
+        }
+    }
+    fn slot_mut(value: &mut ObjectValue) -> Option<&mut Vec<Self>> {
+        match value {
+            ObjectValue::ShortArray(v) => Some(v),
+            _ => None,
+        }
+    }
+    fn value(values: Vec<Self>) -> ObjectValue {
+        ObjectValue::ShortArray(values)
+    }
+}
+
+impl PrimitiveElement for i32 {
+    const LOG_NAME: &'static str = "int";
+    fn slot(value: &ObjectValue) -> Option<&Vec<Self>> {
+        match value {
+            ObjectValue::IntArray(v) => Some(v),
+            _ => None,
+        }
+    }
+    fn slot_mut(value: &mut ObjectValue) -> Option<&mut Vec<Self>> {
+        match value {
+            ObjectValue::IntArray(v) => Some(v),
+            _ => None,
+        }
+    }
+    fn value(values: Vec<Self>) -> ObjectValue {
+        ObjectValue::IntArray(values)
+    }
+}
+
+impl PrimitiveElement for i64 {
+    const LOG_NAME: &'static str = "long";
+    fn slot(value: &ObjectValue) -> Option<&Vec<Self>> {
+        match value {
+            ObjectValue::LongArray(v) => Some(v),
+            _ => None,
+        }
+    }
+    fn slot_mut(value: &mut ObjectValue) -> Option<&mut Vec<Self>> {
+        match value {
+            ObjectValue::LongArray(v) => Some(v),
+            _ => None,
+        }
+    }
+    fn value(values: Vec<Self>) -> ObjectValue {
+        ObjectValue::LongArray(values)
+    }
+}
+
+impl PrimitiveElement for f32 {
+    const LOG_NAME: &'static str = "float";
+    fn slot(value: &ObjectValue) -> Option<&Vec<Self>> {
+        match value {
+            ObjectValue::FloatArray(v) => Some(v),
+            _ => None,
+        }
+    }
+    fn slot_mut(value: &mut ObjectValue) -> Option<&mut Vec<Self>> {
+        match value {
+            ObjectValue::FloatArray(v) => Some(v),
+            _ => None,
+        }
+    }
+    fn value(values: Vec<Self>) -> ObjectValue {
+        ObjectValue::FloatArray(values)
+    }
+}
+
+impl PrimitiveElement for f64 {
+    const LOG_NAME: &'static str = "double";
+    fn slot(value: &ObjectValue) -> Option<&Vec<Self>> {
+        match value {
+            ObjectValue::DoubleArray(v) => Some(v),
+            _ => None,
+        }
+    }
+    fn slot_mut(value: &mut ObjectValue) -> Option<&mut Vec<Self>> {
+        match value {
+            ObjectValue::DoubleArray(v) => Some(v),
+            _ => None,
+        }
+    }
+    fn value(values: Vec<Self>) -> ObjectValue {
+        ObjectValue::DoubleArray(values)
+    }
+}
+
 impl Vm {
     pub fn new() -> Self {
         Self::default()
@@ -803,6 +978,104 @@ impl Vm {
         Ok(())
     }
 
+    /// Allocate a primitive array of `length` zeroed elements.
+    pub fn new_primitive_array<E: PrimitiveElement>(
+        &self,
+        env: &ThreadEnv,
+        length: usize,
+    ) -> Result<ObjectId, JniError> {
+        self.check_env(env)?;
+        let class = self.find_or_define_class("java/lang/Object")?;
+        self.new_local_object(env, class, E::value(vec![E::default(); length]))
+    }
+
+    /// Return the stable backing allocation for a primitive array's direct
+    /// element access. Arrays are created at their final length and never
+    /// resized, so the pointer remains valid until the object ref is deleted
+    /// or its owning thread detaches — the same lifetime rule
+    /// [`Vm::byte_array_elements`] documents.
+    pub fn primitive_array_elements<E: PrimitiveElement>(
+        &self,
+        env: &ThreadEnv,
+        array: ObjectId,
+    ) -> Result<*mut E, JniError> {
+        self.check_env(env)?;
+        let mut state = self.state.write().unwrap_or_else(|p| p.into_inner());
+        let is_global = state
+            .objects
+            .get(&array)
+            .ok_or(JniError::UnknownReference)?
+            .global;
+        if !is_global
+            && !state
+                .locals
+                .get(&env.owner)
+                .is_some_and(|locals| locals.contains(&array))
+        {
+            return Err(JniError::ReferenceNotLocal);
+        }
+        let record = state
+            .objects
+            .get_mut(&array)
+            .ok_or(JniError::UnknownReference)?;
+        E::slot_mut(&mut record.value)
+            .map(Vec::as_mut_ptr)
+            .ok_or(JniError::UnknownReference)
+    }
+
+    /// Copy a range out of a primitive array.
+    pub fn primitive_array_region<E: PrimitiveElement>(
+        &self,
+        env: &ThreadEnv,
+        array: ObjectId,
+        start: usize,
+        length: usize,
+    ) -> Result<Vec<E>, JniError> {
+        let values = self.object_value(env, array)?;
+        E::slot(&values)
+            .and_then(|values| values.get(start..start.checked_add(length)?))
+            .map(<[E]>::to_vec)
+            .ok_or(JniError::UnknownReference)
+    }
+
+    /// Copy a range into a primitive array.
+    pub fn set_primitive_array_region<E: PrimitiveElement>(
+        &self,
+        env: &ThreadEnv,
+        array: ObjectId,
+        start: usize,
+        values: &[E],
+    ) -> Result<(), JniError> {
+        self.check_env(env)?;
+        let mut state = self.state.write().unwrap_or_else(|p| p.into_inner());
+        let is_global = state
+            .objects
+            .get(&array)
+            .ok_or(JniError::UnknownReference)?
+            .global;
+        if !is_global
+            && !state
+                .locals
+                .get(&env.owner)
+                .is_some_and(|locals| locals.contains(&array))
+        {
+            return Err(JniError::ReferenceNotLocal);
+        }
+        let record = state
+            .objects
+            .get_mut(&array)
+            .ok_or(JniError::UnknownReference)?;
+        let elements = E::slot_mut(&mut record.value).ok_or(JniError::UnknownReference)?;
+        let end = start
+            .checked_add(values.len())
+            .ok_or(JniError::UnknownReference)?;
+        let target = elements
+            .get_mut(start..end)
+            .ok_or(JniError::UnknownReference)?;
+        target.copy_from_slice(values);
+        Ok(())
+    }
+
     pub fn object_class_name(&self, object: u64) -> Option<String> {
         let state = self.state.read().unwrap_or_else(|p| p.into_inner());
         let record = state.objects.get(&ObjectId(object))?;
@@ -1054,6 +1327,106 @@ fn validate_member_name(name: &str) -> Result<(), JniError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_primitive_array_roundtrip() {
+        let vm = Vm::new();
+        let env = vm.attach_current_thread();
+
+        // Allocate a zeroed array of the requested length.
+        let ints = vm.new_primitive_array::<i32>(&env, 4).unwrap();
+        assert_eq!(
+            vm.primitive_array_region::<i32>(&env, ints, 0, 4).unwrap(),
+            [0, 0, 0, 0]
+        );
+
+        // Write through a region copy.
+        vm.set_primitive_array_region(&env, ints, 1, &[7, 8, 9])
+            .unwrap();
+        assert_eq!(
+            vm.primitive_array_region::<i32>(&env, ints, 0, 4).unwrap(),
+            [0, 7, 8, 9]
+        );
+        // Partial reads respect the requested range.
+        assert_eq!(vm.primitive_array_region::<i32>(&env, ints, 2, 2).unwrap(), [8, 9]);
+
+        // Direct element access sees the same storage and can mutate it.
+        let elements = vm.primitive_array_elements::<i32>(&env, ints).unwrap();
+        unsafe {
+            assert_eq!(*elements.add(1), 7);
+            *elements.add(3) = 42;
+        }
+        assert_eq!(
+            vm.primitive_array_region::<i32>(&env, ints, 3, 1).unwrap(),
+            [42]
+        );
+    }
+
+    #[test]
+    fn test_primitive_array_all_element_types() {
+        let vm = Vm::new();
+        let env = vm.attach_current_thread();
+
+        macro_rules! roundtrip {
+            ($ty:ty, $values:expr) => {{
+                let array = vm.new_primitive_array::<$ty>(&env, $values.len()).unwrap();
+                vm.set_primitive_array_region(&env, array, 0, &$values).unwrap();
+                assert_eq!(
+                    vm.primitive_array_region::<$ty>(&env, array, 0, $values.len()).unwrap(),
+                    $values
+                );
+            }};
+        }
+
+        roundtrip!(i8, [-1i8, 0, 127]);
+        roundtrip!(bool, [true, false, true]);
+        roundtrip!(u16, [0u16, 0x4e2d, u16::MAX]);
+        roundtrip!(i16, [-32768i16, 0, 32767]);
+        roundtrip!(i32, [-2147483648i32, 0, i32::MAX]);
+        roundtrip!(i64, [-1i64, 0, i64::MAX]);
+        roundtrip!(f32, [1.5f32, -0.25, f32::INFINITY]);
+        roundtrip!(f64, [2.5f64, -0.125, f64::MIN]);
+    }
+
+    #[test]
+    fn test_primitive_array_rejects_type_mismatch_and_bad_ranges() {
+        let vm = Vm::new();
+        let env = vm.attach_current_thread();
+
+        let bytes = vm.new_primitive_array::<i8>(&env, 4).unwrap();
+
+        // A byte array's storage cannot be read back as another element type.
+        assert_eq!(
+            vm.primitive_array_elements::<i32>(&env, bytes),
+            Err(JniError::UnknownReference)
+        );
+        assert_eq!(
+            vm.primitive_array_region::<i32>(&env, bytes, 0, 4),
+            Err(JniError::UnknownReference)
+        );
+        assert_eq!(
+            vm.set_primitive_array_region(&env, bytes, 0, &[1i32, 2, 3]),
+            Err(JniError::UnknownReference)
+        );
+
+        // Out-of-bounds regions fail without corrupting the array.
+        assert_eq!(
+            vm.primitive_array_region::<i8>(&env, bytes, 3, 2),
+            Err(JniError::UnknownReference)
+        );
+        assert_eq!(
+            vm.set_primitive_array_region(&env, bytes, 3, &[1i8, 2]),
+            Err(JniError::UnknownReference)
+        );
+        assert_eq!(
+            vm.primitive_array_region::<i8>(&env, bytes, 0, 4).unwrap(),
+            [0, 0, 0, 0]
+        );
+
+        // Unknown references fail for every accessor.
+        let missing = ObjectId::from_raw(u64::MAX);
+        assert!(vm.primitive_array_elements::<i8>(&env, missing).is_err());
+    }
 
     #[test]
     fn test_method_and_field_metadata() {

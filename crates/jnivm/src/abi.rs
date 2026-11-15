@@ -155,6 +155,41 @@ fn env_table() -> *const jni::JNINativeInterface_ {
         slots.ReleaseByteArrayElements = release_byte_array_elements;
         slots.GetByteArrayRegion = get_byte_array_region;
         slots.SetByteArrayRegion = set_byte_array_region;
+        slots.NewBooleanArray = new_boolean_array;
+        slots.GetBooleanArrayElements = get_boolean_array_elements;
+        slots.ReleaseBooleanArrayElements = release_boolean_array_elements;
+        slots.GetBooleanArrayRegion = get_boolean_array_region;
+        slots.SetBooleanArrayRegion = set_boolean_array_region;
+        slots.NewCharArray = new_char_array;
+        slots.GetCharArrayElements = get_char_array_elements;
+        slots.ReleaseCharArrayElements = release_char_array_elements;
+        slots.GetCharArrayRegion = get_char_array_region;
+        slots.SetCharArrayRegion = set_char_array_region;
+        slots.NewShortArray = new_short_array;
+        slots.GetShortArrayElements = get_short_array_elements;
+        slots.ReleaseShortArrayElements = release_short_array_elements;
+        slots.GetShortArrayRegion = get_short_array_region;
+        slots.SetShortArrayRegion = set_short_array_region;
+        slots.NewIntArray = new_int_array;
+        slots.GetIntArrayElements = get_int_array_elements;
+        slots.ReleaseIntArrayElements = release_int_array_elements;
+        slots.GetIntArrayRegion = get_int_array_region;
+        slots.SetIntArrayRegion = set_int_array_region;
+        slots.NewLongArray = new_long_array;
+        slots.GetLongArrayElements = get_long_array_elements;
+        slots.ReleaseLongArrayElements = release_long_array_elements;
+        slots.GetLongArrayRegion = get_long_array_region;
+        slots.SetLongArrayRegion = set_long_array_region;
+        slots.NewFloatArray = new_float_array;
+        slots.GetFloatArrayElements = get_float_array_elements;
+        slots.ReleaseFloatArrayElements = release_float_array_elements;
+        slots.GetFloatArrayRegion = get_float_array_region;
+        slots.SetFloatArrayRegion = set_float_array_region;
+        slots.NewDoubleArray = new_double_array;
+        slots.GetDoubleArrayElements = get_double_array_elements;
+        slots.ReleaseDoubleArrayElements = release_double_array_elements;
+        slots.GetDoubleArrayRegion = get_double_array_region;
+        slots.SetDoubleArrayRegion = set_double_array_region;
         slots.NewDirectByteBuffer = new_direct_byte_buffer;
         slots.GetDirectBufferAddress = get_direct_buffer_address;
         slots.GetDirectBufferCapacity = get_direct_buffer_capacity;
@@ -259,15 +294,17 @@ pub fn cpp_fallback_reference(object: *mut c_void) -> Result<*mut c_void, String
     Ok(reference as *mut c_void)
 }
 
-/// Compare two handles owned by the companion C++ JNI VM using Java object
-/// identity. This is needed when one object has both local and global JNI
-/// handles, whose pointer values are allowed to differ.
-pub fn cpp_fallback_same_object(left: *mut c_void, right: *mut c_void) -> Option<bool> {
+/// # Safety
+///
+/// Both handles must either be null or valid handles previously issued by the
+/// companion C++ JNI VM. Passing any other pointer is undefined behavior.
+pub unsafe fn cpp_fallback_same_object(left: *mut c_void, right: *mut c_void) -> Option<bool> {
     if left.is_null() || right.is_null() {
         return Some(left.is_null() && right.is_null());
     }
     // SAFETY: the bridge validates both handles through the companion VM's
-    // JNI IsSameObject implementation and returns -1 if it cannot compare.
+    // JNI IsSameObject implementation and returns -1 if it cannot compare;
+    // the caller upholds the safety contract documented above.
     match unsafe { roblox_jni_fallback_same_object(left, right) } {
         0 => Some(false),
         1 => Some(true),
@@ -1010,7 +1047,10 @@ unsafe extern "system" fn is_same_object(
 }
 
 fn cpp_references_are_same(left: usize, right: usize) -> bool {
-    cpp_fallback_same_object(left as *mut c_void, right as *mut c_void).unwrap_or(false)
+    // SAFETY: both values are handles the bridge previously issued through the
+    // companion C++ JNI VM, so they satisfy `cpp_fallback_same_object`'s
+    // safety contract.
+    unsafe { cpp_fallback_same_object(left as *mut c_void, right as *mut c_void) }.unwrap_or(false)
 }
 
 unsafe extern "system" fn exception_check(_env: *mut jni::JNIEnv) -> jni::jboolean {

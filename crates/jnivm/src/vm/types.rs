@@ -94,14 +94,23 @@ struct ClassRecord {
     natives: HashMap<(String, String), usize>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+// `Eq` is implemented by hand because the `f32`/`f64` array variants do not
+// implement it: derived `PartialEq` compares their elements with `==` (so a
+// NaN element never equals itself), which is the honest reading of equality
+// here, but not something the compiler will certify reflexive.
+#[derive(Clone, Debug, PartialEq)]
 pub enum ObjectValue {
     /// Java strings are represented as Rust UTF-16 units, matching JNI's
     /// `jchar` storage and preserving unpaired surrogates.
     String(Vec<u16>),
     ByteArray(Vec<i8>),
+    BooleanArray(Vec<bool>),
+    CharArray(Vec<u16>),
+    ShortArray(Vec<i16>),
     IntArray(Vec<i32>),
     LongArray(Vec<i64>),
+    FloatArray(Vec<f32>),
+    DoubleArray(Vec<f64>),
     ObjectArray(Vec<Option<ObjectId>>),
     /// A `java/nio/ByteBuffer` wrapper over native memory, matching
     /// libjnivm's `ByteBuffer { void* buffer; jlong capacity; }`.
@@ -214,3 +223,5 @@ pub struct Vm {
     attached: Mutex<HashSet<ThreadId>>,
     state: RwLock<State>,
 }
+
+impl Eq for ObjectValue {}

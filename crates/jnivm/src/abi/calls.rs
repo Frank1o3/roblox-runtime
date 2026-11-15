@@ -637,8 +637,13 @@ fn cpp_reference_for(vm: &Vm, object: crate::ObjectId, class_name: &str) -> Opti
             unsafe { roblox_jni_fallback_new_object(class.as_ptr()) as usize }
         }
         crate::ObjectValue::ByteArray(_)
+        | crate::ObjectValue::BooleanArray(_)
+        | crate::ObjectValue::CharArray(_)
+        | crate::ObjectValue::ShortArray(_)
         | crate::ObjectValue::IntArray(_)
         | crate::ObjectValue::LongArray(_)
+        | crate::ObjectValue::FloatArray(_)
+        | crate::ObjectValue::DoubleArray(_)
         | crate::ObjectValue::ObjectArray(_)
         | crate::ObjectValue::DirectByteBuffer { .. } => {
             eprintln!("[jnivm:fallback] cannot mirror array reference of class {class_name} into C++ libjnivm");
