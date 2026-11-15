@@ -17,6 +17,11 @@ fn category_enabled(message: &str) -> bool {
         "input"
     } else if category.starts_with("jnivm") || category == "jni" {
         "jnivm"
+    } else if category.starts_with("linker-loads") {
+        // Load requests and outcomes get their own toggle so the default
+        // categories stay quiet: dlopen probes (Vulkan, FMOD's fallback
+        // chain) fire often and mostly fail on purpose.
+        "linker-loads"
     } else if category.starts_with("linker") {
         "linker"
     } else if category.starts_with("stub") {
@@ -35,7 +40,13 @@ fn category_enabled(message: &str) -> bool {
     std::env::var("RUSTY_BLOX_LOG_CATEGORIES")
         .unwrap_or_else(|_| "base,runtime".to_owned())
         .split(',')
-        .any(|enabled| enabled.trim() == category)
+        .any(|enabled| {
+            let enabled = enabled.trim();
+            enabled == category
+                // The linker toggle was saved as "linker-sys" before the
+                // category mapper and the UI shared one id.
+                || (category == "linker" && enabled == "linker-sys")
+        })
 }
 
 fn looks_like_error(message: &str) -> bool {

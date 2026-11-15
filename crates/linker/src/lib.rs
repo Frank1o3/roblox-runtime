@@ -89,6 +89,7 @@ impl MappedLibrary {
         external_symbols: &BTreeMap<String, usize>,
     ) -> Result<Self, Error> {
         let root_path = path.as_ref().to_path_buf();
+        eprintln!("[linker-loads] loading {}", root_path.display());
         let search_dir = root_path.parent().unwrap_or_else(|| Path::new("."));
         dl::set_search_dir(search_dir);
         dl::register_global_symbols(external_symbols);
@@ -127,8 +128,9 @@ impl MappedLibrary {
                 .map_err(|e| Error::Map(format!("{soname}: {e}")))?;
             let base = usize::try_from(mapped.load_base()).map_err(|_| Error::AddressOverflow)?;
             let code_region = executable_region(base, &image)?;
+            eprintln!("[linker-loads] loaded {soname} at base {:#x}", base);
             objects.push(LoadedObject {
-                soname,
+                soname: soname.clone(),
                 bytes,
                 mapped,
                 base,
@@ -144,7 +146,12 @@ impl MappedLibrary {
                     search_dir.join(&dependency)
                 };
                 if candidate.is_file() && queued.insert(candidate.clone()) {
+                    eprintln!("[linker-loads] {soname} needs {dependency}; queued");
                     queue.push_back(candidate);
+                } else if !queued.contains(&candidate) && !candidate.is_file() {
+                    eprintln!(
+                        "[linker-loads] {soname} needs {dependency}; not found, relying on the runtime symbol table"
+                    );
                 }
             }
         }

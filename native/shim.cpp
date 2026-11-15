@@ -53,7 +53,7 @@ void roblox_linker_update_ld_library_path(const char* path) {
 }
 
 void* roblox_linker_dlopen(const char* filename, int flags) {
-    // `RBX_RUNTIME_TRACE_DLOPEN=1` reports every request and how long it took.
+    // Request and outcome surface under the "Library loads" log category.
     //
     // Roblox reaches several subsystems this way rather than through DT_NEEDED
     // — Vulkan is the known one — so this is the only place that shows which
@@ -61,7 +61,9 @@ void* roblox_linker_dlopen(const char* filename, int flags) {
     // promptly. FMOD's Android output prefers AAudio and falls back to OpenSL
     // ES; if that fallback depends on `dlopen("libaaudio.so")` failing fast,
     // a slow or hanging miss would be a real bug rather than a cosmetic one.
-    static const bool trace = getenv("RBX_RUNTIME_TRACE_DLOPEN") != nullptr;
+    // RBX_RUNTIME_TRACE_DLOPEN keeps the pre-category behavior for developers.
+    static const bool trace = log_category_enabled("linker-loads")
+        || getenv("RBX_RUNTIME_TRACE_DLOPEN") != nullptr;
     if (!trace) {
         return linker::dlopen(filename, flags);
     }
@@ -70,8 +72,8 @@ void* roblox_linker_dlopen(const char* filename, int flags) {
     auto us = std::chrono::duration_cast<std::chrono::microseconds>(
                   std::chrono::steady_clock::now() - start)
                   .count();
-    fprintf(stderr, "[runtime] dlopen(%s) -> %s in %lldus\n", filename ? filename : "(null)",
-            h ? "ok" : "NULL", (long long)us);
+    fprintf(stderr, "[linker-loads] dlopen(%s) -> %s in %lldus\n",
+            filename ? filename : "(null)", h ? "ok" : "NULL", (long long)us);
     return h;
 }
 

@@ -145,6 +145,7 @@ pub unsafe extern "C" fn rust_dlopen(filename: *const c_char, _flags: c_int) -> 
         .iter()
         .position(|obj| obj.soname == name || obj.soname == soname);
     if let Some(idx) = matched_obj {
+        eprintln!("[linker-loads] dlopen({name}) -> mapped object");
         let h = guard.alloc_handle(HandleKind::Object(idx));
         return h as *mut c_void;
     }
@@ -156,11 +157,15 @@ pub unsafe extern "C" fn rust_dlopen(filename: *const c_char, _flags: c_int) -> 
         .find(|k| *k == name || *k == &soname)
         .cloned();
     if let Some(lib_name) = matched_lib {
+        eprintln!("[linker-loads] dlopen({name}) -> registered library");
         let h = guard.alloc_handle(HandleKind::Registered(lib_name));
         return h as *mut c_void;
     }
 
-    eprintln!("[linker] unimplemented library dlopen: {name}");
+    // Roblox probes optional subsystems through dlopen (Vulkan, FMOD's
+    // OpenSL ES fallback), so misses are normal; they surface only when the
+    // "Library loads" log category is enabled.
+    eprintln!("[linker-loads] dlopen({name}) -> not found");
     set_dlerror(format!("cannot open shared object file: {name}"));
     std::ptr::null_mut()
 }
