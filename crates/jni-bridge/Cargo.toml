@@ -8,6 +8,7 @@ version.workspace = true
 
 [dependencies]
 roblox-android.workspace = true
+roblox-audio.workspace = true
 jnivm.workspace = true
 roblox-native-sys.workspace = true
 

@@ -7,7 +7,7 @@
 //! frames are measured from the first callback, never remembered from a request.
 
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{Arc, Mutex, mpsc};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
@@ -15,8 +15,8 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{BufferSize, ErrorKind, FromSample, SizedSample, Stream, StreamConfig};
 
 use super::host::host_by_name;
-use crate::logline::{log, Priority, AUDIO_TAG};
-use super::output::{FillCallback, OutputStream};
+use super::output::{FillCallback, OutputRequest, OutputStream};
+use crate::logline::{AUDIO_TAG, Priority, log};
 
 /// Everything the audio callback touches. No locks except one `try_lock` on a
 /// mutex nobody else ever holds, which cannot block or deadlock.
@@ -120,12 +120,48 @@ fn pick_device(host: &cpal::Host, target: &str) -> Option<cpal::Device> {
     host.default_output_device()
 }
 
-fn build_stream(host_name: &str, target: &str, base: &Ctx) -> Result<(Stream, Granted), String> {
-    let host = host_by_name(host_name).ok_or_else(|| format!("host '{host_name}' is unavailable"))?;
-    let device = pick_device(&host, target).ok_or("no output device")?;
+fn requested_config(
+    device: &cpal::Device,
+    request: &OutputRequest,
+) -> Result<StreamConfig, String> {
     let default = device.default_output_config().map_err(|e| e.to_string())?;
-    let mut cfg: StreamConfig = default.into();
-    let ctx = Ctx { channels: cfg.channels as usize, ..base.clone() };
+    let channels = request.channels.unwrap_or(u32::from(default.channels()));
+    let rate = request.sample_rate.unwrap_or(default.sample_rate());
+    if channels == 0 || channels > u32::from(u16::MAX) || rate == 0 {
+        return Err(format!(
+            "invalid output request: {rate} Hz/{channels} channels"
+        ));
+    }
+    if default.channels() == channels as u16 && default.sample_rate() == rate {
+        return Ok(default.into());
+    }
+    device
+        .supported_output_configs()
+        .map_err(|error| error.to_string())?
+        .find(|range| {
+            u32::from(range.channels()) == channels
+                && range.min_sample_rate() <= rate
+                && range.max_sample_rate() >= rate
+        })
+        .map(|range| range.with_sample_rate(rate).into())
+        .ok_or_else(|| {
+            format!("device cannot provide requested {rate} Hz/{channels} channel output")
+        })
+}
+
+fn build_stream(
+    host_name: &str,
+    request: &OutputRequest,
+    base: &Ctx,
+) -> Result<(Stream, Granted), String> {
+    let host =
+        host_by_name(host_name).ok_or_else(|| format!("host '{host_name}' is unavailable"))?;
+    let device = pick_device(&host, &request.target).ok_or("no output device")?;
+    let mut cfg = requested_config(&device, request)?;
+    let ctx = Ctx {
+        channels: cfg.channels as usize,
+        ..base.clone()
+    };
 
     // Prefer a fixed 1024-frame buffer (ALSA's default can be absurd), then
     // the device default; prefer f32, then the integer formats.
@@ -137,7 +173,11 @@ fn build_stream(host_name: &str, target: &str, base: &Ctx) -> Result<(Stream, Gr
     ];
     let mut last_err = String::from("no format accepted");
     for fixed in [true, false] {
-        cfg.buffer_size = if fixed { BufferSize::Fixed(1024) } else { BufferSize::Default };
+        cfg.buffer_size = if fixed {
+            BufferSize::Fixed(1024)
+        } else {
+            BufferSize::Default
+        };
         for (name, build) in formats {
             match build(&device, &cfg, ctx.clone()) {
                 Ok(stream) => {
@@ -150,7 +190,10 @@ fn build_stream(host_name: &str, target: &str, base: &Ctx) -> Result<(Stream, Gr
                     if ctx.burst.load(Ordering::Relaxed) == 0 {
                         return Err("the host did not turn a cycle within 3s".into());
                     }
-                    let granted = Granted { rate: cfg.sample_rate, channels: cfg.channels as u32 };
+                    let granted = Granted {
+                        rate: cfg.sample_rate,
+                        channels: cfg.channels as u32,
+                    };
                     log(
                         Priority::Info,
                         AUDIO_TAG,
@@ -164,7 +207,9 @@ fn build_stream(host_name: &str, target: &str, base: &Ctx) -> Result<(Stream, Gr
                     );
                     return Ok((stream, granted));
                 }
-                Err(e) => last_err = format!("{name}/{}: {e}", if fixed { "fixed" } else { "default" }),
+                Err(e) => {
+                    last_err = format!("{name}/{}: {e}", if fixed { "fixed" } else { "default" })
+                }
             }
         }
     }
@@ -198,7 +243,7 @@ impl CpalOutputStream {
 }
 
 impl OutputStream for CpalOutputStream {
-    fn open(&mut self, _bits: u32, _float: bool, _desc: &str, target: &str, fill: FillCallback) -> bool {
+    fn open(&mut self, request: OutputRequest, _desc: &str, fill: FillCallback) -> bool {
         self.close();
         self.burst.store(0, Ordering::Relaxed);
         self.running.store(false, Ordering::Relaxed);
@@ -211,21 +256,23 @@ impl OutputStream for CpalOutputStream {
         };
         let (ready_tx, ready_rx) = mpsc::channel::<Result<Granted, String>>();
         let (stop_tx, stop_rx) = mpsc::channel::<()>();
-        let (host, target) = (self.host.clone(), target.to_owned());
+        let host = self.host.clone();
 
-        let spawned = std::thread::Builder::new().name("roblox-cpal-output".into()).spawn(move || {
-            match build_stream(&host, &target, &base) {
-                Ok((stream, granted)) => {
-                    let _ = ready_tx.send(Ok(granted));
-                    // Parked until `close` drops the sender; then the stream drops here.
-                    let _ = stop_rx.recv();
-                    drop(stream);
+        let spawned = std::thread::Builder::new()
+            .name("roblox-cpal-output".into())
+            .spawn(move || {
+                match build_stream(&host, &request, &base) {
+                    Ok((stream, granted)) => {
+                        let _ = ready_tx.send(Ok(granted));
+                        // Parked until `close` drops the sender; then the stream drops here.
+                        let _ = stop_rx.recv();
+                        drop(stream);
+                    }
+                    Err(e) => {
+                        let _ = ready_tx.send(Err(e));
+                    }
                 }
-                Err(e) => {
-                    let _ = ready_tx.send(Err(e));
-                }
-            }
-        });
+            });
         let Ok(handle) = spawned else { return false };
 
         match ready_rx.recv_timeout(Duration::from_secs(10)) {
@@ -320,11 +367,14 @@ mod tests {
 
     #[test]
     fn running_pulls_the_engine_with_the_measured_frame_count() {
-        let c = ctx(Box::new(|dst, frames| {
-            assert_eq!(frames as usize * 2, dst.len());
-            dst.fill(0.5);
-            true
-        }), 2);
+        let c = ctx(
+            Box::new(|dst, frames| {
+                assert_eq!(frames as usize * 2, dst.len());
+                dst.fill(0.5);
+                true
+            }),
+            2,
+        );
         c.running.store(true, Ordering::Relaxed);
         let mut buf = [0.0f32; 8];
         render(&c, &mut buf);
@@ -334,10 +384,13 @@ mod tests {
 
     #[test]
     fn a_stop_request_silences_and_stops_pulling() {
-        let c = ctx(Box::new(|dst, _| {
-            dst.fill(0.9);
-            false
-        }), 1);
+        let c = ctx(
+            Box::new(|dst, _| {
+                dst.fill(0.9);
+                false
+            }),
+            1,
+        );
         c.running.store(true, Ordering::Relaxed);
         let mut buf = [0.0f32; 4];
         render(&c, &mut buf);

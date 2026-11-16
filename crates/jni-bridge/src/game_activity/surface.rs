@@ -228,7 +228,7 @@ pub unsafe fn pass_mouse_wheel(
 /// policy — the seat's answer, and what `RBX_RUNTIME_INPUT_TOUCH` and
 /// `RBX_RUNTIME_NO_TOUCH` do to it. This is only the wire. Nothing on the C
 /// side reads it after startup; see `roblox_set_touchscreen_present` in
-/// `native/init_params.cpp` for why that is ordering rather than policy.
+/// `crates/native-sys/native/init_params.cpp` for why that is ordering rather than policy.
 pub fn set_touchscreen_present(present: bool) {
     // SAFETY: a plain store into a C++ `std::atomic<int>`; no pointers, no
     // allocation, and safe to call from any thread at any time.
@@ -240,7 +240,7 @@ pub fn set_touchscreen_present(present: bool) {
 ///
 /// The descriptor is read out of this build's dex; the three `action`
 /// values are `INFERRED` from mocktail. See `roblox_input_pass_input` in
-/// `native/game_activity.cpp` for both, and `android::input::TOUCH_*` for
+/// `crates/native-sys/native/game_activity.cpp` for both, and `android::input::TOUCH_*` for
 /// the constants themselves.
 ///
 /// # Safety
@@ -281,7 +281,7 @@ pub unsafe fn pass_input(
 
 // `NativeInputInterface`'s six gamepad natives. Descriptors read from the
 // shipping APK's dex, not guessed; what the integer arguments *mean* is
-// INFERRED and is argued out in `native/game_activity.cpp` beside each
+// INFERRED and is argued out in `crates/native-sys/native/game_activity.cpp` beside each
 // trampoline, and in `roblox_runtime::android::gamepad`. Callers should go
 // through that module rather than these directly -- it is what holds the
 // all-or-nothing resolution gate and the off switch.
@@ -629,7 +629,7 @@ unsafe extern "C" {
 /// can be exercised without a running game.
 ///
 /// **Test-only, and the engine never calls this.**
-/// `native/android_classes.cpp` built `roblox_textbox_test_focus` for
+/// `crates/native-sys/native/android_classes.cpp` built `roblox_textbox_test_focus` for
 /// this module's own `textbox_info_arrives_slot_for_slot` test below, to
 /// prove the fifteen-slot layout survives the FFI boundary intact. This is
 /// the same round trip, made reachable from outside the crate so devctl

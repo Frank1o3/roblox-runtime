@@ -557,7 +557,7 @@ pub unsafe fn pass_supported_refresh_rates(
 /// A static, zero-argument native returning `String`.
 ///
 /// `JNILinkingProtocol`'s message and field names are read this way — see
-/// `native/deeplink.cpp`. Purely a read of a constant the engine already
+/// `crates/native-sys/native/deeplink.cpp`. Purely a read of a constant the engine already
 /// holds; nothing is passed in.
 ///
 /// # Safety

@@ -110,7 +110,7 @@ pub fn textbox_generation() -> u32 {
 
 /// Bumped by `onLuaTextBoxPropertyChangedCallback`, deliberately a
 /// separate counter from [`textbox_generation`] — see the comment on
-/// `g_textbox_property_generation` in `native/android_classes.cpp` for
+/// `g_textbox_property_generation` in `crates/native-sys/native/android_classes.cpp` for
 /// why folding the two together would be wrong, not just redundant.
 pub fn textbox_property_generation() -> u32 {
     // SAFETY: a plain atomic load on the C++ side.
@@ -120,7 +120,7 @@ pub fn textbox_property_generation() -> u32 {
 /// The spec for the editor that has to be drawn over the focused text box,
 /// as the engine handed it to `showKeyboard`.
 ///
-/// Layout must match `RobloxRuntimeTextBoxInfo` in `native/android_classes.cpp`
+/// Layout must match `RobloxRuntimeTextBoxInfo` in `crates/native-sys/native/android_classes.cpp`
 /// field-for-field — this is a `#[repr(C)]` mirror, not a coincidence.
 ///
 /// The fourteen values are `NativeTextBoxInfo`'s constructor arguments,
@@ -128,7 +128,7 @@ pub fn textbox_property_generation() -> u32 {
 /// boxes on the Login screen carry a name; the rest keep their slot number,
 /// because the APK's declarations give the class's field list sorted by
 /// name and never say which order the constructor takes them in. The long
-/// comment on `RobloxRuntimeTextBoxInfo` in `native/android_classes.cpp` has the
+/// comment on `RobloxRuntimeTextBoxInfo` in `crates/native-sys/native/android_classes.cpp` has the
 /// captured numbers and the argument from each of them; read it before
 /// renaming anything here.
 ///
@@ -144,7 +144,7 @@ pub fn textbox_property_generation() -> u32 {
 /// about Roblox's platform API and is taken as one; the values this
 /// struct actually carries were captured from roblox-runtime's own boxes and are
 /// not mocktail's. See the long comment on `RobloxRuntimeTextBoxInfo` in
-/// `native/android_classes.cpp` for the rest of the reasoning, and for
+/// `crates/native-sys/native/android_classes.cpp` for the rest of the reasoning, and for
 /// what these names are evidence of: two positional readings of the same
 /// constructor agreeing, not a reflection of the real Java class.
 ///
@@ -302,7 +302,7 @@ pub fn focused_textbox_info() -> Option<RawTextBoxInfo> {
 /// a class -- and `docs/HANDOVER.md` concluded for weeks that voice chat's
 /// downlink "cannot be written" from exactly that absence. roblox-runtime has
 /// depended on the distinction since `terminateNativeCode` (see
-/// `native/game_activity.cpp`) without being able to see it.
+/// `crates/native-sys/native/game_activity.cpp`) without being able to see it.
 ///
 /// The pointer is reported beside the name because "registered" and
 /// "registered to something real" are different claims.

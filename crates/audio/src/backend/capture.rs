@@ -16,7 +16,7 @@
 //!    never be freed under a thread that still touches it (the AB-BA rule).
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{mpsc, Arc};
+use std::sync::{Arc, mpsc};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
@@ -24,7 +24,7 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{BufferSize, FromSample, Sample, SizedSample, StreamConfig};
 
 use super::host::{effective_backend_name, host_by_name};
-use crate::logline::{log, Priority, AUDIO_TAG};
+use crate::logline::{AUDIO_TAG, Priority, log};
 
 /// Process-wide single-capture guard. `open` takes it, `Drop` releases it.
 /// Every capture path in the runtime must hold one of these; the refusal at
@@ -228,7 +228,10 @@ impl CaptureStream {
                 live.rate, live.channels
             ),
         );
-        Ok(Self { live: Some(live), _lease: lease })
+        Ok(Self {
+            live: Some(live),
+            _lease: lease,
+        })
     }
 
     /// Every stop path. Idempotent; `Drop` calls this.
@@ -316,10 +319,30 @@ fn open_live(target: &str, request: CaptureRequest) -> Result<Live, CaptureOpenE
             // (non-Send) stream never crosses a thread boundary and dropping
             // it after the park below is what actually closes the device.
             let stream = match format {
-                cpal::SampleFormat::F32 => build_input::<f32>(&device, &cfg, Arc::clone(&ring_cb), Arc::clone(&disconnected_cb)),
-                cpal::SampleFormat::I16 => build_input::<i16>(&device, &cfg, Arc::clone(&ring_cb), Arc::clone(&disconnected_cb)),
-                cpal::SampleFormat::I32 => build_input::<i32>(&device, &cfg, Arc::clone(&ring_cb), Arc::clone(&disconnected_cb)),
-                cpal::SampleFormat::U16 => build_input::<u16>(&device, &cfg, Arc::clone(&ring_cb), Arc::clone(&disconnected_cb)),
+                cpal::SampleFormat::F32 => build_input::<f32>(
+                    &device,
+                    &cfg,
+                    Arc::clone(&ring_cb),
+                    Arc::clone(&disconnected_cb),
+                ),
+                cpal::SampleFormat::I16 => build_input::<i16>(
+                    &device,
+                    &cfg,
+                    Arc::clone(&ring_cb),
+                    Arc::clone(&disconnected_cb),
+                ),
+                cpal::SampleFormat::I32 => build_input::<i32>(
+                    &device,
+                    &cfg,
+                    Arc::clone(&ring_cb),
+                    Arc::clone(&disconnected_cb),
+                ),
+                cpal::SampleFormat::U16 => build_input::<u16>(
+                    &device,
+                    &cfg,
+                    Arc::clone(&ring_cb),
+                    Arc::clone(&disconnected_cb),
+                ),
                 other => Err(format!("unsupported capture sample format {other:?}")),
             };
             match stream {
@@ -465,7 +488,10 @@ mod tests {
 
     #[test]
     fn a_closed_stream_reads_nothing_and_reports_zero_format() {
-        let mut stream = CaptureStream { live: None, _lease: CaptureLease };
+        let mut stream = CaptureStream {
+            live: None,
+            _lease: CaptureLease,
+        };
         assert!(!stream.is_open());
         assert_eq!(stream.rate_hz(), 0);
         assert_eq!(stream.channels(), 0);
@@ -480,7 +506,10 @@ mod tests {
     #[test]
     fn the_chokepoint_refuses_a_second_capture_and_every_release_reopens() {
         let first = CaptureLease::acquire().expect("first lease");
-        assert!(CaptureLease::acquire().is_none(), "second capture must be refused");
+        assert!(
+            CaptureLease::acquire().is_none(),
+            "second capture must be refused"
+        );
 
         // Dropping the lease releases the chokepoint, and it can be taken
         // again — a closed capture never wedges the gate for future ones.
@@ -489,9 +518,15 @@ mod tests {
         drop(again);
 
         // Dropping a stream (which drops its lease) releases it too.
-        let stream = CaptureStream { live: None, _lease: CaptureLease::acquire().unwrap() };
+        let stream = CaptureStream {
+            live: None,
+            _lease: CaptureLease::acquire().unwrap(),
+        };
         assert!(CaptureLease::acquire().is_none());
         drop(stream);
-        assert!(CaptureLease::acquire().is_some(), "dropped stream releases the gate");
+        assert!(
+            CaptureLease::acquire().is_some(),
+            "dropped stream releases the gate"
+        );
     }
 }

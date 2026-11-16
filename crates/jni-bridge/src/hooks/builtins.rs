@@ -1071,7 +1071,7 @@ fn native_text_box_info_init(
         .unwrap_or_else(|poisoned| poisoned.into_inner())
         .insert(object, info);
     // SAFETY: the pointer refers to a stack value with the exact C ABI layout
-    // shared with native/android_classes.cpp, which copies it before return.
+    // shared with crates/native-sys/native/android_classes.cpp, which copies it before return.
     unsafe { roblox_textbox_last_built(&info) };
     JniValue::Object(Some(object))
 }

@@ -46,9 +46,8 @@
 // `IPlatformLocalStorageHandler` built and handed to `setPlatformImpl` right
 // after the asset manager is set up -- was confirmed against
 // `mocktail/src/legacy/legacy_runtime.cc`'s `ConfigureLocalStorage`
-// (`third_party/mocktail-webview/` is a different, unrelated vendor tree; the
-// checkout this was read from lives outside this repository entirely, per the
-// task that added this file). Mocktail is Apache-2.0; this is a GPL-3.0
+// The checkout this was read from lives outside this repository. Mocktail is
+// Apache-2.0; this is a GPL-3.0
 // project, and nothing below is transcribed from it -- mocktail backs its
 // handler with a generic `SharedPreferences` object and an XML file with no
 // attempt at the secrecy the method names claim, which is a design this

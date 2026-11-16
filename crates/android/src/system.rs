@@ -8,7 +8,7 @@
 //!
 //! Providing `/system` is the runtime's job, the same way `AAssetManager` and
 //! `ALooper` are. The redirect itself lives at the libc boundary in
-//! `native/system_paths.cpp`; this module builds the directory it points at.
+//! `crates/native-sys/native/system_paths.cpp`; this module builds the directory it points at.
 //!
 //! `/` is read-only on an image-based host, so a real `/system` is not an
 //! option even with privileges — which is the other reason to do this in the
@@ -64,6 +64,15 @@ pub fn files_dir() -> PathBuf {
 
 fn set_system_root(path: &Path) {
     PATHS.write().unwrap_or_else(|p| p.into_inner()).system_root = Some(path.to_path_buf());
+}
+
+/// Return the configured directory serving Android's `/system` tree.
+pub fn system_root() -> Option<PathBuf> {
+    PATHS
+        .read()
+        .unwrap_or_else(|p| p.into_inner())
+        .system_root
+        .clone()
 }
 
 /// Copy the Android `/system` root into a C buffer. Returns the required byte

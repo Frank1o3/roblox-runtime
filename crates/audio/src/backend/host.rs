@@ -7,9 +7,9 @@ use std::sync::OnceLock;
 use cpal::traits::HostTrait;
 
 use super::cpal_output::CpalOutputStream;
-use crate::logline::{log, Priority, AUDIO_TAG};
 use super::oss::{make_oss_stream, oss_available};
 use super::output::OutputStream;
+use crate::logline::{AUDIO_TAG, Priority, log};
 
 const ORDER: [&str; 3] = ["pipewire", "pulseaudio", "alsa"];
 

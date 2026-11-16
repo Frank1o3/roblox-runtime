@@ -12,7 +12,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::thread::JoinHandle;
 
-use super::output::{FillCallback, OutputStream};
+use super::output::{FillCallback, OutputRequest, OutputStream};
 
 const CHANNELS: u32 = 2;
 const RATE: u32 = 48_000;
@@ -88,12 +88,15 @@ impl Default for OssStream {
 }
 
 impl OutputStream for OssStream {
-    fn open(&mut self, _bits: u32, _float: bool, _desc: &str, _target: &str, mut fill: FillCallback) -> bool {
+    fn open(&mut self, request: OutputRequest, _desc: &str, mut fill: FillCallback) -> bool {
         self.close();
         let file = match OpenOptions::new().write(true).open(&self.device) {
             Ok(f) => f,
             Err(e) => {
-                eprintln!("W/RobloxRuntime-OSS             cannot open {}: {e}", self.device);
+                eprintln!(
+                    "W/RobloxRuntime-OSS             cannot open {}: {e}",
+                    self.device
+                );
                 return false;
             }
         };
@@ -102,17 +105,39 @@ impl OutputStream for OssStream {
         // the rate if the format is set after it.
         let mut fmt = AFMT_S16_NE;
         if !dsp_ioctl(&file, SNDCTL_DSP_SETFMT, &mut fmt) || fmt != AFMT_S16_NE {
-            eprintln!("W/RobloxRuntime-OSS             {} will not take 16-bit native-endian PCM.", self.device);
+            eprintln!(
+                "W/RobloxRuntime-OSS             {} will not take 16-bit native-endian PCM.",
+                self.device
+            );
             return false;
         }
-        let mut ch = CHANNELS as i32;
+        let wanted_channels = request.channels.unwrap_or(CHANNELS);
+        let wanted_rate = request.sample_rate.unwrap_or(RATE);
+        let mut ch = wanted_channels as i32;
         if !dsp_ioctl(&file, SNDCTL_DSP_CHANNELS, &mut ch) || ch <= 0 {
-            eprintln!("W/RobloxRuntime-OSS             {} refused {CHANNELS} channels.", self.device);
+            eprintln!(
+                "W/RobloxRuntime-OSS             {} refused {wanted_channels} channels.",
+                self.device
+            );
             return false;
         }
-        let mut rate = RATE as i32;
+        let mut rate = wanted_rate as i32;
         if !dsp_ioctl(&file, SNDCTL_DSP_SPEED, &mut rate) || rate <= 0 {
-            eprintln!("W/RobloxRuntime-OSS             {} refused {RATE} Hz.", self.device);
+            eprintln!(
+                "W/RobloxRuntime-OSS             {} refused {wanted_rate} Hz.",
+                self.device
+            );
+            return false;
+        }
+        if request.channels.is_some_and(|wanted| ch as u32 != wanted)
+            || request
+                .sample_rate
+                .is_some_and(|wanted| rate as u32 != wanted)
+        {
+            eprintln!(
+                "W/RobloxRuntime-OSS             {} granted {rate} Hz/{ch} channels, not the requested output format.",
+                self.device
+            );
             return false;
         }
 
@@ -125,7 +150,11 @@ impl OutputStream for OssStream {
         let period = self.period;
         self.quit.store(false, Ordering::Relaxed);
         self.running.store(false, Ordering::Relaxed);
-        let (quit, running, silence) = (self.quit.clone(), self.running.clone(), self.silence.clone());
+        let (quit, running, silence) = (
+            self.quit.clone(),
+            self.running.clone(),
+            self.silence.clone(),
+        );
         let device = self.device.clone();
 
         eprintln!(
@@ -245,7 +274,11 @@ mod tests {
     #[test]
     fn a_missing_device_fails_to_open_and_leaves_nothing_behind() {
         let mut s = OssStream::with_device("/nonexistent/dsp".into());
-        assert!(!s.open(0, false, "t", "", Box::new(|_, _| true)));
+        assert!(!s.open(
+            OutputRequest::default_device(0, false, ""),
+            "t",
+            Box::new(|_, _| true)
+        ));
         assert!(!s.is_open());
     }
 

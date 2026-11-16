@@ -1,7 +1,7 @@
 //! `AConfiguration_*` — the device configuration the engine reads at startup.
 //!
 //! This is the other half of "Roblox thinks you're mobile". `DeviceStaticParams`
-//! (see `native/android_classes.cpp`) is what the engine's own code consults;
+//! (see `crates/native-sys/native/android_classes.cpp`) is what the engine's own code consults;
 //! `AConfiguration` is what the Android framework would have told it. They have
 //! to agree, or the engine gets a phone's screen from one and a desktop from the
 //! other.

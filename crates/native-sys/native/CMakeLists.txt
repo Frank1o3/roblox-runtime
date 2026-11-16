@@ -111,7 +111,7 @@ endif()
 # onLogLine/onJoin: neither event exists, see the header of liblog.cpp.
 #
 add_library(roblox_liblog STATIC
-  liblog.cpp system_paths.cpp netdb_compat.cpp opensles.cpp pipewire_backend.cpp
+  liblog.cpp system_paths.cpp opensles.cpp pipewire_backend.cpp
   pulse_backend.cpp alsa_backend.cpp oss_backend.cpp thread_trace.cpp)
 # Compiled unconditionally, like every other file here: without the headers it
 # is its own honest "unavailable" arm, so the selector gets a truthful answer
@@ -239,7 +239,7 @@ add_library(logger STATIC jnivm_logger/log.cpp)
 target_include_directories(logger PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/jnivm_logger)
 set_target_properties(logger PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../third_party/libjnivm
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../../third_party/libjnivm
                  ${CMAKE_CURRENT_BINARY_DIR}/libjnivm EXCLUDE_FROM_ALL)
 
 # audio_classes.cpp needs no PipeWire headers and so is compiled
@@ -254,7 +254,7 @@ add_executable(roblox_permissions_transport_test EXCLUDE_FROM_ALL
   permissions_transport.cpp permissions_transport_test.cpp)
 target_compile_options(roblox_permissions_transport_test PRIVATE -UNDEBUG)
 target_include_directories(roblox_permissions_transport_test PRIVATE
-  ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/libjnivm/include)
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../../third_party/libjnivm/include)
 add_custom_command(TARGET roblox_permissions_transport_test POST_BUILD
   COMMAND roblox_permissions_transport_test
   COMMENT "Running PermissionsProtocol response transport checks")

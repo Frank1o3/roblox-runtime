@@ -44,7 +44,7 @@ pub fn touch(
 
 /// One finger on the glass, as the C side receives it.
 ///
-/// Mirrors `RobloxRuntimeTouchContact` in `native/game_activity.cpp`; the two
+/// Mirrors `RobloxRuntimeTouchContact` in `crates/native-sys/native/game_activity.cpp`; the two
 /// definitions are the same three words in the same order and have to stay
 /// that way. `id` is Android's stable *pointer id*, not the position of
 /// this contact in the slice — the slice's order is the pointer *index*,

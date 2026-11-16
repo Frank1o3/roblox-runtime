@@ -117,13 +117,6 @@ int s_lstat(const char* path, struct stat* out) {
     return r;
 }
 
-int s_access(const char* path, int mode) {
-    REMAP(path);
-    int r = ::access(real, mode);
-    trace_i("access", real, r);
-    return r;
-}
-
 DIR* s_opendir(const char* path) {
     REMAP(path);
     DIR* d = ::opendir(real);
@@ -177,20 +170,6 @@ char* s_realpath(const char* path, char* resolved) {
     return r;
 }
 
-ssize_t s_readlink(const char* path, char* buf, size_t n) {
-    REMAP(path);
-    ssize_t r = ::readlink(real, buf, n);
-    trace_i("readlink", real, (long)r);
-    return r;
-}
-
-FILE* s_fopen(const char* path, const char* mode) {
-    REMAP(path);
-    FILE* f = ::fopen(real, mode);
-    trace("fopen", real, f ? "ok" : "null");
-    return f;
-}
-
 /// `open` is variadic: the mode argument exists only for `O_CREAT`/`O_TMPFILE`.
 /// Reading it unconditionally would walk the register save area for an argument
 /// the caller never pushed, which is the mistake that makes `RBX_RUNTIME_TRACE=1`
@@ -217,30 +196,6 @@ int s_open_2(const char* path, int flags) {
         return -1;
     }
     return s_open(path, flags);
-}
-
-int s_mkdir(const char* path, mode_t mode) {
-    REMAP(path);
-    return ::mkdir(real, mode);
-}
-
-int s_unlink(const char* path) {
-    REMAP(path);
-    return ::unlink(real);
-}
-
-int s_rename(const char* old_path, const char* new_path) {
-    char old_buf[PATH_MAX];
-    char new_buf[PATH_MAX];
-    const char* old_real = remap(old_path, old_buf, sizeof old_buf);
-    const char* new_real = remap(new_path, new_buf, sizeof new_buf);
-    int r = ::rename(old_real ? old_real : old_path, new_real ? new_real : new_path);
-    if (g_trace) {
-        std::fprintf(stderr, "[paths] tid=%ld rename(\"%s\", \"%s\") = %d\n",
-                     (long)::syscall(SYS_gettid), old_real ? old_real : old_path,
-                     new_real ? new_real : new_path, r);
-    }
-    return r;
 }
 
 /// `statvfs`, which the engine imports and roblox-runtime had never intercepted.
@@ -321,17 +276,11 @@ extern "C" const RuntimeSystemSymbol* roblox_system_symbols(size_t* count) {
     static const RuntimeSystemSymbol table[] = {
         {"stat", (void*)&s_stat},
         {"lstat", (void*)&s_lstat},
-        {"access", (void*)&s_access},
         {"opendir", (void*)&s_opendir},
         {"realpath", (void*)&s_realpath},
-        {"readlink", (void*)&s_readlink},
-        {"fopen", (void*)&s_fopen},
         {"statvfs", (void*)&s_statvfs},
         {"open", (void*)&s_open},
         {"__open_2", (void*)&s_open_2},
-        {"mkdir", (void*)&s_mkdir},
-        {"unlink", (void*)&s_unlink},
-        {"rename", (void*)&s_rename},
     };
     *count = sizeof(table) / sizeof(table[0]);
     return table;

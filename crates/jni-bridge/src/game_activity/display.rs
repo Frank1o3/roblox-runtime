@@ -27,7 +27,7 @@ pub fn set_display_size(width: i32, height: i32) {
 /// `DeviceUtils.getScreenPhysicalSizeInMillimeters`.
 ///
 /// Zero means "not known", which is a state the engine has its own branch
-/// for -- see the class in `native/init_params.cpp`. Passing zero is
+/// for -- see the class in `crates/native-sys/native/init_params.cpp`. Passing zero is
 /// therefore correct rather than a failure to call this.
 pub fn set_display_physical_mm(width_mm: i32, height_mm: i32) {
     // SAFETY: two ints into a setter that only stores them.
@@ -178,7 +178,7 @@ pub unsafe fn appbridge_call_bare(native: *mut c_void) -> Result<(), String> {
 /// `nativeAppBridgeV2UpdateSurfaceApp/GameWithPlatformParams`.
 ///
 /// Two calls Sober makes and roblox-runtime did not — see `update_surface` in
-/// `native/init_params.cpp` for the measurement. `game` selects the
+/// `crates/native-sys/native/init_params.cpp` for the measurement. `game` selects the
 /// three-argument form, which takes an Activity as well.
 ///
 /// # Safety

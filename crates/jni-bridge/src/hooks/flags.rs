@@ -1,5 +1,5 @@
 // The small flag-result/map surface used by Roblox during startup. These
-// handlers mirror NativeFlagsInitResult and JavaMap in native/init_params.cpp
+// handlers mirror NativeFlagsInitResult and JavaMap in crates/native-sys/native/init_params.cpp
 // while keeping every object inside the selected Rust VM.
 
 #[derive(Default)]

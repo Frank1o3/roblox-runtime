@@ -1,7 +1,7 @@
 //! Drives the audio surface the way the engine drives it, so that "audio
 //! works" can be a measurement rather than a reading of the code.
 //!
-//! Replaces the former `native/audio_probe.cpp`. What it exercises is the real
+//! Replaces the former `crates/native-sys/native/audio_probe.cpp`. What it exercises is the real
 //! path and not a friendlier one: the
 //! OpenSL objects go through `opensles::{sl_create_engine, get_engine, …}`,
 //! the AAudio ones through `aaudio::stream`, and the capture accounting comes

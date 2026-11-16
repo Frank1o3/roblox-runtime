@@ -5,7 +5,7 @@ fn main() {
         .join("../..")
         .canonicalize()
         .expect("workspace root");
-    let native = root.join("native");
+    let native = root.join("crates/native-sys/native");
 
     let dst = cmake::Config::new(&native)
         .define("CMAKE_C_COMPILER", "clang")

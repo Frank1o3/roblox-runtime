@@ -12,7 +12,7 @@ pub fn app_ready_set_sink(on_ready: Option<extern "C" fn(*const c_char)>) {
 /// Hand the framework layer the identity its Java mirrors answer from.
 ///
 /// `NativeUserJavaInterface` and `StartAppParams` both report who is signed
-/// in, and both used to report nobody. They live in `native/`, not in
+/// in, and both used to report nobody. They live in `crates/native-sys/native/`, not in
 /// `libroblox.so`, so this call takes no engine symbol and has no ordering
 /// constraint against the engine — only against
 /// `nativeAppBridgeV2StartAppWithParams`, which copies four of these fields
@@ -110,7 +110,7 @@ impl std::fmt::Debug for Jar {
 /// to call when a response carries `Set-Cookie`.
 ///
 /// `sink` receives the *host* the cookies came from, never the cookies. See
-/// `native/cookies.cpp` for why that split is where it is: the host is
+/// `crates/native-sys/native/cookies.cpp` for why that split is where it is: the host is
 /// extracted before anything else reads the URL, because the query string
 /// of a Roblox URL can carry a one-time authentication ticket.
 ///

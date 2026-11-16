@@ -18,8 +18,10 @@
 
 use std::ffi::{CStr, c_char, c_int, c_void};
 
+pub mod netdb;
 pub mod pthread;
 pub mod signal;
+pub mod system_paths;
 pub mod trace;
 
 /// Functions roblox-runtime provides. Consulted before any host library.
@@ -92,17 +94,16 @@ pub fn function_overrides() -> Vec<(&'static str, *mut c_void)> {
     // Android's `/system` tree. These are path-taking libc calls, redirected
     // only for paths under `/system`; everything else forwards untouched.
     v.extend(system_path_overrides());
-    // `struct addrinfo` has its last two pointers swapped between bionic and
-    // glibc, and the `AI_*` constants disagree outright. Same class as the
-    // `sigset_t` and `pthread_mutex_t` translations above.
-    v.extend(netdb_overrides());
+    // `struct addrinfo` and `AI_*` are translated by the Rust resolver.
+    v.extend(netdb::overrides());
     // OpenSL ES. Data symbols, so a missing one fails the DT_NEEDED walk rather
     // than the first audio call — see `opensles_overrides`.
     v.extend(opensles_overrides());
     // `pthread_create`, forwarded untouched unless `RBX_RUNTIME_TRACE_THREADS=1` —
-    // see `thread_overrides` and `native/thread_trace.cpp`.
+    // see `thread_overrides` and `crates/native-sys/native/thread_trace.cpp`.
     v.extend(thread_overrides());
     if std::env::var_os("RBX_RUNTIME_TRACE_PATHS").is_some() {
+        system_paths::set_trace(true);
         unsafe extern "C" {
             fn roblox_set_path_trace(on: c_int);
         }
@@ -195,7 +196,7 @@ unsafe extern "C" {
 /// only worth building once something is observed using it.
 static LEGACY_SF: [[u8; LEGACY_FILE_SIZE]; 3] = [[0; LEGACY_FILE_SIZE]; 3];
 
-/// The array's address and stride, for `native/legacy_stdio.cpp`.
+/// The array's address and stride, for `crates/native-sys/native/legacy_stdio.cpp`.
 ///
 /// Exported rather than restated on that side because `LEGACY_FILE_SIZE` is a
 /// number nobody can derive twice reliably, and two copies that drift would send
@@ -246,7 +247,7 @@ unsafe extern "C" {
 /// Eighty bytes against forty on LP64, and every field the wrong width and at
 /// the wrong offset. The engine imports `mallinfo` undefined, so before this it
 /// resolved to a stub; letting it reach glibc's would have been worse than the
-/// stub, which is the point `native/system_paths.cpp` makes about `statvfs`.
+/// stub, which is the point `crates/native-sys/native/system_paths.cpp` makes about `statvfs`.
 ///
 /// glibc has exactly the right shape under another name. `mallinfo2` is the
 /// same ten fields as `size_t`, added in glibc 2.33 precisely because the `int`
@@ -634,7 +635,7 @@ extern "C" fn bionic_sysconf(name: c_int) -> i64 {
 
 // ----------------------------------------------------------------------- liblog
 
-/// Android's `liblog`, implemented in `native/liblog.cpp`.
+/// Android's `liblog`, implemented in `crates/native-sys/native/liblog.cpp`.
 ///
 /// Roblox narrates its own startup through these, so wiring them up is what turns
 /// every later failure from silent into explained. Implemented in C++ because
@@ -669,46 +670,100 @@ pub fn liblog_overrides() -> Vec<(&'static str, *mut c_void)> {
 
 // -------------------------------------------------------------------- OpenSL
 
-/// OpenSL ES, implemented in `native/opensles.cpp` and backed by PipeWire via
-/// `native/pipewire_backend.cpp`.
+#[repr(C)]
+pub struct SlInterfaceId {
+    time_low: u32,
+    time_mid: u16,
+    time_hi_and_version: u16,
+    clock_seq: u16,
+    node: [u8; 6],
+}
+
+macro_rules! exported_sl_iid {
+    ($name:ident, $storage:ident) => {
+        static $storage: SlInterfaceId = SlInterfaceId {
+            time_low: 0,
+            time_mid: 0,
+            time_hi_and_version: 0,
+            clock_seq: 0,
+            node: [0; 6],
+        };
+
+        #[unsafe(no_mangle)]
+        pub static mut $name: *mut SlInterfaceId = std::ptr::addr_of!($storage).cast_mut();
+    };
+}
+
+exported_sl_iid!(SL_IID_ENGINE, SL_IID_ENGINE_STORAGE);
+exported_sl_iid!(SL_IID_PLAY, SL_IID_PLAY_STORAGE);
+exported_sl_iid!(SL_IID_RECORD, SL_IID_RECORD_STORAGE);
+exported_sl_iid!(SL_IID_VOLUME, SL_IID_VOLUME_STORAGE);
+exported_sl_iid!(SL_IID_BUFFERQUEUE, SL_IID_BUFFERQUEUE_STORAGE);
+exported_sl_iid!(
+    SL_IID_ANDROIDSIMPLEBUFFERQUEUE,
+    SL_IID_ANDROIDSIMPLEBUFFERQUEUE_STORAGE
+);
+exported_sl_iid!(
+    SL_IID_ANDROIDCONFIGURATION,
+    SL_IID_ANDROIDCONFIGURATION_STORAGE
+);
+
+/// OpenSL ES, implemented in `crates/native-sys/native/opensles.cpp` and backed by PipeWire via
+/// `crates/native-sys/native/pipewire_backend.cpp`.
 ///
 /// Seven of these eight are *data* symbols (`SLInterfaceID` is a pointer to a
 /// UUID struct), and a missing data symbol fails the `DT_NEEDED` walk outright
 /// rather than at first use. Current Roblox builds reference them directly,
 /// which is why `libOpenSLES.so` can no longer be an empty library.
 ///
-/// The object model (engine, output mix, buffer-queue-sourced audio players)
-/// is implemented and plays through PipeWire when it is reachable. When it is
-/// not — no library, no session, or built without `pipewire-devel` — the same
-/// `slCreateEngine` reports failure rather than pretending, only for a more
-/// specific reason than "nothing is implemented yet". See `opensles.cpp` and
-/// `pipewire_backend.cpp` for the split.
+/// The ABI registry and seven pointer-valued IID definitions are Rust-owned;
+/// `slCreateEngine`, the object model, and PipeWire behavior remain C++-owned.
+/// Keeping the eight measured exports explicit here makes registration
+/// independently testable while the function implementation is ported.
 pub fn opensles_overrides() -> Vec<(&'static str, *mut c_void)> {
-    #[repr(C)]
-    struct Symbol {
-        name: *const c_char,
-        addr: *mut c_void,
-    }
     unsafe extern "C" {
-        fn roblox_opensles_symbols(count: *mut usize) -> *const Symbol;
+        fn slCreateEngine(
+            engine: *mut *mut c_void,
+            num_options: u32,
+            engine_options: *const c_void,
+            num_interfaces: u32,
+            interface_ids: *const *mut c_void,
+            interface_required: *const u32,
+        ) -> u32;
     }
 
-    let mut count = 0usize;
-    // SAFETY: the table is a static in opensles.cpp and outlives the process.
-    let table = unsafe { roblox_opensles_symbols(&mut count) };
-    if table.is_null() {
-        return Vec::new();
-    }
-    // SAFETY: `table` points at `count` initialised entries with static names.
-    let entries = unsafe { std::slice::from_raw_parts(table, count) };
-    entries
-        .iter()
-        .map(|e| {
-            // SAFETY: each `name` is a string literal in opensles.cpp.
-            let name = unsafe { CStr::from_ptr(e.name) }.to_str().unwrap_or("");
-            (name, e.addr)
-        })
-        .collect()
+    // Function addresses and the addresses of the exported IID pointer
+    // variables are stable for the process lifetime, as required by the
+    // virtual-library symbol table. `addr_of_mut!` takes raw addresses without
+    // creating references to the mutable statics.
+    vec![
+        ("slCreateEngine", slCreateEngine as *const () as *mut c_void),
+        (
+            "SL_IID_ENGINE",
+            std::ptr::addr_of_mut!(SL_IID_ENGINE).cast(),
+        ),
+        ("SL_IID_PLAY", std::ptr::addr_of_mut!(SL_IID_PLAY).cast()),
+        (
+            "SL_IID_RECORD",
+            std::ptr::addr_of_mut!(SL_IID_RECORD).cast(),
+        ),
+        (
+            "SL_IID_VOLUME",
+            std::ptr::addr_of_mut!(SL_IID_VOLUME).cast(),
+        ),
+        (
+            "SL_IID_BUFFERQUEUE",
+            std::ptr::addr_of_mut!(SL_IID_BUFFERQUEUE).cast(),
+        ),
+        (
+            "SL_IID_ANDROIDSIMPLEBUFFERQUEUE",
+            std::ptr::addr_of_mut!(SL_IID_ANDROIDSIMPLEBUFFERQUEUE).cast(),
+        ),
+        (
+            "SL_IID_ANDROIDCONFIGURATION",
+            std::ptr::addr_of_mut!(SL_IID_ANDROIDCONFIGURATION).cast(),
+        ),
+    ]
 }
 
 // -------------------------------------------------------------------- AAudio
@@ -721,7 +776,7 @@ pub fn opensles_overrides() -> Vec<(&'static str, *mut c_void)> {
 /// `supportsAAudio()` in agreement. The failure this forecloses is specific:
 /// `symtab` deciding to register
 /// `libaaudio.so` while `org.fmod.FMOD.supportsAAudio()` in
-/// `native/audio_classes.cpp` says false, which would leave FMOD on the Java
+/// `crates/native-sys/native/audio_classes.cpp` says false, which would leave FMOD on the Java
 /// path with a virtual library nobody opens — an experiment that looks like
 /// it ran and did not.
 pub fn aaudio_selected() -> bool {
@@ -805,6 +860,27 @@ mod opensles_tests {
             assert!(!addr.is_null(), "{name} resolved to a null address");
         }
     }
+
+    #[test]
+    fn interface_id_data_exports_are_distinct_non_null_pointers() {
+        // SAFETY: these are initialized Rust-owned pointer-valued data exports
+        // with process lifetime; reading each pointer checks the OpenSL ABI
+        // value, rather than only the symbol-table address of the variable.
+        let ids = unsafe {
+            [
+                std::ptr::addr_of!(super::SL_IID_ENGINE).read(),
+                std::ptr::addr_of!(super::SL_IID_PLAY).read(),
+                std::ptr::addr_of!(super::SL_IID_RECORD).read(),
+                std::ptr::addr_of!(super::SL_IID_VOLUME).read(),
+                std::ptr::addr_of!(super::SL_IID_BUFFERQUEUE).read(),
+                std::ptr::addr_of!(super::SL_IID_ANDROIDSIMPLEBUFFERQUEUE).read(),
+                std::ptr::addr_of!(super::SL_IID_ANDROIDCONFIGURATION).read(),
+            ]
+        };
+        assert!(ids.iter().all(|id| !id.is_null()));
+        let unique: std::collections::HashSet<usize> = ids.iter().map(|id| *id as usize).collect();
+        assert_eq!(unique.len(), ids.len());
+    }
 }
 
 #[cfg(test)]
@@ -871,7 +947,7 @@ mod aaudio_tests {
 
 // ------------------------------------------------------------------ /system
 
-/// The path-taking libc calls, redirected for `/system` — `native/system_paths.cpp`.
+/// The path-taking libc calls, redirected for `/system` — `crates/native-sys/native/system_paths.cpp`.
 ///
 /// Roblox asks for `/system/fonts/NotoSansCJK-Regular.ttc`, and on a host with
 /// no `/system` the failed lookup becomes an empty path and an unhandled
@@ -891,21 +967,32 @@ pub fn system_path_overrides() -> Vec<(&'static str, *mut c_void)> {
     // SAFETY: the table is a static in system_paths.cpp and outlives the process.
     let table = unsafe { roblox_system_symbols(&mut count) };
     if table.is_null() {
-        return Vec::new();
+        return system_paths::overrides();
     }
     // SAFETY: `table` points at `count` initialised entries with static names.
     let entries = unsafe { std::slice::from_raw_parts(table, count) };
-    entries
+    let mut overrides: Vec<_> = entries
         .iter()
         .map(|e| {
             // SAFETY: each `name` is a string literal in system_paths.cpp.
             let name = unsafe { CStr::from_ptr(e.name) }.to_str().unwrap_or("");
             (name, e.addr)
         })
-        .collect()
+        .filter(|(name, _)| {
+            !matches!(
+                *name,
+                "access" | "readlink" | "fopen" | "mkdir" | "unlink" | "rename"
+            )
+        })
+        .collect();
+    // These fixed-arity filesystem operations now use the same Android root
+    // state through Rust. The variadic open wrappers and struct-translation
+    // functions remain in native-sys.
+    overrides.extend(system_paths::overrides());
+    overrides
 }
 
-/// `pthread_create` — `native/thread_trace.cpp`.
+/// `pthread_create` — `crates/native-sys/native/thread_trace.cpp`.
 ///
 /// Off by default and behaviourally identical to the unwrapped host function
 /// either way; the flag only decides whether the new thread announces its
@@ -935,41 +1022,6 @@ pub fn thread_overrides() -> Vec<(&'static str, *mut c_void)> {
         .iter()
         .map(|e| {
             // SAFETY: each `name` is a string literal in thread_trace.cpp.
-            let name = unsafe { CStr::from_ptr(e.name) }.to_str().unwrap_or("");
-            (name, e.addr)
-        })
-        .collect()
-}
-
-// ------------------------------------------------------------------- netdb
-
-/// `getaddrinfo`/`freeaddrinfo` in bionic's layout — `native/netdb_compat.cpp`.
-///
-/// Without these the engine cannot resolve a single hostname: bionic's
-/// `AI_DEFAULT` sets a bit glibc rejects with `EAI_BADFLAGS`, and a result that
-/// did come back would have its `ai_addr` and `ai_canonname` transposed.
-pub fn netdb_overrides() -> Vec<(&'static str, *mut c_void)> {
-    #[repr(C)]
-    struct Symbol {
-        name: *const c_char,
-        addr: *mut c_void,
-    }
-    unsafe extern "C" {
-        fn roblox_netdb_symbols(count: *mut usize) -> *const Symbol;
-    }
-
-    let mut count = 0usize;
-    // SAFETY: the table is a static in netdb_compat.cpp and outlives the process.
-    let table = unsafe { roblox_netdb_symbols(&mut count) };
-    if table.is_null() {
-        return Vec::new();
-    }
-    // SAFETY: `table` points at `count` initialised entries with static names.
-    let entries = unsafe { std::slice::from_raw_parts(table, count) };
-    entries
-        .iter()
-        .map(|e| {
-            // SAFETY: each `name` is a string literal in netdb_compat.cpp.
             let name = unsafe { CStr::from_ptr(e.name) }.to_str().unwrap_or("");
             (name, e.addr)
         })

@@ -1,4 +1,4 @@
-// NativeHelper callback implementations mirrored from native/init_params.cpp.
+// NativeHelper callback implementations mirrored from crates/native-sys/native/init_params.cpp.
 
 static GAME_LOADED_CALLBACK: OnceLock<extern "C" fn(i64)> = OnceLock::new();
 

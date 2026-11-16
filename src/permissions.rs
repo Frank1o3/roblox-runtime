@@ -8,6 +8,27 @@ const PROTOCOL: &str = "PermissionsProtocol";
 const MICROPHONE: &str = "MICROPHONE_ACCESS";
 const SUPPORTED: [&str; 2] = [MICROPHONE, "LOCAL_NETWORK"];
 
+fn uses_dual_response(requested: bool, protocol: &str) -> bool {
+    requested && protocol == PROTOCOL
+}
+
+fn deliver_response<P, R>(
+    requested: bool,
+    protocol: &str,
+    publish: Option<P>,
+    resolve: R,
+) -> Result<(), &'static str>
+where
+    P: FnOnce(),
+    R: FnOnce(),
+{
+    if uses_dual_response(requested, protocol) {
+        publish.ok_or("protocol response native is unavailable")?();
+    }
+    resolve();
+    Ok(())
+}
+
 fn compute_response(method: &str, request: &str) -> String {
     let object = serde_json::from_str::<serde_json::Value>(request).ok();
     let permissions = object
@@ -120,34 +141,37 @@ fn async_handler_run(
     };
 
     type Respond = unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, *mut c_void);
-    // SAFETY: respond native was resolved from the engine library and passed into arm
+    // SAFETY: respond native was resolved from the engine library and passed into arm.
     let respond_fn: Respond = unsafe { std::mem::transmute(entry.respond as *mut c_void) };
-    unsafe {
-        respond_fn(env, class, id_ref, resp_ref);
-    }
 
-    if entry.dual {
-        if let Some(publish) = entry.publish {
-            type Publish = unsafe extern "system" fn(
-                *mut c_void,
-                *mut c_void,
-                *mut c_void,
-                *mut c_void,
-                *mut c_void,
-                i32,
-                *mut c_void,
-            );
-            // SAFETY: publish native was resolved from the engine library and passed into arm
-            let publish_fn: Publish = unsafe { std::mem::transmute(publish as *mut c_void) };
-            let Ok(proto_ref) = jnivm::new_string_ref(PROTOCOL) else {
-                return jnivm::JniValue::Void;
-            };
-            let Ok(method_ref) = jnivm::new_string_ref(entry.method) else {
-                return jnivm::JniValue::Void;
-            };
-            let Ok(telemetry_ref) = jnivm::new_string_ref("") else {
-                return jnivm::JniValue::Void;
-            };
+    type Publish = unsafe extern "system" fn(
+        *mut c_void,
+        *mut c_void,
+        *mut c_void,
+        *mut c_void,
+        *mut c_void,
+        i32,
+        *mut c_void,
+    );
+    let publish_delivery = if uses_dual_response(entry.dual, PROTOCOL) {
+        let Some(publish) = entry.publish else {
+            eprintln!("[runtime-permissions] protocol response native unavailable");
+            return jnivm::JniValue::Void;
+        };
+        let Ok(proto_ref) = jnivm::new_string_ref(PROTOCOL) else {
+            return jnivm::JniValue::Void;
+        };
+        let Ok(method_ref) = jnivm::new_string_ref(entry.method) else {
+            return jnivm::JniValue::Void;
+        };
+        let Ok(telemetry_ref) = jnivm::new_string_ref("{}") else {
+            return jnivm::JniValue::Void;
+        };
+        // SAFETY: publish native was resolved from the engine library and passed into arm.
+        let publish_fn: Publish = unsafe { std::mem::transmute(publish as *mut c_void) };
+        Some(move || {
+            // SAFETY: all references were created on this attached JNI thread and
+            // the native is the engine's registered publish method.
             unsafe {
                 publish_fn(
                     env,
@@ -159,7 +183,18 @@ fn async_handler_run(
                     telemetry_ref,
                 );
             }
-        }
+        })
+    } else {
+        None
+    };
+
+    if let Err(error) = deliver_response(entry.dual, PROTOCOL, publish_delivery, || {
+        // SAFETY: all references were created on this attached JNI thread and
+        // the native is the engine's registered async-response method.
+        unsafe { respond_fn(env, class, id_ref, resp_ref) };
+    }) {
+        eprintln!("[runtime-permissions] async response delivery failed: {error}");
+        return jnivm::JniValue::Void;
     }
 
     eprintln!(
@@ -173,6 +208,62 @@ fn async_handler_run(
     );
 
     jnivm::JniValue::Void
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{PROTOCOL, deliver_response};
+
+    #[test]
+    fn dual_permission_response_publishes_before_resolving_same_body() {
+        let events = std::cell::RefCell::new(Vec::new());
+        let body = String::from("{\"status\":\"AUTHORIZED\"}");
+        let published = body.clone();
+        let resolved = body.clone();
+
+        deliver_response(
+            true,
+            PROTOCOL,
+            Some(|| events.borrow_mut().push(("publish", published))),
+            || events.borrow_mut().push(("resolve", resolved)),
+        )
+        .unwrap();
+
+        assert_eq!(
+            *events.borrow(),
+            [("publish", body.clone()), ("resolve", body)]
+        );
+    }
+
+    #[test]
+    fn disabled_dual_response_only_resolves() {
+        let events = std::cell::RefCell::new(Vec::new());
+        deliver_response(false, PROTOCOL, None::<fn()>, || {
+            events.borrow_mut().push("resolve")
+        })
+        .unwrap();
+        assert_eq!(*events.borrow(), ["resolve"]);
+    }
+
+    #[test]
+    fn other_protocol_ignores_permission_dual_response_setting() {
+        let events = std::cell::RefCell::new(Vec::new());
+        deliver_response(true, "Linking", None::<fn()>, || {
+            events.borrow_mut().push("resolve")
+        })
+        .unwrap();
+        assert_eq!(*events.borrow(), ["resolve"]);
+    }
+
+    #[test]
+    fn requested_dual_response_without_publisher_fails_before_resolution() {
+        let events = std::cell::RefCell::new(Vec::new());
+        let result = deliver_response(true, PROTOCOL, None::<fn()>, || {
+            events.borrow_mut().push("resolve")
+        });
+        assert_eq!(result, Err("protocol response native is unavailable"));
+        assert!(events.borrow().is_empty());
+    }
 }
 
 fn arm_rust(set: *mut c_void, publish: Option<*mut c_void>, respond: *mut c_void, dual: bool) {

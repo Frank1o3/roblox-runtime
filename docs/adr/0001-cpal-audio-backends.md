@@ -1,19 +1,20 @@
-# ADR-0001: host audio backends become one cpal implementation plus a libc OSS one
+# ADR-0001: Rust host audio uses CPAL plus a dedicated OSS backend
 
-Date: 2026-11-14. Status: accepted.
+Date: 2026-11-14. Status: accepted for the Rust host-audio implementation;
+migration of the live C++ audio paths is incomplete.
 
 ## Context
 
-The runtime's host audio layer is being rewritten in Rust to remove the C++
-audio tree (`native/pipewire_backend.cpp`, `pulse_backend.cpp`,
-`alsa_backend.cpp`, `oss_backend.cpp`, and their probes). The design decision
-this ADR records was made before the rewrite and is now implemented:
+The Rust audio crate has a CPAL host path and a dedicated OSS path. The design
+decision this ADR records applies to those Rust implementations. The current
+runtime still compiles and uses C++ host audio from `crates/native-sys/native/`, so this ADR does
+not claim that those sources have been migrated or removed:
 
-- **PipeWire, PulseAudio and ALSA are one cpal-backed implementation**
+- **The Rust PipeWire, PulseAudio and ALSA host choices use the CPAL-backed
+  implementation**
   (`crates/audio/src/backend/cpal_output.rs`). cpal already wraps the three
-  host sound servers, and maintaining three hand-written client-protocol
-  implementations for one process's audio output was the dominant cost of the
-  C++ layer.
+  host sound servers. This host implementation remains distinct from OSS and
+  the Android AAudio/OpenSL paths.
 - **OSS stays a direct libc implementation** (`backend/oss.rs`): OSS has no
   client library to wrap; it is `/dev/dsp`, ioctls and `write`.
 - **Every backend hands the engine f32 frames.** Conversion to the device's
@@ -31,9 +32,11 @@ this ADR records was made before the rewrite and is now implemented:
   one-way door — FMOD never falls back once told AAudio exists — so the probe
   has to prove a stream could actually open, not that a library is present.
 
-## What is lost or weakened relative to the C++ backends
+## Differences in the Rust CPAL path relative to the C++ host backends
 
-Recorded so nobody has to rediscover these from a behavior diff:
+These are known differences if/when Rust CPAL replaces the corresponding C++
+host path. They are not a claim that the live C++ runtime has already lost this
+behavior:
 
 1. **Live default-sink following.** The C++ PipeWire/Pulse backends observed
    server events (or polled) so a *running* stream followed a change of the
@@ -64,8 +67,6 @@ Recorded so nobody has to rediscover these from a behavior diff:
   (`backend/pcm.rs`, `backend/capture.rs`, `backend/cpal_output.rs` unit
   tests). Live verification stays in examples/probes and the manual
   checklist.
-- The backend selector lives in one place (`backend/host.rs`); the
-  dlopen-based selector the C++ used is deleted rather than kept as a second
-  opinion, because two selectors answering the same question differently is
-  exactly the failure mode the old `RBX_RUNTIME_AUDIO_HOST` handling drifted
-  into.
+- The Rust backend selector lives in `backend/host.rs`. The native selector
+  remains in the C++ implementation while that path is live; remove it only
+  after callers have moved and parity is checked.

@@ -18,7 +18,7 @@
 //! unlock is implemented, and `slCreateEngine` reports honestly what is
 //! behind them.
 //!
-//! Written against `native/opensles.cpp` as a behavioral reference only. The
+//! Written against `crates/native-sys/native/opensles.cpp` as a behavioral reference only. The
 //! interface-ID rule carried over from the spec's own reading: the IDs are
 //! compared by *pointer identity*, never by their (zeroed) value bytes, so
 //! each is a distinct static and nothing here needs a real UUID.

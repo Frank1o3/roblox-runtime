@@ -26,19 +26,19 @@
 use std::cell::Cell;
 use std::collections::BTreeMap;
 use std::ffi::c_void;
+use std::sync::OnceLock as SelectionOnceLock;
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, Instant};
-use std::sync::OnceLock as SelectionOnceLock;
 
 use super::backend::{
-    capture_backend, output_backend, Capture, DECLARED_BURST_FRAMES, DECLARED_BYTES_PER_FRAME,
-    DECLARED_CAPTURE_RATE, DECLARED_CAPTURE_CHANNELS, DECLARED_RING_FRAMES,
+    Capture, DECLARED_BURST_FRAMES, DECLARED_BYTES_PER_FRAME, DECLARED_CAPTURE_CHANNELS,
+    DECLARED_CAPTURE_RATE, DECLARED_RING_FRAMES, capture_backend, output_backend,
 };
 use super::builder::{AAudioStreamDataCallback, AAudioStreamErrorCallback, StreamBuilder};
 use crate::backend::output::{FillCallback, OutputStream};
 use crate::input_callback::{DataFn, ExitFn, InputCallbackDriver, ReadFn};
-use crate::logline::{log, Priority, AUDIO_TAG};
+use crate::logline::{AUDIO_TAG, Priority, log};
 use crate::types::*;
 
 /// Opaque builder handle handed to the engine: the registry key, which is the
@@ -96,11 +96,17 @@ pub fn announce_selection() {
     log(
         Priority::Info,
         AUDIO_TAG,
-        &format!("audio backend: {name} (RBX_RUNTIME_AUDIO={requested}); {}", match selection {
-            BackendSelection::Java => "libaaudio.so is not registered and FMOD uses its Java AudioDevice path",
-            BackendSelection::AAudio => "libaaudio.so is registered and streams use the selected host audio backend",
-            BackendSelection::AAudioRefuse => "control run: AAudio is registered but every stream open is refused",
-        }),
+        &format!(
+            "audio backend: {name} (RBX_RUNTIME_AUDIO={requested}); {}",
+            match selection {
+                BackendSelection::Java =>
+                    "libaaudio.so is not registered and FMOD uses its Java AudioDevice path",
+                BackendSelection::AAudio =>
+                    "libaaudio.so is registered and streams use the selected host audio backend",
+                BackendSelection::AAudioRefuse =>
+                    "control run: AAudio is registered but every stream open is refused",
+            }
+        ),
     );
 }
 
@@ -173,7 +179,10 @@ struct Residue {
 
 impl Residue {
     const fn new() -> Self {
-        Self { buf: [0; 8], len: 0 }
+        Self {
+            buf: [0; 8],
+            len: 0,
+        }
     }
 }
 
@@ -320,7 +329,11 @@ fn format_to_bits(format: AAudioFormat) -> Option<(u32, bool)> {
 
 fn bits_to_format(bits: u32, is_float: bool) -> AAudioFormat {
     if is_float {
-        return if bits == 32 { AAUDIO_FORMAT_PCM_FLOAT } else { AAUDIO_FORMAT_INVALID };
+        return if bits == 32 {
+            AAUDIO_FORMAT_PCM_FLOAT
+        } else {
+            AAUDIO_FORMAT_INVALID
+        };
     }
     match bits {
         16 => AAUDIO_FORMAT_PCM_I16,
@@ -362,7 +375,11 @@ pub fn open_stream(
         &format!(
             "openStream requested: direction={} format={} bufferCapacity={} performanceMode={} \
              usage={} inputPreset={} dataCallback={} errorCallback={}",
-            if builder.direction == AAUDIO_DIRECTION_INPUT { "INPUT" } else { "OUTPUT" },
+            if builder.direction == AAUDIO_DIRECTION_INPUT {
+                "INPUT"
+            } else {
+                "OUTPUT"
+            },
             format_name(builder.format),
             builder.buffer_capacity_in_frames,
             builder.performance_mode,
@@ -470,7 +487,11 @@ fn open_input_stream(
             DECLARED_CAPTURE_CHANNELS,
             format_name(AAUDIO_FORMAT_PCM_I16),
             DECLARED_BURST_FRAMES,
-            if builder.data_callback.is_some() { "callback" } else { "blocking read" },
+            if builder.data_callback.is_some() {
+                "callback"
+            } else {
+                "blocking read"
+            },
         ),
     );
     if let Some(out) = out {
@@ -521,7 +542,11 @@ fn open_output_stream(
     // The user's sink, or empty for the session default. The engine cannot
     // express a device choice on this surface; the choice arrives from
     // outside the engine entirely (client settings).
-    if !output.open(bits, is_float, "roblox-runtime (Roblox via AAudio)", "", fill) {
+    if !output.open(
+        super::super::backend::OutputRequest::default_device(bits, is_float, ""),
+        "roblox-runtime (Roblox via AAudio)",
+        fill,
+    ) {
         lock(streams()).remove(&handle);
         return AAUDIO_ERROR_UNAVAILABLE;
     }
@@ -535,7 +560,11 @@ fn open_output_stream(
                  it; refusing rather than reporting a format the engine would lay its mixer out \
                  against wrongly",
                 output.sample_bits(),
-                if output.sample_is_float() { "float" } else { "integer" }
+                if output.sample_is_float() {
+                    "float"
+                } else {
+                    "integer"
+                }
             ),
         );
         output.close();
@@ -650,7 +679,11 @@ fn stop_capture(shared: &Arc<StreamShared>, to: AAudioStreamState) {
             AUDIO_TAG,
             &format!(
                 "recording {}: capture stream destroyed, not deactivated",
-                if to == AAUDIO_STREAM_STATE_PAUSED { "paused" } else { "stopped" }
+                if to == AAUDIO_STREAM_STATE_PAUSED {
+                    "paused"
+                } else {
+                    "stopped"
+                }
             ),
         );
     }
@@ -670,7 +703,9 @@ pub fn request_start(handle: StreamHandle) -> AAudioResult {
         }
         // Realtime rule: flips one atomic and touches nothing else.
         output.set_running(true);
-        shared.state.store(AAUDIO_STREAM_STATE_STARTED, Ordering::Release);
+        shared
+            .state
+            .store(AAUDIO_STREAM_STATE_STARTED, Ordering::Release);
         return AAUDIO_OK;
     }
 
@@ -702,7 +737,9 @@ pub fn request_start(handle: StreamHandle) -> AAudioResult {
     }
 
     if capture_is_open(&shared) {
-        shared.state.store(AAUDIO_STREAM_STATE_STARTED, Ordering::Release);
+        shared
+            .state
+            .store(AAUDIO_STREAM_STATE_STARTED, Ordering::Release);
         return AAUDIO_OK;
     }
 
@@ -719,19 +756,27 @@ pub fn request_start(handle: StreamHandle) -> AAudioResult {
             log(
                 Priority::Error,
                 AUDIO_TAG,
-                &format!("requestStart could not open a capture stream ({error}); staying \
+                &format!(
+                    "requestStart could not open a capture stream ({error}); staying \
                           stopped with no microphone open rather than reporting a recording that \
-                          is not happening"),
+                          is not happening"
+                ),
             );
-            shared.state.store(AAUDIO_STREAM_STATE_STOPPED, Ordering::Release);
+            shared
+                .state
+                .store(AAUDIO_STREAM_STATE_STOPPED, Ordering::Release);
             return AAUDIO_ERROR_UNAVAILABLE;
         }
     };
     *lock(&shared.capture) = Some(capture);
     reset_residue(&shared);
-    shared.state.store(AAUDIO_STREAM_STATE_STARTED, Ordering::Release);
+    shared
+        .state
+        .store(AAUDIO_STREAM_STATE_STARTED, Ordering::Release);
     if engine.data.is_some() && !start_input_driver(&shared, handle, engine) {
-        shared.state.store(AAUDIO_STREAM_STATE_STOPPED, Ordering::Release);
+        shared
+            .state
+            .store(AAUDIO_STREAM_STATE_STOPPED, Ordering::Release);
         take_capture(&shared);
         log(
             Priority::Error,
@@ -759,7 +804,9 @@ pub fn request_pause(handle: StreamHandle) -> AAudioResult {
             // Never tears down, never takes a lock that matters: silence.
             output.set_running(false);
         }
-        shared.state.store(AAUDIO_STREAM_STATE_PAUSED, Ordering::Release);
+        shared
+            .state
+            .store(AAUDIO_STREAM_STATE_PAUSED, Ordering::Release);
         return AAUDIO_OK;
     }
     if running_on_callback_thread(handle) {
@@ -779,7 +826,9 @@ pub fn request_stop(handle: StreamHandle) -> AAudioResult {
         if let Some(output) = lock(&shared.output).as_ref() {
             output.set_running(false);
         }
-        shared.state.store(AAUDIO_STREAM_STATE_STOPPED, Ordering::Release);
+        shared
+            .state
+            .store(AAUDIO_STREAM_STATE_STOPPED, Ordering::Release);
         return AAUDIO_OK;
     }
     if running_on_callback_thread(handle) {
@@ -808,7 +857,9 @@ pub fn close_stream(handle: StreamHandle) -> AAudioResult {
     }
     if shared.direction == AAUDIO_DIRECTION_INPUT {
         let _lifecycle = lock(&shared.input_lifecycle);
-        shared.state.store(AAUDIO_STREAM_STATE_CLOSED, Ordering::Release);
+        shared
+            .state
+            .store(AAUDIO_STREAM_STATE_CLOSED, Ordering::Release);
         let driver = lock(&shared.driver).take();
         if let Some(d) = driver.as_ref() {
             d.cancel();
@@ -826,7 +877,9 @@ pub fn close_stream(handle: StreamHandle) -> AAudioResult {
     // Output: drop the host stream (its owner thread joins internally), then
     // delete.
     lock(&shared.output).take();
-    shared.state.store(AAUDIO_STREAM_STATE_CLOSED, Ordering::Release);
+    shared
+        .state
+        .store(AAUDIO_STREAM_STATE_CLOSED, Ordering::Release);
     lock(streams()).remove(&handle);
     AAUDIO_OK
 }
@@ -848,7 +901,8 @@ fn start_input_driver(
         callbacks: engine,
         handle,
     };
-    let data: DataFn = Box::new(move |bytes: &mut [u8], frames: u32| deliver.deliver(bytes, frames));
+    let data: DataFn =
+        Box::new(move |bytes: &mut [u8], frames: u32| deliver.deliver(bytes, frames));
     let watch = Arc::clone(shared);
     let exited: ExitFn = Box::new(move |callback_stopped: bool| {
         // The exit hook: the capture closes on every way out of the worker,
@@ -932,7 +986,13 @@ fn disconnect_failed_input(shared: &Arc<StreamShared>, handle: StreamHandle) -> 
         if let Some(error) = engine.error {
             // SAFETY: the engine's error callback receives the stream handle
             // it opened and its own user_data, per the AAudio contract.
-            unsafe { error(handle as *mut c_void, engine.user, AAUDIO_ERROR_DISCONNECTED) };
+            unsafe {
+                error(
+                    handle as *mut c_void,
+                    engine.user,
+                    AAUDIO_ERROR_DISCONNECTED,
+                )
+            };
         }
     }
     true
@@ -1042,7 +1102,8 @@ pub fn read_stream(
         len
     };
 
-    let deadline = (timeout_nanoseconds > 0).then(|| Instant::now() + Duration::from_nanos(timeout_nanoseconds as u64));
+    let deadline = (timeout_nanoseconds > 0)
+        .then(|| Instant::now() + Duration::from_nanos(timeout_nanoseconds as u64));
     loop {
         let n = {
             let mut capture = lock(&shared.capture);
@@ -1063,7 +1124,9 @@ pub fn read_stream(
         }
         // A millisecond, or whatever is left of the timeout if that is less.
         let remaining = deadline.map_or(1_000_000, |d| {
-            d.saturating_duration_since(Instant::now()).as_nanos().min(1_000_000) as u64
+            d.saturating_duration_since(Instant::now())
+                .as_nanos()
+                .min(1_000_000) as u64
         });
         std::thread::sleep(Duration::from_nanos(remaining.max(1)));
     }
@@ -1090,7 +1153,9 @@ pub fn read_stream(
 // ---------------------------------------------------------------------------
 
 pub fn get_state(handle: StreamHandle) -> AAudioStreamState {
-    stream_for(handle).map_or(AAUDIO_STREAM_STATE_CLOSED, |s| s.state.load(Ordering::Acquire))
+    stream_for(handle).map_or(AAUDIO_STREAM_STATE_CLOSED, |s| {
+        s.state.load(Ordering::Acquire)
+    })
 }
 
 pub fn get_sample_rate(handle: StreamHandle) -> i32 {
@@ -1100,7 +1165,9 @@ pub fn get_sample_rate(handle: StreamHandle) -> i32 {
     if shared.direction == AAUDIO_DIRECTION_INPUT {
         return DECLARED_CAPTURE_RATE as i32;
     }
-    lock(&shared.output).as_ref().map_or(0, |o| o.rate_hz() as i32)
+    lock(&shared.output)
+        .as_ref()
+        .map_or(0, |o| o.rate_hz() as i32)
 }
 
 pub fn get_channel_count(handle: StreamHandle) -> i32 {
@@ -1110,7 +1177,9 @@ pub fn get_channel_count(handle: StreamHandle) -> i32 {
     if shared.direction == AAUDIO_DIRECTION_INPUT {
         return DECLARED_CAPTURE_CHANNELS as i32;
     }
-    lock(&shared.output).as_ref().map_or(0, |o| o.channels() as i32)
+    lock(&shared.output)
+        .as_ref()
+        .map_or(0, |o| o.channels() as i32)
 }
 
 pub fn get_format(handle: StreamHandle) -> AAudioFormat {
@@ -1124,7 +1193,9 @@ pub fn get_frames_per_burst(handle: StreamHandle) -> i32 {
     if shared.direction == AAUDIO_DIRECTION_INPUT {
         return DECLARED_BURST_FRAMES as i32;
     }
-    lock(&shared.output).as_ref().map_or(0, |o| o.burst_frames() as i32)
+    lock(&shared.output)
+        .as_ref()
+        .map_or(0, |o| o.burst_frames() as i32)
 }
 
 /// On output, capacity and size are both the burst, and that is the truth
@@ -1177,10 +1248,14 @@ pub fn get_xrun_count(handle: StreamHandle) -> i32 {
         return 0;
     };
     let count = if shared.direction == AAUDIO_DIRECTION_INPUT {
-        lock(&shared.capture).as_ref().map_or(0, |c| c.dropped_bytes())
+        lock(&shared.capture)
+            .as_ref()
+            .map_or(0, |c| c.dropped_bytes())
             / u64::from(DECLARED_BYTES_PER_FRAME)
     } else {
-        lock(&shared.output).as_ref().map_or(0, |o| o.silence_cycles())
+        lock(&shared.output)
+            .as_ref()
+            .map_or(0, |o| o.silence_cycles())
     };
     count.min(i32::MAX as u64) as i32
 }
@@ -1202,11 +1277,15 @@ pub fn supports_aaudio() -> bool {
 pub fn announce_backend() {
     let asked = crate::backend::host_backend_name();
     let got = crate::backend::effective_backend_name();
-    log(Priority::Info, AUDIO_TAG, &format!("host audio device: {got} (RBX_RUNTIME_AUDIO_HOST={asked})"));
+    log(
+        Priority::Info,
+        AUDIO_TAG,
+        &format!("host audio device: {got} (RBX_RUNTIME_AUDIO_HOST={asked})"),
+    );
 }
 
 // ---------------------------------------------------------------------------
-// Tests: the twelve contract checks, ported from native/aaudio_input_test.cpp
+// Tests: the twelve contract checks, ported from crates/native-sys/native/aaudio_input_test.cpp
 // against a fake backend installed through the same seams the real one uses.
 // They share one process-global surface, so they serialize on a mutex and run
 // in a fixed order, like the C++ main does.
@@ -1216,8 +1295,8 @@ pub fn announce_backend() {
 mod tests {
     use super::*;
     use crate::backend::capture::CaptureOpenError;
-    use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, AtomicU64};
     use std::sync::Condvar;
+    use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, AtomicU64};
 
     /// Serializes the twelve scenarios: the surface is process-global and the
     /// fake capture counts are too.
@@ -1287,7 +1366,7 @@ mod tests {
     struct FakeOutputStream;
 
     impl OutputStream for FakeOutputStream {
-        fn open(&mut self, _: u32, _: bool, _: &str, _: &str, _: FillCallback) -> bool {
+        fn open(&mut self, _: crate::backend::OutputRequest, _: &str, _: FillCallback) -> bool {
             false
         }
         fn close(&mut self) {}
@@ -1405,7 +1484,8 @@ mod tests {
         // SAFETY: `audio` is the engine's own interleaved s16 buffer for
         // `frames` frames, exactly as the data callback contract delivers
         // it; only its bytes are read here.
-        let bytes = unsafe { std::slice::from_raw_parts(audio as *const u8, (frames * 2) as usize) };
+        let bytes =
+            unsafe { std::slice::from_raw_parts(audio as *const u8, (frames * 2) as usize) };
         let mut inner = state.inner.lock().unwrap_or_else(|p| p.into_inner());
         inner.calls += 1;
         let call = inner.calls;
@@ -1417,7 +1497,11 @@ mod tests {
             }
         }
         inner.frames = frames;
-        inner.bytes_match = if call == 1 { match_bytes } else { inner.bytes_match && match_bytes };
+        inner.bytes_match = if call == 1 {
+            match_bytes
+        } else {
+            inner.bytes_match && match_bytes
+        };
         inner.request_result = request_result;
         state.changed.notify_all();
         if inner.wait_after_request {
@@ -1485,11 +1569,7 @@ mod tests {
         let builder = create_stream_builder();
         builder_set_direction(builder, AAUDIO_DIRECTION_INPUT);
         if let Some(state) = callback {
-            builder_set_data_callback(
-                builder,
-                Some(receive),
-                Arc::as_ptr(state) as *mut c_void,
-            );
+            builder_set_data_callback(builder, Some(receive), Arc::as_ptr(state) as *mut c_void);
             builder_set_error_callback(
                 builder,
                 Some(receive_error),

@@ -7,6 +7,8 @@
     version.workspace=true
 
 [dependencies]
+    libc.workspace=true
+    roblox-android.workspace=true
     roblox-audio.workspace=true
     roblox-native-sys.workspace=true
     roblox-logging.workspace=true

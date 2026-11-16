@@ -24,8 +24,8 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use super::backend::output_factory;
 use super::log_opensl;
-use crate::backend::output::{FillCallback, OutputStream};
-use crate::backend::pcm::{fill_pcm, PendingBuffer};
+use crate::backend::output::{FillCallback, OutputRequest, OutputStream};
+use crate::backend::pcm::{PendingBuffer, fill_pcm};
 use crate::logline::Priority;
 use crate::types::*;
 
@@ -211,7 +211,10 @@ impl PlayerShared {
         if self.channels == 0 || self.channels > 64 {
             log_opensl(
                 Priority::Error,
-                &format!("unsupported channel count {}; no audio for this player", self.channels),
+                &format!(
+                    "unsupported channel count {}; no audio for this player",
+                    self.channels
+                ),
             );
             return SL_RESULT_CONTENT_UNSUPPORTED;
         }
@@ -232,20 +235,24 @@ impl PlayerShared {
             // buffer-queue interface pointer.
             token: Arc::as_ptr(self) as usize,
         };
-        let fill: FillCallback = Box::new(move |dst: &mut [f32], frames: u32| {
-            fill_state.render(dst, frames)
-        });
+        let fill: FillCallback =
+            Box::new(move |dst: &mut [f32], frames: u32| fill_state.render(dst, frames));
         if !output.open(
-            self.bits_per_sample,
-            false,
+            OutputRequest {
+                sample_rate: Some(self.rate_hz),
+                channels: Some(self.channels),
+                sample_bits: self.bits_per_sample,
+                sample_is_float: false,
+                target: String::new(),
+            },
             "roblox-runtime (Roblox via OpenSL ES)",
-            "",
             fill,
         ) {
             return SL_RESULT_CONTENT_UNSUPPORTED;
         }
         *lock(&self.output) = Some(output);
-        self.state.store(SL_OBJECT_STATE_REALIZED, Ordering::Release);
+        self.state
+            .store(SL_OBJECT_STATE_REALIZED, Ordering::Release);
         SL_RESULT_SUCCESS
     }
 
@@ -285,9 +292,11 @@ impl PlayerShared {
         if let Some(output) = output.as_mut() {
             output.close();
         }
-        self.play_state.store(SL_PLAYSTATE_STOPPED, Ordering::Release);
+        self.play_state
+            .store(SL_PLAYSTATE_STOPPED, Ordering::Release);
         lock(&self.queue).0.clear();
-        self.state.store(SL_OBJECT_STATE_UNREALIZED, Ordering::Release);
+        self.state
+            .store(SL_OBJECT_STATE_UNREALIZED, Ordering::Release);
         super::remove_player(Arc::as_ptr(&self) as usize);
         SL_RESULT_SUCCESS
     }
@@ -358,7 +367,11 @@ impl PlayerShared {
     /// Accepted; the events it configures structurally never occur, and
     /// registering interest in one is not the same claim as promising it
     /// will fire.
-    pub fn register_play_callback(&self, _callback: *mut c_void, _context: *mut c_void) -> SLresult {
+    pub fn register_play_callback(
+        &self,
+        _callback: *mut c_void,
+        _context: *mut c_void,
+    ) -> SLresult {
         SL_RESULT_SUCCESS
     }
 
@@ -486,7 +499,8 @@ impl PlayerShared {
         } else {
             10.0f32.powf(level as f32 / 2000.0)
         };
-        self.volume_linear.store(linear.to_bits(), Ordering::Release);
+        self.volume_linear
+            .store(linear.to_bits(), Ordering::Release);
         SL_RESULT_SUCCESS
     }
 
@@ -516,7 +530,8 @@ impl PlayerShared {
     }
 
     pub fn set_mute(&self, mute: SLboolean) -> SLresult {
-        self.muted.store(mute != SL_BOOLEAN_FALSE, Ordering::Release);
+        self.muted
+            .store(mute != SL_BOOLEAN_FALSE, Ordering::Release);
         SL_RESULT_SUCCESS
     }
 
@@ -656,7 +671,11 @@ impl PlayerFillState {
         self.drained.0.clear();
         {
             let mut queue = lock(&self.queue);
-            fill_pcm(&mut queue.0, &mut self.scratch[..want_bytes], &mut self.drained.0);
+            fill_pcm(
+                &mut queue.0,
+                &mut self.scratch[..want_bytes],
+                &mut self.drained.0,
+            );
         }
         let linear = f32::from_bits(self.volume_linear.load(Ordering::Relaxed));
         for (sample, out) in dst.iter_mut().enumerate() {

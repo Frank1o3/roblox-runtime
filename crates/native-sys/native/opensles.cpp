@@ -16,10 +16,9 @@
 //
 //     cannot locate symbol "SL_IID_ENGINE" referenced by "libroblox.so"
 //
-// This file used to stop there: it provided the symbols so the library
-// linked, and `slCreateEngine` reported failure — the honest answer for a
-// host with no OpenSL implementation behind it. That gap is now filled for
-// the one path Roblox's Android build actually exercises: an engine, one
+// The Rust ABI crate now provides the seven pointer-valued IID data symbols.
+// This file provides `slCreateEngine` and the native object/vtable behavior
+// for the one path Roblox's Android build actually exercises: an engine, one
 // output mix, and audio players sourced from an
 // `SL_DATALOCATOR_ANDROIDSIMPLEBUFFERQUEUE`/`SLDataFormat_PCM` pair, pushed
 // to PipeWire through `pipewire_backend.h`. `slCreateEngine` still reports
@@ -410,15 +409,9 @@ struct SLEngineItf_ {
                                       SLboolean* pSupported);
 };
 
-// ----------------------------------------------------------------- IID globals
-
-InterfaceID g_engine{};
-InterfaceID g_play{};
-InterfaceID g_record{};
-InterfaceID g_volume{};
-InterfaceID g_buffer_queue{};
-InterfaceID g_android_simple_buffer_queue{};
-InterfaceID g_android_configuration{};
+// ------------------------------------------------------ Rust-owned IID globals
+// The pointer-valued `SL_IID_*` data exports are defined in `roblox-abi`.
+// This file keeps only the private OutputMix IID, which is not an engine import.
 // Not exported: Roblox never references SL_IID_OUTPUTMIX as a linked symbol
 // (see the eight-symbol list in the file header, which does not include it),
 // so nothing outside this file can ever hold this pointer to compare against
@@ -429,13 +422,13 @@ InterfaceID g_output_mix{};
 } // namespace
 
 extern "C" {
-InterfaceID* SL_IID_ENGINE = &g_engine;
-InterfaceID* SL_IID_PLAY = &g_play;
-InterfaceID* SL_IID_RECORD = &g_record;
-InterfaceID* SL_IID_VOLUME = &g_volume;
-InterfaceID* SL_IID_BUFFERQUEUE = &g_buffer_queue;
-InterfaceID* SL_IID_ANDROIDSIMPLEBUFFERQUEUE = &g_android_simple_buffer_queue;
-InterfaceID* SL_IID_ANDROIDCONFIGURATION = &g_android_configuration;
+extern InterfaceID* SL_IID_ENGINE;
+extern InterfaceID* SL_IID_PLAY;
+extern InterfaceID* SL_IID_RECORD;
+extern InterfaceID* SL_IID_VOLUME;
+extern InterfaceID* SL_IID_BUFFERQUEUE;
+extern InterfaceID* SL_IID_ANDROIDSIMPLEBUFFERQUEUE;
+extern InterfaceID* SL_IID_ANDROIDCONFIGURATION;
 } // extern "C"
 
 namespace {
@@ -1629,27 +1622,6 @@ uint32_t slCreateEngine(void** engine, uint32_t numOptions, const void* pEngineO
     e->engineVtable = &kEngineMethods;
     *engine = const_cast<void*>(static_cast<const void*>(&e->objectVtable));
     return SL_RESULT_SUCCESS;
-}
-
-struct RuntimeSymbol {
-    const char* name;
-    void* address;
-};
-
-static const RuntimeSymbol kSymbols[] = {
-    {"slCreateEngine", reinterpret_cast<void*>(&slCreateEngine)},
-    {"SL_IID_ENGINE", &SL_IID_ENGINE},
-    {"SL_IID_PLAY", &SL_IID_PLAY},
-    {"SL_IID_RECORD", &SL_IID_RECORD},
-    {"SL_IID_VOLUME", &SL_IID_VOLUME},
-    {"SL_IID_BUFFERQUEUE", &SL_IID_BUFFERQUEUE},
-    {"SL_IID_ANDROIDSIMPLEBUFFERQUEUE", &SL_IID_ANDROIDSIMPLEBUFFERQUEUE},
-    {"SL_IID_ANDROIDCONFIGURATION", &SL_IID_ANDROIDCONFIGURATION},
-};
-
-const RuntimeSymbol* roblox_opensles_symbols(size_t* count) {
-    if (count) *count = sizeof(kSymbols) / sizeof(kSymbols[0]);
-    return kSymbols;
 }
 
 } // extern "C"

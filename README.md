@@ -10,13 +10,12 @@ client files, data/cache locations, settings, Fast Flags and the host window.
 
 ## Status
 
-**Functional.**
+**Runs, with native migration and shutdown work remaining.**
 
-The runtime is now capable of running the Roblox Android client natively on
-Linux through `rusty-blox`. The runtime has working paths for native library
-loading, Android compatibility, JNI/GameActivity integration, filesystem setup,
-threading primitives, graphics integration and the host-side services Roblox
-expects.
+The release build has been manually observed loading and running an experience
+through `rusty-blox` (details and limits below). The runtime still compiles
+project-owned C++ compatibility code for ABI symbols, Java hooks, audio, and a
+companion JNI VM. It is not yet a Rust-only implementation.
 
 The runtime is designed as an embeddable component rather than a standalone
 launcher. It does not download or discover Roblox builds itself; the embedding
@@ -37,10 +36,11 @@ the available log does not establish whether those messages are related to the
 shutdown crash. Clean shutdown remains unverified and should be treated as a
 known runtime limitation.
 
-The active engine loader is the Rust ELF mapper in `crates/linker`, and the
-runtime creates its JavaVM with the pure-Rust `jnivm` crate. Android class hooks
-and GameActivity drivers still use the native compatibility layer while their
-Rust implementations are completed.
+The active engine loader is the Rust ELF mapper in `crates/linker`. The primary
+JavaVM, Rust hooks, and `JNI_OnLoad` path use `crates/jnivm`, while the native
+compatibility bridge still creates a companion VM and owns many Android,
+GameActivity, service, and audio hooks. The two VM paths have not yet been
+consolidated.
 
 ## Architecture
 
@@ -93,8 +93,10 @@ implementations, selected host libraries, or explicit compatibility stubs.
 The `jni` crate provides the JNI and GameActivity bridge used by the Roblox
 client.
 
-The `jnivm` crate contains an in-progress pure-Rust JNI VM. It is opt-in and
-does not silently replace the working native compatibility path.
+The `jnivm` crate owns the JavaVM used by the runtime startup and `JNI_OnLoad`
+path. The native bridge still builds and runs a companion libjnivm VM for
+unported hooks and callback drivers; hook registration and object state are
+therefore not yet single-VM end to end.
 
 ### Graphics
 
@@ -147,12 +149,12 @@ The runtime deliberately does not own APK discovery or application UI.
 
 ## Building
 
-Requirements:
+Requirements for the current build (the Rust-only target is not complete):
 
 - recent stable Rust
 - Clang/Clang++
 - CMake
-- initialized Git submodules
+- initialized Git submodules, including `third_party/libjnivm`
 
 Initialize the native dependencies and check the workspace:
 
@@ -164,7 +166,7 @@ For a release build:
     cargo build --release
 
 The release profile keeps debug information enabled because the runtime operates
-at the native/ABI boundary and is substantially easier to diagnose with symbols.
+at the crates/native-sys/native/ABI boundary and is substantially easier to diagnose with symbols.
 
 ## Runtime options
 

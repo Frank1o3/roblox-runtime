@@ -46,7 +46,7 @@
 //!
 //! Every optional field below is `None`, not a manufactured number, when this
 //! machine's kernel driver does not expose the sysfs node that would answer it
-//! — `native/opensles.cpp` reporting `SL_RESULT_FEATURE_UNSUPPORTED` rather than
+//! — `crates/native-sys/native/opensles.cpp` reporting `SL_RESULT_FEATURE_UNSUPPORTED` rather than
 //! handing back a dead engine object is the same principle applied to audio.
 //! A desktop with no battery gets `Reading { battery: None, .. }`, not a battery
 //! reported as present, full, and on mains. `state_changed_args` returns `None`

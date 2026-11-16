@@ -107,13 +107,13 @@ pub fn record(kind: Kind, detail: impl Into<String>) {
 /// **Naming the value matters more than naming the method.** "Not implemented"
 /// tells the reader nothing they could act on; "returned an empty string for the
 /// installer package name" tells them exactly which answer the engine then
-/// reasoned from, which is the thing that goes wrong. `native/opensles.cpp`
+/// reasoned from, which is the thing that goes wrong. `crates/native-sys/native/opensles.cpp`
 /// makes the same argument for why a stub reports failure rather than success.
 pub fn placeholder(what: &str, returned: &str) {
     record(Kind::Placeholder, format!("{what} -> {returned}"));
 }
 
-/// The C entry point, for `native/`.
+/// The C entry point, for `crates/native-sys/native/`.
 ///
 /// # Safety
 /// `detail` must be a NUL-terminated C string valid for the duration of the
@@ -281,7 +281,7 @@ mod tests {
     fn a_placeholder_records_what_it_returned_not_just_that_it_failed() {
         // "Not implemented" is not actionable. The value handed back is what the
         // engine then reasons from, so it is the thing worth writing down -- the
-        // same argument `native/opensles.cpp` makes for reporting failure rather
+        // same argument `crates/native-sys/native/opensles.cpp` makes for reporting failure rather
         // than returning a dead object.
         let text = render_from(&map(&[(
             Kind::Placeholder,

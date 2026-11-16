@@ -1,4 +1,4 @@
-# Remaining work: remove project-owned C++ from Rusty Blox
+# Remaining work: reduce native code and contain justified shims
 
 Complete the migration across both repositories:
 
@@ -6,11 +6,14 @@ Complete the migration across both repositories:
   path/submodule dependency.
 - **Client:** the parent `rusty-blox` repository.
 
-The acceptance goal is that building either project does not compile or link
-project-owned C or C++ source. Runtime functionality must be implemented in
-Rust and preserve the public `roblox_runtime` APIs used by the client. System
-libraries and Rust dependencies may still contain their own native code; record
-those separately and do not describe them as project-owned C++.
+The goal is to move behavior into Rust where doing so reduces unsafe code and
+improves ownership, without forcing a Rust port across ABI boundaries that are
+safer or more correct to retain as small native shims. Preserve the public
+`roblox_runtime` APIs used by the client. Keep any remaining project-owned C or
+C++ sources, headers, and CMake rules together under `crates/native-sys/`; do
+not scatter native implementation files through the workspace. Record why each
+retained shim remains and what would be required to remove it. System libraries
+and Rust dependencies may also contain native code; track those separately.
 
 Treat the checked-out source, build scripts, and manifests as authoritative.
 `docs/porting-plan.md` and `docs/client-migration.md` are useful inventories,
@@ -25,13 +28,13 @@ symbol callers, runtime reachability, APK descriptors, and tests first.
   `roblox-framework` crate has been removed; shared Android system paths now
   live in `crates/android`.
 - Accessibility hooks and battery JNI object/report helpers have Rust
-  implementations. `native/accessibility.cpp` and `native/battery.cpp` have
+  implementations. `crates/native-sys/native/accessibility.cpp` and `crates/native-sys/native/battery.cpp` have
   been removed. Battery readings are shared from `crates/android` and the
   reporting natives remain unobserved with no known caller; do not invent a
   caller or claim they were exercised.
 - The Rust VM owns JavaVM creation, thread environments, and `JNI_OnLoad`, but
   the C++ compatibility shim and `third_party/libjnivm` remain. Other native
-  Android/Roblox hooks and C ABI tables remain in `native/`.
+  Android/Roblox hooks and C ABI tables remain in `crates/native-sys/native/`.
 - AAudio, its Rust callback path, and portions of audio policy are already in
   Rust. OpenSL symbols/backend and Java audio hooks still require inventory and
   migration. Preserve the existing CPAL host paths, OSS backend, and Android
@@ -69,7 +72,7 @@ symbol table before removing any of them. Keep the checklist in
 `docs/porting-plan.md`; fix stale completion claims and mark each item
 `verified`, `ported`, `unused and removed`, or `blocked` with evidence.
 
-### 2. Finish the audio subsystem migration
+### 2. Port sensible audio behavior into Rust
 
 Use `crates/audio` as the owner. Port and wire the remaining OpenSL ES ABI/data
 symbols and Java audio hooks, then remove their C++ implementations. Verify
@@ -152,15 +155,14 @@ files and runtime callers. Port any live behavior to Rust or remove the code if
 it is genuinely unused. Do not delete merely because a previous note called it
 unused; prove that no build or runtime path consumes it.
 
-### 7. Remove native build infrastructure from the runtime
+### 7. Contain and minimize native build infrastructure
 
-Only after every live target above has a Rust replacement or has been proven
-unused, remove `native/`, runtime `third_party/` native dependencies,
-`crates/native-sys`, CMake build scripts and dependencies, native link directives,
-and obsolete submodule entries. Remove the `cmake` workspace dependency and any
-unused `cc`/C++ toolchain requirements. Update README installation/build
-requirements and CI so a clean runtime build needs no project C/C++ compiler or
-CMake.
+Port or remove native targets where behavior has a sound Rust replacement or
+is proven unused. Keep justified compatibility shims under
+`crates/native-sys/native/`, with CMake driven only by
+`crates/native-sys/build.rs`. Do not claim the runtime or client is free of
+project-owned native code while those targets remain. Remove unused dependencies
+and document build requirements from the verified graph.
 
 ### 8. Audit and finish the Rusty Blox client
 
@@ -172,20 +174,20 @@ or require CMake due to the runtime. Keep Rusty Blox on the stable
 and client CI/package instructions. Distinguish a Rust crate's upstream native
 build or host system dependency from C++ source owned by either repository.
 
-### 9. Final clean-tree acceptance gate
+### 9. Final source and build-graph acceptance gate
 
 Run from clean checkouts of both repositories. The task is complete only when:
 
-- runtime and client build/test commands pass without CMake or project-owned
-  C/C++ compilation;
+- runtime and client build/test commands pass, including the contained native
+  build where it remains required;
 - all native compatibility behavior still used by the APK is owned by Rust and
   has focused tests or recorded manual evidence;
 - the runtime uses one Rust VM and preserves the public client facade;
-- no runtime-owned C/C++ source, CMake target, native build crate, obsolete
-  submodule, or dead native file remains;
+- every remaining runtime-owned C/C++ file is under `crates/native-sys/`, is
+  reachable and justified, and has a documented removal path or reason to keep;
 - the client build graph contains no project-owned C/C++ target;
-- scoped searches for C/C++ extensions, JNI C++ headers/types, native build
-  tools, and old bridge symbols have no unexplained matches;
+- scoped searches for native files/build rules and old bridge symbols have no
+  unexplained matches;
 - `README.md`, `docs/porting-plan.md`, `docs/client-migration.md`, crate READMEs,
   and CI instructions agree with the checked-in implementation.
 

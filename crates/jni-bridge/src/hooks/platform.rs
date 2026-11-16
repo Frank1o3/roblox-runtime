@@ -627,12 +627,189 @@ fn fmod_audio_device_create(
     _receiver: Option<jnivm::ObjectId>,
     _args: &[JniValue],
 ) -> JniValue {
-    new_opaque_local(vm, "org/fmod/AudioDevice")
+    let value = new_opaque_local(vm, "org/fmod/AudioDevice");
+    if let JniValue::Object(Some(object)) = value {
+        fmod_devices()
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .insert(
+                (vm as *const Vm as usize, object),
+                std::sync::Arc::new(FmodAudioDevice::default()),
+            );
+        JniValue::Object(Some(object))
+    } else {
+        value
+    }
+}
+
+const FMOD_MAX_CALLBACK_BYTES: usize = 1 << 20;
+const FMOD_WRITE_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(500);
+
+#[derive(Default)]
+struct FmodAudioDevice {
+    lifecycle: Mutex<()>,
+    active: Mutex<Option<FmodActiveOutput>>,
+}
+
+struct FmodActiveOutput {
+    queue: std::sync::Arc<roblox_audio::backend::owned_pcm_queue::OwnedPcmQueue>,
+    output: Box<dyn roblox_audio::backend::output::OutputStream>,
+}
+
+type FmodDeviceKey = (usize, jnivm::ObjectId);
+
+fn fmod_devices() -> &'static Mutex<HashMap<FmodDeviceKey, std::sync::Arc<FmodAudioDevice>>> {
+    static DEVICES: OnceLock<Mutex<HashMap<FmodDeviceKey, std::sync::Arc<FmodAudioDevice>>>> =
+        OnceLock::new();
+    DEVICES.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn fmod_device(
+    vm: &Vm,
+    receiver: Option<jnivm::ObjectId>,
+) -> Option<std::sync::Arc<FmodAudioDevice>> {
+    let receiver = receiver?;
+    fmod_devices()
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .get(&(vm as *const Vm as usize, receiver))
+        .cloned()
+}
+
+fn render_fmod_pcm(
+    queue: &roblox_audio::backend::owned_pcm_queue::OwnedPcmQueue,
+    scratch: &mut [u8],
+    output: &mut [f32],
+) -> bool {
+    output.fill(0.0);
+    let Some(byte_count) = output.len().checked_mul(2) else {
+        return true;
+    };
+    if byte_count > scratch.len() {
+        return true;
+    }
+    let bytes = &mut scratch[..byte_count];
+    bytes.fill(0);
+    let copied = queue.try_copy(bytes);
+    for (sample, pair) in output
+        .iter_mut()
+        .zip(bytes[..copied - copied % 2].chunks_exact(2))
+    {
+        *sample = f32::from(i16::from_le_bytes([pair[0], pair[1]])) / 32768.0;
+    }
+    true
+}
+
+impl FmodAudioDevice {
+    fn close(&self) {
+        let _lifecycle = self.lifecycle.lock().unwrap_or_else(|p| p.into_inner());
+        let active = self.active.lock().unwrap_or_else(|p| p.into_inner()).take();
+        if let Some(mut active) = active {
+            // Closing first cancels blocked Java writers; stream teardown is
+            // outside the active-state lock so the callback can finish.
+            active.queue.close();
+            active.output.close();
+        }
+    }
+
+    fn init(&self, channels: i32, rate: i32, buffer_frames: i32, buffer_count: i32) -> bool {
+        let _lifecycle = self.lifecycle.lock().unwrap_or_else(|p| p.into_inner());
+        self.close_active();
+        if !(1..=8).contains(&channels)
+            || !(8_000..=192_000).contains(&rate)
+            || buffer_frames <= 0
+            || buffer_count > 1024
+        {
+            return false;
+        }
+        let depth = if buffer_count > 0 {
+            buffer_count as usize
+        } else {
+            4
+        };
+        let queue = std::sync::Arc::new(
+            roblox_audio::backend::owned_pcm_queue::OwnedPcmQueue::new(depth),
+        );
+        let mut output = roblox_audio::backend::make_output_stream();
+        let callback_queue = std::sync::Arc::clone(&queue);
+        let mut scratch = vec![0u8; FMOD_MAX_CALLBACK_BYTES];
+        let request = roblox_audio::backend::OutputRequest {
+            sample_rate: Some(rate as u32),
+            channels: Some(channels as u32),
+            sample_bits: 16,
+            sample_is_float: false,
+            target: String::new(),
+        };
+        if !output.open(
+            request,
+            "roblox-runtime (Roblox FMOD Java AudioDevice)",
+            Box::new(move |dst, _frames| render_fmod_pcm(&callback_queue, &mut scratch, dst)),
+        ) {
+            queue.close();
+            return false;
+        }
+        if output.rate_hz() != rate as u32 || output.channels() != channels as u32 {
+            queue.close();
+            output.close();
+            return false;
+        }
+        output.set_running(true);
+        *self.active.lock().unwrap_or_else(|p| p.into_inner()) =
+            Some(FmodActiveOutput { queue, output });
+        true
+    }
+
+    fn close_active(&self) {
+        let active = self.active.lock().unwrap_or_else(|p| p.into_inner()).take();
+        if let Some(mut active) = active {
+            active.queue.close();
+            active.output.close();
+        }
+    }
+
+    fn write(&self, bytes: Vec<u8>) {
+        if bytes.is_empty() {
+            return;
+        }
+        let Some(queue) = self
+            .active
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .as_ref()
+            .map(|active| std::sync::Arc::clone(&active.queue))
+        else {
+            return;
+        };
+        let deadline = std::time::Instant::now() + FMOD_WRITE_TIMEOUT;
+        let mut bytes = bytes;
+        loop {
+            while queue.take_reclaimed().is_some() {}
+            let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+            if remaining.is_zero() {
+                break;
+            }
+            let wait = remaining.min(std::time::Duration::from_millis(10));
+            match queue.push(bytes, wait) {
+                Ok(()) => return,
+                Err((roblox_audio::backend::owned_pcm_queue::PushError::TimedOut, returned)) => {
+                    bytes = returned;
+                }
+                Err((roblox_audio::backend::owned_pcm_queue::PushError::Closed, _))
+                | Err((roblox_audio::backend::owned_pcm_queue::PushError::Empty, _)) => return,
+            }
+        }
+    }
+}
+
+impl Drop for FmodAudioDevice {
+    fn drop(&mut self) {
+        self.close_active();
+    }
 }
 
 fn fmod_audio_device_init(
     _vm: &Vm,
-    _receiver: Option<jnivm::ObjectId>,
+    receiver: Option<jnivm::ObjectId>,
     args: &[JniValue],
 ) -> JniValue {
     let channels = match args.first() {
@@ -643,27 +820,98 @@ fn fmod_audio_device_init(
         Some(JniValue::Int(value)) => *value,
         _ => 0,
     };
-    eprintln!(
-        "[jnivm] FMOD Java AudioDevice sink is unavailable in this VM (channels={channels}, rate={rate}); AAudio should be selected when supported"
-    );
-    JniValue::Boolean(false)
+    let buffer_frames = match args.get(2) {
+        Some(JniValue::Int(value)) => *value,
+        _ => 0,
+    };
+    let buffer_count = match args.get(3) {
+        Some(JniValue::Int(value)) => *value,
+        _ => 0,
+    };
+    let started = fmod_device(_vm, receiver)
+        .is_some_and(|device| device.init(channels, rate, buffer_frames, buffer_count));
+    JniValue::Boolean(started)
 }
 
 fn fmod_audio_device_write(
-    _vm: &Vm,
-    _receiver: Option<jnivm::ObjectId>,
-    _args: &[JniValue],
+    vm: &Vm,
+    receiver: Option<jnivm::ObjectId>,
+    args: &[JniValue],
 ) -> JniValue {
-    // `init` refuses this Java fallback, so there is no active sink to write.
+    let Some(device) = fmod_device(vm, receiver) else {
+        return JniValue::Void;
+    };
+    let (Some(JniValue::Object(Some(array))), Some(JniValue::Int(length))) =
+        (args.first(), args.get(1))
+    else {
+        return JniValue::Void;
+    };
+    if *length <= 0 {
+        return JniValue::Void;
+    }
+    let env = attached_thread_env(vm);
+    let Ok(ObjectValue::ByteArray(array_bytes)) = vm.object_value(&env, *array) else {
+        return JniValue::Void;
+    };
+    let length = (*length as usize).min(array_bytes.len());
+    let bytes = array_bytes[..length]
+        .iter()
+        .map(|byte| *byte as u8)
+        .collect();
+    device.write(bytes);
     JniValue::Void
 }
 
 fn fmod_audio_device_close(
-    _vm: &Vm,
-    _receiver: Option<jnivm::ObjectId>,
+    vm: &Vm,
+    receiver: Option<jnivm::ObjectId>,
     _args: &[JniValue],
 ) -> JniValue {
+    if let Some(receiver) = receiver {
+        if let Some(device) = fmod_devices()
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .remove(&(vm as *const Vm as usize, receiver))
+        {
+            device.close();
+        }
+    }
     JniValue::Void
+}
+
+#[cfg(test)]
+mod fmod_audio_device_tests {
+    use super::*;
+
+    #[test]
+    fn render_converts_owned_pcm_and_reclaims_off_the_callback_path() {
+        let queue = roblox_audio::backend::owned_pcm_queue::OwnedPcmQueue::new(2);
+        queue
+            .push(vec![0x00, 0x40, 0x00, 0xC0], std::time::Duration::ZERO)
+            .unwrap();
+        let mut scratch = [0u8; 8];
+        let mut output = [1.0f32; 4];
+        assert!(render_fmod_pcm(&queue, &mut scratch, &mut output));
+        assert_eq!(output, [0.5, -0.5, 0.0, 0.0]);
+        assert_eq!(queue.take_reclaimed().unwrap(), [0x00, 0x40, 0x00, 0xC0]);
+    }
+
+    #[test]
+    fn render_preserves_partial_pcm_chunks_between_host_callbacks() {
+        let queue = roblox_audio::backend::owned_pcm_queue::OwnedPcmQueue::new(1);
+        queue
+            .push(vec![0x00, 0x40, 0x00, 0xC0], std::time::Duration::ZERO)
+            .unwrap();
+        let mut scratch = [0u8; 2];
+        let mut first = [0.0f32; 1];
+        let mut second = [0.0f32; 1];
+        render_fmod_pcm(&queue, &mut scratch, &mut first);
+        assert!(queue.take_reclaimed().is_none());
+        render_fmod_pcm(&queue, &mut scratch, &mut second);
+        assert_eq!(first, [0.5]);
+        assert_eq!(second, [-0.5]);
+        assert_eq!(queue.take_reclaimed().unwrap(), [0x00, 0x40, 0x00, 0xC0]);
+    }
 }
 
 static FMOD_AAUDIO_SUPPORTED: OnceLock<fn() -> bool> = OnceLock::new();

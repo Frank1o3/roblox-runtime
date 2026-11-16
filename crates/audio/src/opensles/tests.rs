@@ -14,7 +14,7 @@ use std::time::{Duration, Instant};
 use super::backend::{self, CaptureOpener, OpenSlCapture, OutputFactory};
 use super::*;
 use crate::backend::capture::CaptureOpenError;
-use crate::backend::output::{FillCallback, OutputStream};
+use crate::backend::output::{FillCallback, OutputRequest, OutputStream};
 
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|p| p.into_inner())
@@ -29,7 +29,7 @@ static TEST_LOCK: Mutex<()> = Mutex::new(());
 
 #[derive(Default)]
 struct FakeOutputInner {
-    args: Mutex<Option<(u32, bool, String, String)>>,
+    args: Mutex<Option<(OutputRequest, String)>>,
     fill: Mutex<Option<FillCallback>>,
     running: AtomicBool,
     is_open: AtomicBool,
@@ -41,8 +41,8 @@ struct FakeOutput {
 }
 
 impl OutputStream for FakeOutput {
-    fn open(&mut self, bits: u32, is_float: bool, desc: &str, target: &str, fill: FillCallback) -> bool {
-        *lock(&self.inner.args) = Some((bits, is_float, desc.to_owned(), target.to_owned()));
+    fn open(&mut self, request: OutputRequest, desc: &str, fill: FillCallback) -> bool {
+        *lock(&self.inner.args) = Some((request, desc.to_owned()));
         *lock(&self.inner.fill) = Some(fill);
         self.inner.is_open.store(true, Ordering::Release);
         true
@@ -96,7 +96,9 @@ impl OutputFactory for FakeOutputFactoryShared {
 fn output_factory_shared() -> &'static Arc<FakeOutputFactoryShared> {
     static FACTORY: OnceLock<Arc<FakeOutputFactoryShared>> = OnceLock::new();
     FACTORY.get_or_init(|| {
-        Arc::new(FakeOutputFactoryShared { created: Mutex::new(Vec::new()) })
+        Arc::new(FakeOutputFactoryShared {
+            created: Mutex::new(Vec::new()),
+        })
     })
 }
 
@@ -140,7 +142,10 @@ struct FakeSource {
 
 impl OpenSlCapture for FakeSource {
     fn read(&mut self, dst: &mut [u8]) -> usize {
-        let first = self.shared.next_byte.fetch_add(dst.len() as u64, Ordering::AcqRel);
+        let first = self
+            .shared
+            .next_byte
+            .fetch_add(dst.len() as u64, Ordering::AcqRel);
         for (i, out) in dst.iter_mut().enumerate() {
             *out = (first + i as u64) as u8;
         }
@@ -162,13 +167,19 @@ struct FakeOpener {
 }
 
 impl CaptureOpener for FakeOpener {
-    fn open(&self, _rate_hz: u32, _channels: u16) -> Result<Box<dyn OpenSlCapture>, CaptureOpenError> {
+    fn open(
+        &self,
+        _rate_hz: u32,
+        _channels: u16,
+    ) -> Result<Box<dyn OpenSlCapture>, CaptureOpenError> {
         if self.shared.fail.load(Ordering::Acquire) {
             return Err(CaptureOpenError::NoInputDevice);
         }
         self.shared.opens.fetch_add(1, Ordering::AcqRel);
         self.shared.live.fetch_add(1, Ordering::AcqRel);
-        Ok(Box::new(FakeSource { shared: Arc::clone(&self.shared) }))
+        Ok(Box::new(FakeSource {
+            shared: Arc::clone(&self.shared),
+        }))
     }
 }
 
@@ -270,7 +281,9 @@ fn realized_player(num_buffers: u32) -> (EngineHandle, PlayerHandle) {
 fn player_fill(player: PlayerHandle) -> FillCallback {
     let outputs = created_outputs();
     let inner = outputs.last().expect("realize created an output").clone();
-    let fill = lock(&inner.fill).take().expect("open stored the fill callback");
+    let fill = lock(&inner.fill)
+        .take()
+        .expect("open stored the fill callback");
     let _ = player;
     fill
 }
@@ -307,7 +320,10 @@ fn sl_create_engine_refuses_or_serves_depending_on_the_host_and_validates_reques
         sl_create_engine(
             Some(&mut out),
             0,
-            &[SlInterfaceRequest { iid: volume(), required: true }],
+            &[SlInterfaceRequest {
+                iid: volume(),
+                required: true
+            }],
         ),
         SL_RESULT_FEATURE_UNSUPPORTED
     );
@@ -373,16 +389,25 @@ fn the_engine_stub_creates_and_queries_say_unsupported_or_zero() {
     assert!(midi.is_none());
 
     let mut count = 99;
-    assert_eq!(object.query_num_supported_interfaces(Some(&mut count)), SL_RESULT_SUCCESS);
+    assert_eq!(
+        object.query_num_supported_interfaces(Some(&mut count)),
+        SL_RESULT_SUCCESS
+    );
     assert_eq!(count, 0);
-    assert_eq!(object.query_supported_interfaces(0), SL_RESULT_PARAMETER_INVALID);
+    assert_eq!(
+        object.query_supported_interfaces(0),
+        SL_RESULT_PARAMETER_INVALID
+    );
     let mut extensions = 99;
     assert_eq!(
         object.query_num_supported_extensions(Some(&mut extensions)),
         SL_RESULT_SUCCESS
     );
     assert_eq!(extensions, 0);
-    assert_eq!(object.query_supported_extension(0), SL_RESULT_PARAMETER_INVALID);
+    assert_eq!(
+        object.query_supported_extension(0),
+        SL_RESULT_PARAMETER_INVALID
+    );
     let mut supported = SL_BOOLEAN_TRUE;
     assert_eq!(
         object.is_extension_supported(Some(&mut supported)),
@@ -402,7 +427,10 @@ fn output_mix_lifecycle_and_its_three_methods() {
     assert_eq!(
         object.create_output_mix(
             Some(&mut mix),
-            &[SlInterfaceRequest { iid: play(), required: true }],
+            &[SlInterfaceRequest {
+                iid: play(),
+                required: true
+            }],
         ),
         SL_RESULT_FEATURE_UNSUPPORTED
     );
@@ -413,7 +441,10 @@ fn output_mix_lifecycle_and_its_three_methods() {
     assert_eq!(
         object.create_output_mix(
             Some(&mut mix),
-            &[SlInterfaceRequest { iid: play(), required: false }],
+            &[SlInterfaceRequest {
+                iid: play(),
+                required: false
+            }],
         ),
         SL_RESULT_SUCCESS
     );
@@ -436,7 +467,10 @@ fn output_mix_lifecycle_and_its_three_methods() {
     );
     assert_eq!(num_devices, 0, "one shared destination, described as none");
     assert_eq!(mix_object.re_route(1), SL_RESULT_FEATURE_UNSUPPORTED);
-    assert_eq!(mix_object.register_device_change_callback(std::ptr::null_mut(), std::ptr::null_mut()), SL_RESULT_SUCCESS);
+    assert_eq!(
+        mix_object.register_device_change_callback(std::ptr::null_mut(), std::ptr::null_mut()),
+        SL_RESULT_SUCCESS
+    );
 
     assert_eq!(mix_object.destroy(mix), SL_RESULT_SUCCESS);
     assert!(get_mix(mix).is_none(), "destroy removed the mix");
@@ -529,7 +563,10 @@ fn create_audio_player_validates_its_arguments() {
             &absq_src(2),
             &pcm_16_stereo(48_000_000),
             &mix_sink(Some(0)),
-            &[SlInterfaceRequest { iid: record(), required: true }],
+            &[SlInterfaceRequest {
+                iid: record(),
+                required: true
+            }],
         ),
         SL_RESULT_FEATURE_UNSUPPORTED
     );
@@ -565,12 +602,25 @@ fn player_realize_opens_the_output_with_the_caller_format_and_refuses_unmappable
     assert_eq!(shared.state(), SL_OBJECT_STATE_REALIZED);
     let outputs = created_outputs();
     assert_eq!(outputs.len(), 1, "realize opened exactly one output");
-    let args = lock(&outputs[0].args).clone().expect("open recorded its arguments");
-    assert_eq!(args.0, 16, "the sample-bit hint is the caller's format");
-    assert!(!args.1, "the hint is not float");
-    let description = &args.2;
-    assert!(description.contains("OpenSL"), "the description names the path: {description}");
-    assert_eq!(args.3, "", "the sink follows the user's configured device");
+    let args = lock(&outputs[0].args)
+        .clone()
+        .expect("open recorded its arguments");
+    assert_eq!(
+        args.0.sample_bits, 16,
+        "the sample-bit hint is the caller's format"
+    );
+    assert!(!args.0.sample_is_float, "the hint is not float");
+    assert_eq!(args.0.sample_rate, Some(44_100));
+    assert_eq!(args.0.channels, Some(2));
+    let description = &args.1;
+    assert!(
+        description.contains("OpenSL"),
+        "the description names the path: {description}"
+    );
+    assert_eq!(
+        args.0.target, "",
+        "the sink follows the user's configured device"
+    );
 
     // An unmappable layout is refused at realize, before any device exists.
     let mut bad = None;
@@ -645,7 +695,10 @@ fn player_realize_opens_the_output_with_the_caller_format_and_refuses_unmappable
 
     assert_eq!(shared.destroy(), SL_RESULT_SUCCESS);
     assert!(get_player(player).is_none(), "destroy removed the player");
-    assert!(outputs[0].closed.load(Ordering::Acquire), "destroy closed the output");
+    assert!(
+        outputs[0].closed.load(Ordering::Acquire),
+        "destroy closed the output"
+    );
 }
 
 #[test]
@@ -668,22 +721,37 @@ fn the_player_queue_drains_in_order_and_reports_each_buffer_once() {
         assert_eq!(shared.enqueue(buffer_b.as_ptr(), 8), SL_RESULT_SUCCESS);
     }
     let (mut count, mut index) = (0, 0);
-    assert_eq!(shared.absq_get_state(Some(&mut count), Some(&mut index)), SL_RESULT_SUCCESS);
+    assert_eq!(
+        shared.absq_get_state(Some(&mut count), Some(&mut index)),
+        SL_RESULT_SUCCESS
+    );
     assert_eq!(count, 2);
     assert_eq!(index, 2);
 
     // The queue is full at depth 2.
     // SAFETY: the buffer is valid; the refusal happens before any use.
     unsafe {
-        assert_eq!(shared.enqueue(buffer_a.as_ptr(), 8), SL_RESULT_BUFFER_INSUFFICIENT);
+        assert_eq!(
+            shared.enqueue(buffer_a.as_ptr(), 8),
+            SL_RESULT_BUFFER_INSUFFICIENT
+        );
     }
     // SAFETY: the null pointer is the point of the check.
     unsafe {
-        assert_eq!(shared.enqueue(std::ptr::null(), 8), SL_RESULT_PARAMETER_INVALID);
-        assert_eq!(shared.enqueue(buffer_a.as_ptr(), 0), SL_RESULT_PARAMETER_INVALID);
+        assert_eq!(
+            shared.enqueue(std::ptr::null(), 8),
+            SL_RESULT_PARAMETER_INVALID
+        );
+        assert_eq!(
+            shared.enqueue(buffer_a.as_ptr(), 0),
+            SL_RESULT_PARAMETER_INVALID
+        );
     }
 
-    assert_eq!(shared.set_play_state(SL_PLAYSTATE_PLAYING), SL_RESULT_SUCCESS);
+    assert_eq!(
+        shared.set_play_state(SL_PLAYSTATE_PLAYING),
+        SL_RESULT_SUCCESS
+    );
     let mut state = 0;
     assert_eq!(shared.get_play_state(Some(&mut state)), SL_RESULT_SUCCESS);
     assert_eq!(state, SL_PLAYSTATE_PLAYING);
@@ -698,7 +766,12 @@ fn the_player_queue_drains_in_order_and_reports_each_buffer_once() {
     let mut fill = player_fill(player);
     let mut dst = [0f32; 4];
     assert!(run_fill(&mut fill, &mut dst, 2));
-    let expected: [f32; 4] = [513.0 / 32768.0, 1027.0 / 32768.0, 1541.0 / 32768.0, 2055.0 / 32768.0];
+    let expected: [f32; 4] = [
+        513.0 / 32768.0,
+        1027.0 / 32768.0,
+        1541.0 / 32768.0,
+        2055.0 / 32768.0,
+    ];
     for (i, (got, want)) in dst.iter().zip(expected.iter()).enumerate() {
         assert!((got - want).abs() < 1e-6, "sample {i}: {got} vs {want}");
     }
@@ -723,21 +796,36 @@ fn the_player_queue_drains_in_order_and_reports_each_buffer_once() {
     );
 
     // Pause stops the pull without clearing the queue.
-    assert_eq!(shared.set_play_state(SL_PLAYSTATE_PAUSED), SL_RESULT_SUCCESS);
+    assert_eq!(
+        shared.set_play_state(SL_PLAYSTATE_PAUSED),
+        SL_RESULT_SUCCESS
+    );
     assert!(
         !created_outputs()[0].running.load(Ordering::Acquire),
         "PAUSED deactivates the pull"
     );
 
     // STOPPED empties the queue as well: the next fill is silence.
-    assert_eq!(shared.set_play_state(SL_PLAYSTATE_STOPPED), SL_RESULT_SUCCESS);
-    assert_eq!(shared.absq_get_state(Some(&mut count), None), SL_RESULT_SUCCESS);
+    assert_eq!(
+        shared.set_play_state(SL_PLAYSTATE_STOPPED),
+        SL_RESULT_SUCCESS
+    );
+    assert_eq!(
+        shared.absq_get_state(Some(&mut count), None),
+        SL_RESULT_SUCCESS
+    );
     assert_eq!(count, 0, "STOPPED abandons the queued buffers");
     lock(drains()).clear();
     let mut dst = [7f32; 4];
     assert!(run_fill(&mut fill, &mut dst, 2));
-    assert!(dst.iter().all(|&s| s == 0.0), "silence after stop, not stale bytes");
-    assert!(lock(drains()).is_empty(), "abandoned buffers never report a drain");
+    assert!(
+        dst.iter().all(|&s| s == 0.0),
+        "silence after stop, not stale bytes"
+    );
+    assert!(
+        lock(drains()).is_empty(),
+        "abandoned buffers never report a drain"
+    );
 
     assert_eq!(shared.destroy(), SL_RESULT_SUCCESS);
 }
@@ -751,7 +839,10 @@ fn player_volume_and_mute_follow_the_spec_curve() {
     let mut fill = player_fill(player);
 
     let mut max = 99;
-    assert_eq!(shared.get_max_volume_level(Some(&mut max)), SL_RESULT_SUCCESS);
+    assert_eq!(
+        shared.get_max_volume_level(Some(&mut max)),
+        SL_RESULT_SUCCESS
+    );
     assert_eq!(max, 0, "0 millibel = unity gain is the ceiling");
 
     // One full-scale sample to hear through the gain changes. 2 frames of
@@ -787,7 +878,10 @@ fn player_volume_and_mute_follow_the_spec_curve() {
         assert_eq!(shared.enqueue(data.as_ptr(), 4), SL_RESULT_SUCCESS);
     }
     assert!(run_fill(&mut fill, &mut dst, 2));
-    assert!(dst.iter().all(|&s| s == 0.0), "the floor is silence, not a negative gain");
+    assert!(
+        dst.iter().all(|&s| s == 0.0),
+        "the floor is silence, not a negative gain"
+    );
     assert_eq!(shared.get_volume_level(Some(&mut level)), SL_RESULT_SUCCESS);
     assert_eq!(level, SL_MILLIBEL_MIN);
 
@@ -818,11 +912,20 @@ fn player_volume_and_mute_follow_the_spec_curve() {
         shared.enable_stereo_position(SL_BOOLEAN_TRUE),
         SL_RESULT_FEATURE_UNSUPPORTED
     );
-    assert_eq!(shared.is_enabled_stereo_position(Some(&mut enabled)), SL_RESULT_SUCCESS);
+    assert_eq!(
+        shared.is_enabled_stereo_position(Some(&mut enabled)),
+        SL_RESULT_SUCCESS
+    );
     assert_eq!(enabled, SL_BOOLEAN_FALSE);
-    assert_eq!(shared.set_stereo_position(500), SL_RESULT_FEATURE_UNSUPPORTED);
+    assert_eq!(
+        shared.set_stereo_position(500),
+        SL_RESULT_FEATURE_UNSUPPORTED
+    );
     let mut position = 99i16;
-    assert_eq!(shared.get_stereo_position(Some(&mut position)), SL_RESULT_SUCCESS);
+    assert_eq!(
+        shared.get_stereo_position(Some(&mut position)),
+        SL_RESULT_SUCCESS
+    );
     assert_eq!(position, 0);
 
     assert_eq!(shared.destroy(), SL_RESULT_SUCCESS);
@@ -840,23 +943,44 @@ fn player_position_is_not_tracked_and_says_so() {
     assert_eq!(position, 0, "zero rather than a fabricated estimate");
     let mut duration = 0;
     assert_eq!(shared.get_duration(Some(&mut duration)), SL_RESULT_SUCCESS);
-    assert_eq!(duration, SL_TIME_UNKNOWN, "a buffer-queue source has no inherent duration");
+    assert_eq!(
+        duration, SL_TIME_UNKNOWN,
+        "a buffer-queue source has no inherent duration"
+    );
 
     assert_eq!(shared.set_marker_position(500), SL_RESULT_SUCCESS);
-    assert_eq!(shared.get_marker_position(Some(&mut position)), SL_RESULT_SUCCESS);
+    assert_eq!(
+        shared.get_marker_position(Some(&mut position)),
+        SL_RESULT_SUCCESS
+    );
     assert_eq!(position, 500, "the marker is echoed back faithfully");
     assert_eq!(shared.clear_marker_position(), SL_RESULT_SUCCESS);
-    assert_eq!(shared.get_marker_position(Some(&mut position)), SL_RESULT_SUCCESS);
+    assert_eq!(
+        shared.get_marker_position(Some(&mut position)),
+        SL_RESULT_SUCCESS
+    );
     assert_eq!(position, 0);
     assert_eq!(shared.set_position_update_period(250), SL_RESULT_SUCCESS);
     let mut period = 0;
-    assert_eq!(shared.get_position_update_period(Some(&mut period)), SL_RESULT_SUCCESS);
+    assert_eq!(
+        shared.get_position_update_period(Some(&mut period)),
+        SL_RESULT_SUCCESS
+    );
     assert_eq!(period, 250);
     assert_eq!(shared.set_callback_events_mask(0xFF), SL_RESULT_SUCCESS);
     let mut mask = 0xFF;
-    assert_eq!(shared.get_callback_events_mask(Some(&mut mask)), SL_RESULT_SUCCESS);
-    assert_eq!(mask, 0, "interest is accepted; the events structurally never occur");
-    assert_eq!(shared.register_play_callback(std::ptr::null_mut(), std::ptr::null_mut()), SL_RESULT_SUCCESS);
+    assert_eq!(
+        shared.get_callback_events_mask(Some(&mut mask)),
+        SL_RESULT_SUCCESS
+    );
+    assert_eq!(
+        mask, 0,
+        "interest is accepted; the events structurally never occur"
+    );
+    assert_eq!(
+        shared.register_play_callback(std::ptr::null_mut(), std::ptr::null_mut()),
+        SL_RESULT_SUCCESS
+    );
 
     // Android configuration: accepted and discarded.
     assert_eq!(
@@ -887,20 +1011,21 @@ fn recorder_validation_refuses_everything_but_default_input_s16() {
     let engine = test_engine();
     let object = get_engine(engine).unwrap();
 
-    let recorder_sink = |num_buffers: u32, format: &SlPcmFormat| -> (SLresult, Option<RecorderHandle>) {
-        let mut recorder = None;
-        let result = object.create_audio_recorder(
-            Some(&mut recorder),
-            &SlLocator::IoDevice {
-                device_type: SL_IODEVICE_AUDIOINPUT,
-                device_id: SL_DEFAULTDEVICEID_AUDIOINPUT,
-            },
-            &absq_src(num_buffers),
-            format,
-            &no_interfaces(),
-        );
-        (result, recorder)
-    };
+    let recorder_sink =
+        |num_buffers: u32, format: &SlPcmFormat| -> (SLresult, Option<RecorderHandle>) {
+            let mut recorder = None;
+            let result = object.create_audio_recorder(
+                Some(&mut recorder),
+                &SlLocator::IoDevice {
+                    device_type: SL_IODEVICE_AUDIOINPUT,
+                    device_id: SL_DEFAULTDEVICEID_AUDIOINPUT,
+                },
+                &absq_src(num_buffers),
+                format,
+                &no_interfaces(),
+            );
+            (result, recorder)
+        };
 
     // The happy path first: 8 kHz mono s16, milliHertz divided down.
     let (result, recorder) = recorder_sink(
@@ -923,7 +1048,11 @@ fn recorder_validation_refuses_everything_but_default_input_s16() {
     assert_eq!(live_captures(), 0, "creating a recorder opens nothing");
     assert_eq!(shared.realize(), SL_RESULT_SUCCESS);
     assert_eq!(shared.state(), SL_OBJECT_STATE_REALIZED);
-    assert_eq!(live_captures(), 0, "realizing a recorder still opens nothing");
+    assert_eq!(
+        live_captures(),
+        0,
+        "realizing a recorder still opens nothing"
+    );
 
     assert_eq!(shared.get_interface(record()), Ok(RecorderIid::Record));
     assert_eq!(
@@ -961,17 +1090,26 @@ fn recorder_validation_refuses_everything_but_default_input_s16() {
     // Wrong device type, wrong sink locator, non-PCM sink format.
     for (source, sink, format) in [
         (
-            SlLocator::IoDevice { device_type: 0x99, device_id: SL_DEFAULTDEVICEID_AUDIOINPUT },
+            SlLocator::IoDevice {
+                device_type: 0x99,
+                device_id: SL_DEFAULTDEVICEID_AUDIOINPUT,
+            },
             absq_src(2),
             pcm_16_stereo(8_000_000),
         ),
         (
-            SlLocator::IoDevice { device_type: SL_IODEVICE_AUDIOINPUT, device_id: SL_DEFAULTDEVICEID_AUDIOINPUT },
+            SlLocator::IoDevice {
+                device_type: SL_IODEVICE_AUDIOINPUT,
+                device_id: SL_DEFAULTDEVICEID_AUDIOINPUT,
+            },
             mix_sink(Some(0)),
             pcm_16_stereo(8_000_000),
         ),
         (
-            SlLocator::IoDevice { device_type: SL_IODEVICE_AUDIOINPUT, device_id: SL_DEFAULTDEVICEID_AUDIOINPUT },
+            SlLocator::IoDevice {
+                device_type: SL_IODEVICE_AUDIOINPUT,
+                device_id: SL_DEFAULTDEVICEID_AUDIOINPUT,
+            },
             absq_src(2),
             SlPcmFormat::PcmEx {
                 num_channels: 1,
@@ -1001,7 +1139,11 @@ fn recorder_validation_refuses_everything_but_default_input_s16() {
 
     // Anything but 16-in-16 little-endian is refused: capture converts
     // nothing on the way in.
-    for (bits, container, endianness) in [(8u32, 8u32, 0u32), (16, 32, 0), (16, 16, SL_BYTEORDER_BIGENDIAN)] {
+    for (bits, container, endianness) in [
+        (8u32, 8u32, 0u32),
+        (16, 32, 0),
+        (16, 16, SL_BYTEORDER_BIGENDIAN),
+    ] {
         let mut recorder = None;
         assert_eq!(
             object.create_audio_recorder(
@@ -1062,7 +1204,10 @@ fn recorder_validation_refuses_everything_but_default_input_s16() {
             },
             &absq_src(2),
             &pcm_16_stereo(8_000_000),
-            &[SlInterfaceRequest { iid: play(), required: true }],
+            &[SlInterfaceRequest {
+                iid: play(),
+                required: true
+            }],
         ),
         SL_RESULT_FEATURE_UNSUPPORTED
     );
@@ -1146,7 +1291,10 @@ fn the_recorder_microphone_rule_holds_across_the_whole_state_machine() {
     assert_eq!(position, 8);
 
     // PAUSED destroys the capture, it does not deactivate it.
-    assert_eq!(shared.set_record_state(SL_RECORDSTATE_PAUSED), SL_RESULT_SUCCESS);
+    assert_eq!(
+        shared.set_record_state(SL_RECORDSTATE_PAUSED),
+        SL_RESULT_SUCCESS
+    );
     assert!(
         wait_for(2000, || live_captures() == 0),
         "pausing left the microphone open"
@@ -1162,7 +1310,10 @@ fn the_recorder_microphone_rule_holds_across_the_whole_state_machine() {
     assert_eq!(live_captures(), 1);
 
     // STOPPED destroys it again.
-    assert_eq!(shared.set_record_state(SL_RECORDSTATE_STOPPED), SL_RESULT_SUCCESS);
+    assert_eq!(
+        shared.set_record_state(SL_RECORDSTATE_STOPPED),
+        SL_RESULT_SUCCESS
+    );
     assert!(wait_for(2000, || live_captures() == 0));
     assert_eq!(shared.get_record_state(Some(&mut state)), SL_RESULT_SUCCESS);
     assert_eq!(state, SL_RECORDSTATE_STOPPED);
@@ -1208,15 +1359,24 @@ fn recorder_open_failure_stays_stopped_and_never_lies_about_recording() {
 
     capture_shared().fail.store(false, Ordering::Release);
     assert_eq!(shared.set_record_state(99), SL_RESULT_PARAMETER_INVALID);
-    assert_eq!(shared.set_duration_limit(1000), SL_RESULT_FEATURE_UNSUPPORTED);
+    assert_eq!(
+        shared.set_duration_limit(1000),
+        SL_RESULT_FEATURE_UNSUPPORTED
+    );
     let mut position = 99;
     assert_eq!(shared.get_position(Some(&mut position)), SL_RESULT_SUCCESS);
     assert_eq!(position, 0);
     assert_eq!(shared.set_callback_events_mask(0xFF), SL_RESULT_SUCCESS);
     let mut mask = 0xFF;
-    assert_eq!(shared.get_callback_events_mask(Some(&mut mask)), SL_RESULT_SUCCESS);
+    assert_eq!(
+        shared.get_callback_events_mask(Some(&mut mask)),
+        SL_RESULT_SUCCESS
+    );
     assert_eq!(mask, 0);
-    assert_eq!(shared.register_record_callback(std::ptr::null_mut(), std::ptr::null_mut()), SL_RESULT_SUCCESS);
+    assert_eq!(
+        shared.register_record_callback(std::ptr::null_mut(), std::ptr::null_mut()),
+        SL_RESULT_SUCCESS
+    );
 
     assert_eq!(shared.destroy(), SL_RESULT_SUCCESS);
 }
@@ -1308,8 +1468,14 @@ fn recorder_absq_contract_matches_the_player_mirror() {
     // SAFETY: the buffers are owned by this test; only the null/zero cases
     // deliberately pass invalid arguments, and those are refused.
     unsafe {
-        assert_eq!(shared.enqueue(std::ptr::null_mut(), 8), SL_RESULT_PARAMETER_INVALID);
-        assert_eq!(shared.enqueue(buffer_a.as_mut_ptr(), 0), SL_RESULT_PARAMETER_INVALID);
+        assert_eq!(
+            shared.enqueue(std::ptr::null_mut(), 8),
+            SL_RESULT_PARAMETER_INVALID
+        );
+        assert_eq!(
+            shared.enqueue(buffer_a.as_mut_ptr(), 0),
+            SL_RESULT_PARAMETER_INVALID
+        );
         assert_eq!(shared.enqueue(buffer_a.as_mut_ptr(), 8), SL_RESULT_SUCCESS);
         assert_eq!(shared.enqueue(buffer_b.as_mut_ptr(), 8), SL_RESULT_SUCCESS);
         assert_eq!(
@@ -1318,23 +1484,38 @@ fn recorder_absq_contract_matches_the_player_mirror() {
         );
     }
     let (mut count, mut index) = (0, 0);
-    assert_eq!(shared.absq_get_state(Some(&mut count), Some(&mut index)), SL_RESULT_SUCCESS);
+    assert_eq!(
+        shared.absq_get_state(Some(&mut count), Some(&mut index)),
+        SL_RESULT_SUCCESS
+    );
     assert_eq!(count, 2);
     assert_eq!(index, 2);
 
     assert_eq!(shared.absq_clear(), SL_RESULT_SUCCESS);
-    assert_eq!(shared.absq_get_state(Some(&mut count), Some(&mut index)), SL_RESULT_SUCCESS);
+    assert_eq!(
+        shared.absq_get_state(Some(&mut count), Some(&mut index)),
+        SL_RESULT_SUCCESS
+    );
     assert_eq!(count, 0);
-    assert_eq!(index, 2, "clear abandons the buffers; the index keeps rising");
+    assert_eq!(
+        index, 2,
+        "clear abandons the buffers; the index keeps rising"
+    );
 
     // And the recorder-side marker/period echo, for symmetry with the player.
     let mut position = 0;
     assert_eq!(shared.set_marker_position(500), SL_RESULT_SUCCESS);
-    assert_eq!(shared.get_marker_position(Some(&mut position)), SL_RESULT_SUCCESS);
+    assert_eq!(
+        shared.get_marker_position(Some(&mut position)),
+        SL_RESULT_SUCCESS
+    );
     assert_eq!(position, 500);
     assert_eq!(shared.set_position_update_period(250), SL_RESULT_SUCCESS);
     let mut period = 0;
-    assert_eq!(shared.get_position_update_period(Some(&mut period)), SL_RESULT_SUCCESS);
+    assert_eq!(
+        shared.get_position_update_period(Some(&mut period)),
+        SL_RESULT_SUCCESS
+    );
     assert_eq!(period, 250);
 
     assert_eq!(shared.destroy(), SL_RESULT_SUCCESS);

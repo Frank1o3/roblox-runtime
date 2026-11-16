@@ -10,9 +10,13 @@ pub mod cpal_output;
 pub mod host;
 pub mod oss;
 pub mod output;
+pub mod owned_pcm_queue;
 pub mod pcm;
 
-pub use host::{effective_backend_name, host_backend_available, host_backend_name, make_output_stream};
+pub use host::{
+    effective_backend_name, host_backend_available, host_backend_name, make_output_stream,
+};
+pub use output::OutputRequest;
 
 use std::collections::HashSet;
 use std::sync::atomic::AtomicBool;

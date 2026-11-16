@@ -1,7 +1,7 @@
 //! Feed the VM's invented answers into the runtime's gap inventory.
 //!
 //! The C++ path bridges libjnivm's `Constructed Unresolved symbol` log line to
-//! `roblox_unimplemented_record` through `native/jnivm_logger/log.cpp`. This
+//! `roblox_unimplemented_record` through `crates/native-sys/native/jnivm_logger/log.cpp`. This
 //! module is the Rust VM's equivalent, without the message-matching fragility:
 //! the call sites record at the exact moment the VM invents a registration,
 //! with libjnivm's wording preserved so the report's rows stay comparable

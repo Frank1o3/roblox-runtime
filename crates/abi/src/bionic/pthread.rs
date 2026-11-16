@@ -72,7 +72,7 @@
 //! `pthread_cond_t`'s and `sem_t`'s single-sentinel lazy init below. The attr
 //! wrapper also has to follow `attr` through to `pthread_create` (there is
 //! no POSIX static initialiser for an attr, so it has no equivalent
-//! complication) — `native/thread_trace.cpp`'s `roblox_pthread_create` calls
+//! complication) — `crates/native-sys/native/thread_trace.cpp`'s `roblox_pthread_create` calls
 //! back into this file, on aarch64 only, to resolve `attr` before forwarding
 //! it to the host's own `pthread_create`.
 //!
@@ -84,7 +84,7 @@
 //! locked and unlocked by eight threads at once, an attr's stack size read
 //! back through its own getter, and the same value read back on the far side
 //! of a real `pthread_create`/`pthread_getattr_np` round trip through
-//! `native/thread_trace.cpp`. **Still not run**: against real ARM64
+//! `crates/native-sys/native/thread_trace.cpp`. **Still not run**: against real ARM64
 //! hardware, or against Roblox's own engine -- an emulated qemu-user
 //! container proves the ABI translation is right, not that the engine's
 //! actual lock usage pattern is.
@@ -668,7 +668,7 @@ pub extern "C" fn mutex_timedlock(mutex: *mut c_void, abstime: *const c_void) ->
 // This also means `pthread_create` needs to translate whatever `attr` it is
 // given before handing it to the host's own `pthread_create` --
 // `roblox_pthread_attr_real` below is exported for exactly that, and
-// `native/thread_trace.cpp`'s `roblox_pthread_create` calls it on aarch64.
+// `crates/native-sys/native/thread_trace.cpp`'s `roblox_pthread_create` calls it on aarch64.
 // Missing that call site would leave every other fix in this file correct
 // and this one path -- thread creation with a non-default attr, which is
 // what a set stack size goes through -- still handing glibc a 56-byte object
@@ -853,7 +853,7 @@ pub extern "C" fn getattr_np(thread: c_ulong, attr: *mut c_void) -> c_int {
 }
 
 /// Resolve a `pthread_attr_t*` handed to `pthread_create` to its real glibc
-/// backing object -- exported for `native/thread_trace.cpp`'s
+/// backing object -- exported for `crates/native-sys/native/thread_trace.cpp`'s
 /// `roblox_pthread_create`, which otherwise forwards `attr` straight to the
 /// host's own `pthread_create`. Correct on x86_64, where bionic's and
 /// glibc's `pthread_attr_t` agree in size and this function does not even
@@ -1376,7 +1376,7 @@ mod tests {
     #[test]
     fn attr_round_trips_a_set_stack_size_through_pthread_create() {
         // Exercises the real path an engine call takes: this file's
-        // `attr_init`/`attr_setstacksize`, then `native/thread_trace.cpp`'s
+        // `attr_init`/`attr_setstacksize`, then `crates/native-sys/native/thread_trace.cpp`'s
         // `roblox_pthread_create` (which calls back into
         // `roblox_pthread_attr_real` on aarch64 before forwarding to the
         // host's own `pthread_create`), then the new thread reading its own

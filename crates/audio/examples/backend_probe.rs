@@ -1,7 +1,7 @@
 //! Asks a named host output backend directly and takes two seconds.
 //!
-//! Ported from `native/alsa_backend_probe.cpp` and
-//! `native/pulse_backend_probe.cpp` — which were byte-for-byte the same probe
+//! Ported from `crates/native-sys/native/alsa_backend_probe.cpp` and
+//! `crates/native-sys/native/pulse_backend_probe.cpp` — which were byte-for-byte the same probe
 //! against two C++ factories — onto one Rust example, since the Rust crate
 //! has no per-backend factories: the backend is chosen by
 //! `RBX_RUNTIME_AUDIO_HOST`, so the two probes become two invocations of one
@@ -46,7 +46,14 @@ static PHASE: AtomicU64 = AtomicU64::new(0);
 
 fn main() {
     println!("backend: {}", effective_backend_name());
-    println!("host_backend_available(): {}", if host_backend_available() { "yes" } else { "NO" });
+    println!(
+        "host_backend_available(): {}",
+        if host_backend_available() {
+            "yes"
+        } else {
+            "NO"
+        }
+    );
     if !host_backend_available() {
         std::process::exit(1);
     }
@@ -73,7 +80,11 @@ fn main() {
         true
     });
     // No format preference: whatever the device prefers is what it gets.
-    if !stream.open(0, false, "roblox-runtime (backend probe)", "", fill) {
+    if !stream.open(
+        roblox_audio::backend::OutputRequest::default_device(0, false, ""),
+        "roblox-runtime (backend probe)",
+        fill,
+    ) {
         println!("open failed");
         std::process::exit(1);
     }
