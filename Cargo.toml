@@ -25,7 +25,7 @@
         roblox-native-sys={path="crates/native-sys"}
         rustix={version="1", default-features=false, features=["mm", "param", "std"]}
         serde_json="1.0.154"
-        zip={version="9.6.0", default-features=false, features=["deflate"]}
+        zip={version="9.8.1", default-features=false, features=["deflate"]}
 
 [package]
     description="Embeddable Roblox Android runtime for Linux"
