@@ -21,6 +21,7 @@ pub const AAUDIO_ERROR_UNIMPLEMENTED: AAudioResult = -890;
 pub const AAUDIO_ERROR_UNAVAILABLE: AAudioResult = -889;
 pub const AAUDIO_ERROR_NO_MEMORY: AAudioResult = -887;
 pub const AAUDIO_ERROR_NULL: AAudioResult = -886;
+pub const AAUDIO_ERROR_TIMEOUT: AAudioResult = -885;
 
 pub const AAUDIO_DIRECTION_OUTPUT: AAudioDirection = 0;
 pub const AAUDIO_DIRECTION_INPUT: AAudioDirection = 1;

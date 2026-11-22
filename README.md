@@ -29,6 +29,21 @@ and ran. This is a manual smoke test of the release build; the equivalent debug
 build is still reported to fail during game loading, and the cause of that
 configuration difference is unknown.
 
+On 2026-11-21, `cargo run --release -- --launch` was verified with a saved
+cookie-only profile. The client loaded the managed x86-64 APK and
+`libroblox.so`, recovered the saved account identity through Roblox's
+authenticated-user endpoint, and reached the signed-in Home shell. This run
+did not join an experience; its evidence covers APK loading and automatic
+session restoration through Home.
+
+A second 2026-11-21 run log supplied by the client shows an experience loading
+and audio streams opening, followed by a `SIGSEGV` on process exit. The
+systemd-coredump entry has no core attached and reports the instruction pointer
+at zero, so it does not identify the crashing call. The client now sends the
+observed GameActivity focus, pause, surface-destroyed, stop and
+`terminateNativeCode` callbacks before releasing the host surface. That
+shutdown sequence still needs an interactive close-and-relaunch check.
+
 When the client was stopped, the process exited with signal 11 (`SIGSEGV`)
 instead of shutting down gracefully. The log also showed Wayland
 `wl_shm.create_pool` requests failing with `Bad file descriptor` before exit;
@@ -76,6 +91,8 @@ including bionic pthread primitives and generated fallback symbols.
 
 The `android` crate supplies Android platform behavior that has to exist on the
 Linux host, including assets, storage, loopers, native windows and system APIs.
+It answers the observed NDK thermal queries with a neutral desktop status;
+Android thermal listeners and device-specific thresholds are not emulated.
 
 ### Native loading
 

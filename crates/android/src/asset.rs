@@ -14,6 +14,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 struct Asset {
     bytes: Arc<Vec<u8>>,
+    read_position: Mutex<usize>,
 }
 
 const MAX_ASSET_CACHE_BYTES: usize = 32 * 1024 * 1024;
@@ -320,7 +321,39 @@ extern "C" fn asset_manager_open(
     let Some(bytes) = read_asset(&name) else {
         return std::ptr::null_mut();
     };
-    Box::into_raw(Box::new(Asset { bytes })).cast()
+    Box::into_raw(Box::new(Asset {
+        bytes,
+        read_position: Mutex::new(0),
+    }))
+    .cast()
+}
+
+extern "C" fn asset_read(asset: *mut c_void, buffer: *mut c_void, count: usize) -> c_int {
+    if asset.is_null() || (buffer.is_null() && count != 0) {
+        return -1;
+    }
+    // SAFETY: handles are allocated by `asset_manager_open` and remain live
+    // until `asset_close`; `buffer` is writable for `count` bytes per NDK ABI.
+    let asset = unsafe { &*asset.cast::<Asset>() };
+    let Ok(mut position) = asset.read_position.lock() else {
+        return -1;
+    };
+    let start = (*position).min(asset.bytes.len());
+    let count = count
+        .min(asset.bytes.len().saturating_sub(start))
+        .min(c_int::MAX as usize);
+    if count != 0 {
+        // SAFETY: source bounds are checked above and caller owns writable output.
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                asset.bytes.as_ptr().add(start),
+                buffer.cast::<u8>(),
+                count,
+            )
+        };
+        *position += count;
+    }
+    count as c_int
 }
 
 extern "C" fn asset_get_buffer(asset: *mut c_void) -> *const c_void {
@@ -414,6 +447,7 @@ pub fn overrides() -> Vec<(&'static str, *mut c_void)> {
             "AAsset_getBuffer",
             asset_get_buffer as *const () as *mut c_void,
         ),
+        ("AAsset_read", asset_read as *const () as *mut c_void),
         (
             "AAsset_getLength",
             asset_get_length as *const () as *mut c_void,

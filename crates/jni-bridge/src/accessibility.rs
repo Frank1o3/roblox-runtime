@@ -196,6 +196,16 @@ fn new_object(vm: &Vm, class_name: &str) -> Option<ObjectId> {
     vm.new_local_object(&env, class, ObjectValue::Opaque).ok()
 }
 
+fn register_hook_class(vm: &Vm, name: &str) -> Result<jnivm::ClassId, String> {
+    match vm.register_class(name) {
+        Ok(class) => Ok(class),
+        Err(jnivm::JniError::DuplicateClass(_)) => {
+            vm.find_class(name).map_err(|error| error.to_string())
+        }
+        Err(error) => Err(error.to_string()),
+    }
+}
+
 fn new_string(vm: &Vm, value: &str) -> Option<ObjectId> {
     let class = vm.find_or_define_class("java/lang/String").ok()?;
     let env = vm.get_env()?;
@@ -215,9 +225,7 @@ fn register_method(
     is_static: bool,
     handler: MethodHandler,
 ) -> Result<(), String> {
-    let class = vm
-        .find_or_define_class(class_name)
-        .map_err(|e| e.to_string())?;
+    let class = register_hook_class(vm, class_name)?;
     let method = vm
         .register_method(class, name, descriptor, is_static)
         .map_err(|e| e.to_string())?;
@@ -232,9 +240,7 @@ fn register_field(
     descriptor: &str,
     is_static: bool,
 ) -> Result<jnivm::FieldId, String> {
-    let class = vm
-        .find_or_define_class(class_name)
-        .map_err(|e| e.to_string())?;
+    let class = register_hook_class(vm, class_name)?;
     vm.register_field(class, name, descriptor, is_static)
         .map_err(|e| e.to_string())
 }

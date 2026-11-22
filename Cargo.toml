@@ -25,6 +25,7 @@
         roblox-native-sys={path="crates/native-sys"}
         rustix={version="1", default-features=false, features=["mm", "param", "std"]}
         serde_json="1.0.154"
+        ureq="3.5.2"
         zip={version="9.8.1", default-features=false, features=["deflate"]}
 
 [package]
@@ -44,6 +45,7 @@
     roblox-linker.workspace=true
     roblox-logging.workspace=true
     serde_json.workspace=true
+    ureq.workspace=true
 
 [lints.rust]
     unsafe_code="deny"

@@ -2,6 +2,7 @@
 //! `stream` owns and validates those handles in Rust.
 
 use std::ffi::c_void;
+use std::time::{Duration, Instant};
 
 use super::stream;
 use crate::aaudio::builder::{AAudioStreamDataCallback, AAudioStreamErrorCallback};
@@ -122,6 +123,41 @@ unsafe extern "C" fn stream_get_state(pointer: *mut c_void) -> AAudioStreamState
     handle(pointer).map_or(AAUDIO_STREAM_STATE_CLOSED, stream::get_state)
 }
 
+unsafe extern "C" fn stream_wait_for_state_change(
+    pointer: *mut c_void,
+    input_state: AAudioStreamState,
+    next_state: *mut AAudioStreamState,
+    timeout_nanoseconds: i64,
+) -> AAudioResult {
+    let Some(handle) = handle(pointer) else {
+        return AAUDIO_ERROR_NULL;
+    };
+    if timeout_nanoseconds < 0 {
+        return AAUDIO_ERROR_ILLEGAL_ARGUMENT;
+    }
+    let start = Instant::now();
+    let timeout = Duration::from_nanos(timeout_nanoseconds as u64);
+    loop {
+        let current = stream::get_state(handle);
+        if current != input_state {
+            if !next_state.is_null() {
+                // SAFETY: AAudio declares this optional output writable.
+                unsafe { next_state.write(current) };
+            }
+            return AAUDIO_OK;
+        }
+        let elapsed = start.elapsed();
+        if elapsed >= timeout {
+            if !next_state.is_null() {
+                // SAFETY: AAudio declares this optional output writable.
+                unsafe { next_state.write(current) };
+            }
+            return AAUDIO_ERROR_TIMEOUT;
+        }
+        std::thread::sleep((timeout - elapsed).min(Duration::from_millis(1)));
+    }
+}
+
 unsafe extern "C" fn stream_get_sample_rate(pointer: *mut c_void) -> i32 {
     handle(pointer).map_or(0, stream::get_sample_rate)
 }
@@ -189,6 +225,7 @@ pub fn symbols() -> Vec<(&'static str, *mut c_void)> {
         ("AAudioStream_getFramesPerBurst", stream_get_frames_per_burst as *const () as *mut c_void),
         ("AAudioStream_getSampleRate", stream_get_sample_rate as *const () as *mut c_void),
         ("AAudioStream_getState", stream_get_state as *const () as *mut c_void),
+        ("AAudioStream_waitForStateChange", stream_wait_for_state_change as *const () as *mut c_void),
         ("AAudioStream_getXRunCount", stream_get_xrun_count as *const () as *mut c_void),
         ("AAudioStream_read", stream_read as *const () as *mut c_void),
         ("AAudioStream_requestPause", stream_request_pause as *const () as *mut c_void),

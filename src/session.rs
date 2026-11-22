@@ -154,13 +154,28 @@ fn restore_identity(engine: &crate::LoadedEngine, session_dir: &Path) -> Result<
     let path = session_dir.join(IDENTITY_FILE);
     let contents = match std::fs::read_to_string(path) {
         Ok(contents) => contents,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            let Some(identity) = identity_from_saved_cookie(session_dir) else {
+                return Ok(());
+            };
+            write_private_json(
+                &session_dir.join(IDENTITY_FILE),
+                &encode_identity(&identity),
+            )?;
+            eprintln!("[session] recovered saved account identity from Roblox session");
+            return publish_identity(engine, identity);
+        }
         Err(error) => return Err(format!("read saved Roblox identity: {error}")),
     };
     let value = serde_json::from_str::<serde_json::Value>(&contents)
         .map_err(|error| format!("parse saved Roblox identity: {error}"))?;
     let identity =
         decode_identity(&value).ok_or_else(|| "saved Roblox identity is incomplete".to_owned())?;
+    publish_identity(engine, identity)
+}
+
+#[allow(unsafe_code)]
+fn publish_identity(engine: &crate::LoadedEngine, identity: SavedIdentity) -> Result<(), String> {
     crate::jni::game_activity::identity_publish(
         identity.user_id,
         &identity.username,
@@ -186,6 +201,72 @@ fn restore_identity(engine: &crate::LoadedEngine, session_dir: &Path) -> Result<
     .map_err(|error| format!("restore Roblox native user id: {error}"))?;
     eprintln!("[session] restored saved account identity and native user id");
     Ok(())
+}
+
+/// Older profiles may contain a valid cookie jar without the identity snapshot
+/// introduced later. Ask Roblox's authenticated-user endpoint for the minimal
+/// account fields needed to seed app startup, then persist only that identity.
+/// The cookie is sent only to this fixed HTTPS Roblox endpoint, redirects are
+/// disabled, and neither the cookie nor response body is logged.
+fn identity_from_saved_cookie(session_dir: &Path) -> Option<SavedIdentity> {
+    let contents = std::fs::read_to_string(session_dir.join("roblox-cookies")).ok()?;
+    let cookie = contents
+        .lines()
+        .filter(|line| !line.starts_with('#'))
+        .filter_map(|line| line.split_once('\t'))
+        .filter(|(domain, _)| matches!(*domain, "roblox.com" | ".roblox.com"))
+        .find_map(|(_, encoded)| {
+            unescape(encoded).split("; ").find_map(|record| {
+                let (name, value) = record.split_once('=')?;
+                (name == ".ROBLOSECURITY" && !value.is_empty()).then(|| value.to_owned())
+            })
+        })?;
+    if !cookie
+        .bytes()
+        .all(|byte| (0x21..=0x7e).contains(&byte) && !matches!(byte, b'"' | b',' | b';' | b'\\'))
+    {
+        return None;
+    }
+
+    let config = ureq::config::Config::builder()
+        .https_only(true)
+        .max_redirects(0)
+        .timeout_connect(Some(Duration::from_secs(4)))
+        .timeout_global(Some(Duration::from_secs(6)))
+        .user_agent("rusty-blox/0.1")
+        .build();
+    let response = config
+        .new_agent()
+        .get("https://users.roblox.com/v1/users/authenticated")
+        .header("Cookie", &format!(".ROBLOSECURITY={cookie}"))
+        .call()
+        .ok()?;
+    if !response.status().is_success() {
+        return None;
+    }
+    let body = response.into_body().read_to_vec().ok()?;
+    if body.len() > 64 * 1024 {
+        return None;
+    }
+    let value = serde_json::from_slice::<serde_json::Value>(&body).ok()?;
+    let id = json_i64(value.get("id")).filter(|id| *id > 0)?;
+    let username = value.get("name")?.as_str()?.to_owned();
+    if username.is_empty() {
+        return None;
+    }
+    let display_name = value
+        .get("displayName")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or(&username)
+        .to_owned();
+    Some(SavedIdentity {
+        user_id: id,
+        username,
+        display_name,
+        membership_type: 0,
+        is_under13: false,
+        has_roblox_subscription: false,
+    })
 }
 
 #[allow(unsafe_code)]

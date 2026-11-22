@@ -20,8 +20,10 @@ pub mod config;
 pub mod image_reader;
 pub mod local_storage;
 pub mod looper;
+pub mod media_codec;
 pub mod native_window;
 pub mod system;
+pub mod thermal;
 
 pub use native_window::{
     HostSurface, SurfaceError, clear, current, install, is_installed, wayland_display,
@@ -47,6 +49,8 @@ pub fn overrides() -> Vec<(&'static str, *mut c_void)> {
     symbols.extend(config::overrides());
     symbols.extend(image_reader::overrides());
     symbols.extend(looper::overrides());
+    symbols.extend(media_codec::overrides());
     symbols.extend(native_window::overrides());
+    symbols.extend(thermal::overrides());
     symbols
 }
