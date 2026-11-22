@@ -1326,15 +1326,6 @@ namespace roblox_runtime {
 void register_cookie_classes(jnivm::ENV* env);
 }
 
-// Defined in audio_classes.cpp. Separate for the usual reason and one specific
-// one: that file's header states the rule that no PipeWire capture stream may
-// exist while Roblox is not recording, and that rule has to be the first thing
-// anyone editing the microphone path reads rather than a paragraph buried in
-// this file's preamble.
-namespace roblox_runtime {
-void register_audio_classes(jnivm::ENV* env);
-}
-
 // Defined in clipboard.cpp. Separate because its header comment has to carry
 // the finding that `android.content.ClipboardManager` is not a class the engine
 // ever asks for — the framework-class inventory lists it because Roblox's own
@@ -1860,7 +1851,6 @@ extern "C" void roblox_register_android_classes(void* env_ptr) {
     roblox_runtime::MediaCodecInfoUtils::Register(env);
     roblox_runtime::BuildVersion::Register(env);
     roblox_runtime::register_cookie_classes(env);
-    roblox_runtime::register_audio_classes(env);
     roblox_runtime::register_clipboard_classes(env);
     roblox_runtime::register_shared_preferences(env);
     roblox_runtime::register_permission_checks(env);

@@ -13,6 +13,7 @@ fn attached_thread_env(vm: &Vm) -> ThreadEnv {
 include!("hooks/builtins.rs");
 include!("hooks/flags.rs");
 include!("hooks/platform.rs");
+include!("hooks/audio.rs");
 include!("hooks/native_helper.rs");
 
 /// Register the runtime-owned Android and Roblox Java methods in the Rust VM.

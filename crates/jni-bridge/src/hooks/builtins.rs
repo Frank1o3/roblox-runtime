@@ -701,11 +701,26 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
         .register_class("com/roblox/universalapp/messagebus/MessageBus")
         .map_err(|error| error.to_string())?;
     for (name, descriptor) in [
-        ("getMessageId", "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;"),
-        ("subscribeRaw", "(Ljava/lang/String;Lcom/roblox/universalapp/messagebus/RawCallback;)V"),
-        ("setRequestHandlerAsyncRaw", "(Ljava/lang/String;Ljava/lang/String;Lcom/roblox/universalapp/messagebus/RequestHandlerAsyncRaw;)V"),
-        ("callResponseHandlerRaw", "(Ljava/lang/String;Ljava/lang/String;)V"),
-        ("publishProtocolMethodResponseRaw", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;)V"),
+        (
+            "getMessageId",
+            "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;",
+        ),
+        (
+            "subscribeRaw",
+            "(Ljava/lang/String;Lcom/roblox/universalapp/messagebus/RawCallback;)V",
+        ),
+        (
+            "setRequestHandlerAsyncRaw",
+            "(Ljava/lang/String;Ljava/lang/String;Lcom/roblox/universalapp/messagebus/RequestHandlerAsyncRaw;)V",
+        ),
+        (
+            "callResponseHandlerRaw",
+            "(Ljava/lang/String;Ljava/lang/String;)V",
+        ),
+        (
+            "publishProtocolMethodResponseRaw",
+            "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;)V",
+        ),
     ] {
         register_unhandled_static(vm, message_bus, name, descriptor)?;
     }
@@ -782,6 +797,7 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
 
     install_platform_methods(vm)?;
     install_fmod_methods(vm)?;
+    install_audio_methods(vm)?;
     install_flags_methods(vm)?;
     install_system_dialog_singleton(vm)?;
     install_system_dialog_methods(vm)?;
@@ -799,7 +815,6 @@ fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
         "org/fmod/MediaCodec",
         "com/roblox/engine/jni/memstorage/Connection",
         "com/roblox/universalapp/messagebus/Connection",
-        "org/webrtc/voiceengine/WebRtcAudioManager",
         "com/roblox/client/flags/FlagJniInterface",
     ] {
         vm.register_class(class_name)
