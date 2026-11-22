@@ -175,14 +175,108 @@ int roblox_jni_register_native(const char* class_name, const char* name,
     }
 }
 
+/// Classify a jobject owned by the compatibility VM without dereferencing
+/// an unknown pointer. Kind values: 1 current-thread local, 2 global, 3 class.
+int roblox_jni_compat_reference_kind(jobject object) {
+    if (!g_vm || !object) return 0;
+    try {
+        auto* target = reinterpret_cast<jnivm::Object*>(object);
+        {
+            std::lock_guard<std::mutex> lock(g_vm->mtx);
+            for (const auto& entry : g_vm->classes) {
+                if (entry.second.get() == target) return 3;
+            }
+            for (const auto& global : g_vm->globals) {
+                if (global.get() == target) return 2;
+            }
+        }
+        auto* env = roblox_runtime::process_env();
+        if (!env) return 0;
+#ifdef EnableJNIVMGC
+        for (const auto& frame : env->localframe) {
+            for (const auto& local : frame) {
+                if (local.get() == target) return 1;
+            }
+        }
+#endif
+        return 0;
+    } catch (...) {
+        return 0;
+    }
+}
+
+jint roblox_jni_compat_push_local_frame(jint capacity) {
+    if (!g_vm) return JNI_OK;
+    try {
+        auto* env = roblox_runtime::process_env();
+        return env ? env->GetJNIEnv()->PushLocalFrame(capacity) : JNI_ERR;
+    } catch (...) {
+        return JNI_ERR;
+    }
+}
+
+jobject roblox_jni_compat_pop_local_frame(jobject result) {
+    try {
+        auto* env = roblox_runtime::process_env();
+        return env ? env->GetJNIEnv()->PopLocalFrame(result) : result;
+    } catch (...) {
+        return result;
+    }
+}
+
+jobject roblox_jni_compat_new_global_ref(jobject object) {
+    if (roblox_jni_compat_reference_kind(object) == 0) return nullptr;
+    try {
+        auto* env = roblox_runtime::process_env();
+        return env ? env->GetJNIEnv()->NewGlobalRef(object) : nullptr;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+jobject roblox_jni_compat_new_local_ref(jobject object) {
+    if (roblox_jni_compat_reference_kind(object) == 0) return nullptr;
+    try {
+        auto* env = roblox_runtime::process_env();
+        return env ? env->GetJNIEnv()->NewLocalRef(object) : nullptr;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+void roblox_jni_compat_delete_global_ref(jobject object) {
+    if (roblox_jni_compat_reference_kind(object) != 2) return;
+    try {
+        if (auto* env = roblox_runtime::process_env()) {
+            env->GetJNIEnv()->DeleteGlobalRef(object);
+        }
+    } catch (...) {
+    }
+}
+
+void roblox_jni_compat_delete_local_ref(jobject object) {
+    if (roblox_jni_compat_reference_kind(object) != 1) return;
+    try {
+        if (auto* env = roblox_runtime::process_env()) {
+            env->GetJNIEnv()->DeleteLocalRef(object);
+        }
+    } catch (...) {
+    }
+}
+
+jboolean roblox_jni_compat_is_same_object(jobject left, jobject right) {
+    if (roblox_jni_compat_reference_kind(left) == 0 ||
+        roblox_jni_compat_reference_kind(right) == 0) return JNI_FALSE;
+    try {
+        auto* env = roblox_runtime::process_env();
+        return env ? env->GetJNIEnv()->IsSameObject(left, right) : JNI_FALSE;
+    } catch (...) {
+        return JNI_FALSE;
+    }
+}
+
 /// Decode JNI's `Call*MethodV` arguments with the host C ABI. Rust can safely
 /// dispatch the resulting `jvalue`s, but `va_list` itself is target-specific
-/// Compare JNI handles by Java object identity; local and global handles for
-/// Promote a reference owned by the companion libjnivm VM and return its
-/// Java class name. This is used when the Rust JNI table receives an object
-/// Invoke an already registered C++ hook. Object results are promoted to a
-/// Write C++ stubs for every Java class and method the native code has reached
-/// for so far. This is the Phase 2 backlog, observed rather than guessed.
 int roblox_jni_dump_classes(const char* path) {
 #ifdef JNI_DEBUG
     if (!g_vm) {

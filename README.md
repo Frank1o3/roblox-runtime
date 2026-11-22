@@ -37,7 +37,19 @@ did not join an experience; its evidence covers APK loading and automatic
 session restoration through Home.
 
 A second 2026-11-21 run log supplied by the client shows an experience loading
-and audio streams opening, followed by a `SIGSEGV` on process exit. The
+and audio streams opening. A subsequent run also loaded the experience and audio,
+then reported an unresolved `AAsset_seek` lookup before Wayland
+`wl_shm.create_pool` failed with `Bad file descriptor`. Rust now implements
+`AAsset_seek` and `AAsset_seek64` and supplies FMOD's `AssetManager` object.
+
+After the reference and asset-manager fixes, `cargo run --release -- --launch`
+again loaded the managed x86-64 APK, restored the saved identity, reached Home,
+and started the saved experience. That run did not log the earlier
+`NewGlobalRef` failure, the FMOD asset-manager lookup, the `AAsset_seek` lookup,
+or the Wayland bad-file-descriptor message. I stopped it with Ctrl-C, so this
+run does not verify graceful window shutdown.
+
+The earlier log ended in a `SIGSEGV` on process exit. The
 systemd-coredump entry has no core attached and reports the instruction pointer
 at zero, so it does not identify the crashing call. The client now sends the
 observed GameActivity focus, pause, surface-destroyed, stop and

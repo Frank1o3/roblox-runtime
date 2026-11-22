@@ -302,7 +302,15 @@ lookups no longer dispatch to C++ fallback hooks. Capability-by-capability:
 
 - The attached release log showed five Android NDK thermal lookups, the
   AAsset sequential-read lookup, and `AAudioStream_waitForStateChange` reaching
-  the runtime's unimplemented `dlsym` path. Rust now supplies those symbols.
+  the runtime's unimplemented `dlsym` path. Rust supplies those symbols. A
+  later release log also exposed `AAsset_seek`; Rust now implements the 32-bit
+  and 64-bit seek exports with a checked asset cursor.
+- The later log also exposed `ExperienceSession.shouldDisableExperienceIdleTimer`.
+  The Rust VM now registers the class and returns false for this desktop-only
+  policy query, allowing the native idle-timer behavior to remain enabled.
+- The same run exposed `FMOD.getAssetManager()`. Rust now returns an opaque
+  `android/content/res/AssetManager`; the native `AAssetManager_fromJava`
+  adapter already maps that handle to the APK-backed Rust asset manager.
   Thermal queries return desktop-neutral status/headroom and no device
   thresholds; callbacks are not implemented because the observed path does not
   register listeners.
@@ -314,10 +322,13 @@ lookups no longer dispatch to C++ fallback hooks. Capability-by-capability:
   and terminate callbacks before releasing the host surface. The available
   coredump record has no core attached and only reports a zero instruction
   pointer; graceful shutdown remains unverified.
-- The C++ companion VM and bridge remain live. The observed `NewGlobalRef`
-  failure for an unknown reference is consistent with the still-unresolved
-  cross-VM object boundary; these symbol and registration fixes do not remove
-  that dependency.
+- Rust `jnivm` now recognizes live references owned by the companion VM and
+  delegates reference promotion, local-frame operations, deletion, and identity
+  comparison to that owner. A release `--launch` run reached signed-in Home and
+  started the saved experience without reproducing the earlier
+  `NewGlobalRef` warning or `FMOD.getAssetManager` lookup. This is a compatibility
+  bridge, not a pure-Rust replacement: C++ still owns these objects and still
+  implements most Android/GameActivity/service hooks.
 
 ### B.1 Descriptor verification
 

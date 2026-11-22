@@ -356,6 +356,30 @@ extern "C" fn asset_read(asset: *mut c_void, buffer: *mut c_void, count: usize) 
     count as c_int
 }
 
+extern "C" fn asset_seek(asset: *mut c_void, offset: i64, whence: c_int) -> i64 {
+    if asset.is_null() {
+        return -1;
+    }
+    // SAFETY: handles are allocated by `asset_manager_open` and remain live
+    // until `asset_close`; Android assets are not shared across threads.
+    let asset = unsafe { &*asset.cast::<Asset>() };
+    let Ok(mut position) = asset.read_position.lock() else {
+        return -1;
+    };
+    let base = match whence {
+        0 => 0i128,                     // SEEK_SET
+        1 => *position as i128,         // SEEK_CUR
+        2 => asset.bytes.len() as i128, // SEEK_END
+        _ => return -1,
+    };
+    let target = base + offset as i128;
+    if !(0..=asset.bytes.len() as i128).contains(&target) {
+        return -1;
+    }
+    *position = target as usize;
+    target as i64
+}
+
 extern "C" fn asset_get_buffer(asset: *mut c_void) -> *const c_void {
     if asset.is_null() {
         return std::ptr::null();
@@ -448,6 +472,8 @@ pub fn overrides() -> Vec<(&'static str, *mut c_void)> {
             asset_get_buffer as *const () as *mut c_void,
         ),
         ("AAsset_read", asset_read as *const () as *mut c_void),
+        ("AAsset_seek", asset_seek as *const () as *mut c_void),
+        ("AAsset_seek64", asset_seek as *const () as *mut c_void),
         (
             "AAsset_getLength",
             asset_get_length as *const () as *mut c_void,

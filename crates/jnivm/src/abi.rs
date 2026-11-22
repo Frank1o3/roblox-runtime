@@ -28,6 +28,17 @@ unsafe extern "C" {
         signature: *const c_char,
         function: *mut c_void,
     ) -> i32;
+    fn roblox_jni_compat_reference_kind(object: jni::jobject) -> i32;
+    fn roblox_jni_compat_push_local_frame(capacity: jni::jint) -> jni::jint;
+    fn roblox_jni_compat_pop_local_frame(result: jni::jobject) -> jni::jobject;
+    fn roblox_jni_compat_new_global_ref(object: jni::jobject) -> jni::jobject;
+    fn roblox_jni_compat_new_local_ref(object: jni::jobject) -> jni::jobject;
+    fn roblox_jni_compat_delete_global_ref(object: jni::jobject);
+    fn roblox_jni_compat_delete_local_ref(object: jni::jobject);
+    fn roblox_jni_compat_is_same_object(
+        left: jni::jobject,
+        right: jni::jobject,
+    ) -> jni::jboolean;
 }
 
 thread_local! {
@@ -796,6 +807,10 @@ unsafe extern "system" fn new_local_ref(
     match vm.clone_local_ref(&env, object as usize as u64) {
         Ok(reference) => reference.0 as usize as jni::jobject,
         Err(error) => {
+            // Native hook objects can belong to libjnivm's separate VM.
+            if unsafe { roblox_jni_compat_reference_kind(object) } != 0 {
+                return unsafe { roblox_jni_compat_new_local_ref(object) };
+            }
             eprintln!("[jnivm] NewLocalRef failed: {error}");
             ptr::null_mut()
         }
@@ -812,10 +827,14 @@ unsafe extern "system" fn push_local_frame(
     let Some(env) = env_token(vm, env) else {
         return jni::JNI_ERR;
     };
-    match vm.push_local_frame(&env, capacity) {
-        Ok(()) => jni::JNI_OK,
-        Err(_) => jni::JNI_ERR,
+    if vm.push_local_frame(&env, capacity).is_err() {
+        return jni::JNI_ERR;
     }
+    if unsafe { roblox_jni_compat_push_local_frame(capacity) } != jni::JNI_OK {
+        let _ = vm.pop_local_frame(&env, None);
+        return jni::JNI_ERR;
+    }
+    jni::JNI_OK
 }
 
 unsafe extern "system" fn pop_local_frame(
@@ -828,9 +847,16 @@ unsafe extern "system" fn pop_local_frame(
     let Some(env) = env_token(vm, env) else {
         return result;
     };
-    let res_id = (!result.is_null()).then_some(crate::ObjectId(result as usize as u64));
+    let result_is_compat =
+        !result.is_null() && unsafe { roblox_jni_compat_reference_kind(result) } != 0;
+    let compat_result = if result_is_compat { result } else { ptr::null_mut() };
+    let compat_result = unsafe { roblox_jni_compat_pop_local_frame(compat_result) };
+    let res_id = (!result.is_null() && !result_is_compat)
+        .then_some(crate::ObjectId(result as usize as u64));
     match vm.pop_local_frame(&env, res_id) {
+        Ok(Some(_)) if result_is_compat => compat_result,
         Ok(Some(id)) => id.0 as usize as jni::jobject,
+        Ok(None) if result_is_compat => compat_result,
         Ok(None) => ptr::null_mut(),
         Err(_) => result,
     }
@@ -849,7 +875,11 @@ unsafe extern "system" fn delete_local_ref(env: *mut jni::JNIEnv, object: jni::j
     };
     let id = crate::ObjectId(object as usize as u64);
     if let Err(error) = vm.delete_local_ref(&env, id) {
-        eprintln!("[jnivm] DeleteLocalRef failed: {error}");
+        if unsafe { roblox_jni_compat_reference_kind(object) } == 1 {
+            unsafe { roblox_jni_compat_delete_local_ref(object) };
+        } else {
+            eprintln!("[jnivm] DeleteLocalRef failed: {error}");
+        }
     }
 }
 
@@ -873,6 +903,10 @@ unsafe extern "system" fn new_global_ref(
     match vm.new_global_ref(&env, id) {
         Ok(reference) => reference.0 as usize as jni::jobject,
         Err(error) => {
+            // Keep C++ objects alive through their owning VM's Global wrapper.
+            if unsafe { roblox_jni_compat_reference_kind(object) } != 0 {
+                return unsafe { roblox_jni_compat_new_global_ref(object) };
+            }
             let class = vm
                 .object_class_name(id.0)
                 .unwrap_or_else(|| "<unknown>".into());
@@ -895,7 +929,11 @@ unsafe extern "system" fn delete_global_ref(_env: *mut jni::JNIEnv, object: jni:
         }
         let id = crate::ObjectId(object as usize as u64);
         if let Err(error) = vm.delete_global_ref(id) {
-            eprintln!("[jnivm] DeleteGlobalRef failed: {error}");
+            if unsafe { roblox_jni_compat_reference_kind(object) } == 2 {
+                unsafe { roblox_jni_compat_delete_global_ref(object) };
+            } else {
+                eprintln!("[jnivm] DeleteGlobalRef failed: {error}");
+            }
         }
     }
 }
@@ -929,9 +967,15 @@ unsafe extern "system" fn is_same_object(
     ) {
         return jni::JNI_TRUE;
     }
-    vm.same_object(crate::ObjectId(left_raw), crate::ObjectId(right_raw))
-        .then_some(jni::JNI_TRUE)
-        .unwrap_or(jni::JNI_FALSE)
+    if vm.same_object(crate::ObjectId(left_raw), crate::ObjectId(right_raw)) {
+        return jni::JNI_TRUE;
+    }
+    let left_compat = unsafe { roblox_jni_compat_reference_kind(left) } != 0;
+    let right_compat = unsafe { roblox_jni_compat_reference_kind(right) } != 0;
+    if left_compat && right_compat {
+        return unsafe { roblox_jni_compat_is_same_object(left, right) };
+    }
+    jni::JNI_FALSE
 }
 
 unsafe extern "system" fn exception_check(_env: *mut jni::JNIEnv) -> jni::jboolean {

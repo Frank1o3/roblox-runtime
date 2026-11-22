@@ -47,6 +47,17 @@ pub fn set_startup_bootstrap(callback: extern "C" fn()) -> Result<(), &'static s
 }
 
 fn install_builtin_methods(vm: &Vm) -> Result<(), String> {
+    let experience_session = vm
+        .register_class("com/roblox/client/game/ExperienceSession")
+        .map_err(|error| error.to_string())?;
+    install_builtin(
+        vm,
+        experience_session,
+        "shouldDisableExperienceIdleTimer",
+        "()Z",
+        experience_idle_timer_disabled,
+    )?;
+
     let system = vm
         .register_class("java/lang/System")
         .map_err(|error| error.to_string())?;
@@ -1569,6 +1580,15 @@ fn locale_method(vm: &Vm, _receiver: Option<jnivm::ObjectId>, _args: &[JniValue]
     }
     locale.make_ascii_lowercase();
     java_string(vm, &locale, "NativeLocaleJavaInterface")
+}
+
+fn experience_idle_timer_disabled(
+    _vm: &Vm,
+    _receiver: Option<jnivm::ObjectId>,
+    _args: &[JniValue],
+) -> JniValue {
+    // Desktop has no Android experience idle timer to suppress.
+    JniValue::Boolean(false)
 }
 
 fn anonymous_user_id(_vm: &Vm, _receiver: Option<jnivm::ObjectId>, _args: &[JniValue]) -> JniValue {

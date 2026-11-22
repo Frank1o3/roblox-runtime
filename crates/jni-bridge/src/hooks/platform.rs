@@ -224,6 +224,13 @@ fn install_fmod_methods(vm: &Vm) -> Result<(), String> {
         fmod_supports_low_latency,
     )?;
     install_builtin(vm, fmod, "supportsAAudio", "()Z", fmod_supports_aaudio)?;
+    install_builtin(
+        vm,
+        fmod,
+        "getAssetManager",
+        "()Landroid/content/res/AssetManager;",
+        fmod_asset_manager,
+    )?;
 
     let audio_device = vm
         .register_class("org/fmod/AudioDevice")
@@ -620,6 +627,10 @@ fn fmod_supports_aaudio(
         .is_some_and(|callback| callback());
     eprintln!("[jnivm] FMOD.supportsAAudio -> {supported}");
     JniValue::Boolean(supported)
+}
+
+fn fmod_asset_manager(vm: &Vm, _receiver: Option<jnivm::ObjectId>, _args: &[JniValue]) -> JniValue {
+    new_opaque_local(vm, "android/content/res/AssetManager")
 }
 
 fn fmod_audio_device_create(
