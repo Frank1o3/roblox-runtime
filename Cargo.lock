@@ -568,7 +568,7 @@ dependencies = [
 
 [[package]]
 name = "jnivm"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "jni-sys 0.4.1",
  "libc",
@@ -1022,7 +1022,7 @@ dependencies = [
 
 [[package]]
 name = "roblox-abi"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "libc",
  "roblox-android",
@@ -1033,7 +1033,7 @@ dependencies = [
 
 [[package]]
 name = "roblox-android"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "roblox-logging",
  "serde_json",
@@ -1042,7 +1042,7 @@ dependencies = [
 
 [[package]]
 name = "roblox-audio"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "cpal",
  "libc",
@@ -1051,7 +1051,7 @@ dependencies = [
 
 [[package]]
 name = "roblox-graphics-vulkan"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "ash",
  "roblox-logging",
@@ -1059,7 +1059,7 @@ dependencies = [
 
 [[package]]
 name = "roblox-jni-bridge"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "jnivm",
  "roblox-android",
@@ -1069,7 +1069,7 @@ dependencies = [
 
 [[package]]
 name = "roblox-linker"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "libc",
  "roblox-logging",
@@ -1078,18 +1078,18 @@ dependencies = [
 
 [[package]]
 name = "roblox-logging"
-version = "0.1.4"
+version = "0.1.5"
 
 [[package]]
 name = "roblox-native-sys"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "cmake",
 ]
 
 [[package]]
 name = "roblox-runtime"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "jnivm",
  "roblox-abi",

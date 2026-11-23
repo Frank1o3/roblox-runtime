@@ -920,6 +920,7 @@ mod aaudio_tests {
         "AAudioStream_requestStart",
         "AAudioStream_requestStop",
         "AAudioStream_setBufferSizeInFrames",
+        "AAudioStream_waitForStateChange",
     ];
 
     #[test]
