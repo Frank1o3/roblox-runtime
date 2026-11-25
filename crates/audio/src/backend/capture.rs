@@ -15,7 +15,7 @@
 //! 5. `close` joins the owner thread while holding nothing, so a stream can
 //!    never be freed under a thread that still touches it (the AB-BA rule).
 
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, mpsc};
 use std::thread::JoinHandle;
 use std::time::Duration;
@@ -76,15 +76,20 @@ impl std::fmt::Display for CaptureOpenError {
 
 /// Lock-free single-producer single-consumer ring of interleaved f32 samples.
 ///
-/// Producer side: the host audio callback. It must never block, so when the
-/// ring is full the *oldest* samples are overwritten and the overrun counter
-/// climbs — fresher audio at bounded latency beats a stall for voice chat.
-/// Consumer side: ordinary threads, which may wait.
+/// Each slot uses atomic bits and a sequence counter. This lets the realtime
+/// producer overwrite old samples without racing a consumer that is copying
+/// them: the consumer accepts a slot only when its sequence is stable and
+/// matches the requested absolute sample index.
+struct SampleSlot {
+    sequence: AtomicU64,
+    value_bits: AtomicU32,
+}
+
 pub(crate) struct SampleRing {
-    buf: Vec<f32>,
+    buf: Box<[SampleSlot]>,
     mask: usize,
-    /// Monotonic total samples written / read (never wrapped); the storage
-    /// index of sample `n` is `n & mask`.
+    /// Monotonic total samples published / read; the storage index of sample
+    /// `n` is `n & mask`.
     written: AtomicU64,
     read: AtomicU64,
     overruns: AtomicU64,
@@ -95,8 +100,15 @@ impl SampleRing {
     fn new(capacity_frames: usize, channels: u16) -> Self {
         let capacity_samples =
             (capacity_frames.max(1) * usize::from(channels.max(1))).next_power_of_two();
+        let buf = (0..capacity_samples)
+            .map(|_| SampleSlot {
+                sequence: AtomicU64::new(0),
+                value_bits: AtomicU32::new(0),
+            })
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
         Self {
-            buf: vec![0.0; capacity_samples],
+            buf,
             mask: capacity_samples - 1,
             written: AtomicU64::new(0),
             read: AtomicU64::new(0),
@@ -105,48 +117,81 @@ impl SampleRing {
         }
     }
 
-    /// Realtime: write exactly `len` samples pulled from `sample`, overwriting
-    /// the oldest when full. The closure runs on the producer thread only.
+    /// Realtime: write exactly `len` samples pulled from `sample`, retaining
+    /// only the newest `capacity` samples if one callback is larger than the
+    /// ring. The closure runs on the producer thread only.
     fn write_with(&self, len: usize, mut sample: impl FnMut(usize) -> f32) {
-        let written = self.written.fetch_add(len as u64, Ordering::AcqRel);
+        let start = self.written.load(Ordering::Relaxed);
+        let end = start.saturating_add(len as u64);
         let read = self.read.load(Ordering::Acquire);
-        // Everything at or after `read` is still unread; if this write would
-        // overwrite it, the reader loses the difference and we count it.
-        if written - read > self.capacity as u64 - len as u64 {
+        if end.saturating_sub(read) > self.capacity as u64 {
             self.overruns.fetch_add(1, Ordering::Relaxed);
         }
-        for (i, index) in (written as usize..).take(len).enumerate() {
-            // SAFETY: `index & mask` is always inside `buf`, and the producer
-            // is the process's only writer of this ring, so no two writes in
-            // this loop touch the same slot.
-            unsafe {
-                *self.buf.as_ptr().cast_mut().add(index & self.mask) = sample(i);
-            }
+
+        let first_sample = len.saturating_sub(self.capacity);
+        for i in first_sample..len {
+            let sample_index = start.saturating_add(i as u64);
+            let slot = &self.buf[sample_index as usize & self.mask];
+            let writing = sample_index.wrapping_mul(2).wrapping_add(1);
+
+            // Odd means the slot is being written; the following even value
+            // identifies the complete sample at this absolute index.
+            slot.sequence.store(writing, Ordering::Release);
+            slot.value_bits.store(sample(i).to_bits(), Ordering::Relaxed);
+            slot.sequence.store(writing.wrapping_add(1), Ordering::Release);
         }
+
+        // Publish only after every retained slot contains its complete sample.
+        self.written.store(end, Ordering::Release);
     }
 
     /// Copy whatever is available into `dst`; returns samples copied (not
     /// necessarily a whole number of frames — callers round down).
     fn read(&self, dst: &mut [f32]) -> usize {
-        let read = self.read.load(Ordering::Acquire);
         let written = self.written.load(Ordering::Acquire);
-        let available = (written - read).min(dst.len() as u64) as usize;
-        for (i, out) in dst.iter_mut().take(available).enumerate() {
-            // SAFETY: the index is masked into range like the writer's; the
-            // consumer is the only reader of slots the writer has finished.
-            unsafe {
-                *out = *self.buf.get_unchecked((read as usize + i) & self.mask);
+        let oldest_available = written.saturating_sub(self.capacity as u64);
+        let mut next_read = self.read.load(Ordering::Relaxed).max(oldest_available);
+        let available = written
+            .saturating_sub(next_read)
+            .min(dst.len() as u64) as usize;
+        let mut copied = 0;
+
+        while copied < available {
+            let sample_index = next_read;
+            let expected = sample_index.wrapping_mul(2).wrapping_add(2);
+            let slot = &self.buf[sample_index as usize & self.mask];
+            let before = slot.sequence.load(Ordering::Acquire);
+            if before != expected {
+                // The producer is overwriting this unread sample. Drop it and
+                // move forward; never read partially replaced storage.
+                next_read = next_read.saturating_add(1);
+                break;
             }
+
+            let bits = slot.value_bits.load(Ordering::Relaxed);
+            let after = slot.sequence.load(Ordering::Acquire);
+            if before != after {
+                next_read = next_read.saturating_add(1);
+                break;
+            }
+
+            dst[copied] = f32::from_bits(bits);
+            copied += 1;
+            next_read = next_read.saturating_add(1);
         }
-        self.read.store(read + available as u64, Ordering::Release);
-        available
+
+        self.read.store(next_read, Ordering::Release);
+        copied
     }
 
     /// Used by the AAudio input surface (blocking read pacing) and by tests;
     /// not every consumer of the ring needs it today.
     #[allow(dead_code)]
     fn available(&self) -> u64 {
-        self.written.load(Ordering::Acquire) - self.read.load(Ordering::Acquire)
+        self.written
+            .load(Ordering::Acquire)
+            .saturating_sub(self.read.load(Ordering::Acquire))
+            .min(self.capacity as u64)
     }
 
     fn overruns(&self) -> u64 {
@@ -484,6 +529,48 @@ mod tests {
         assert_eq!(ring.read(&mut dst), 2);
         assert_eq!(dst, [1.0, 2.0]);
         assert_eq!(ring.available(), 2);
+    }
+
+    #[test]
+    fn a_write_larger_than_capacity_keeps_only_the_newest_samples() {
+        let ring = ring_for_tests(4, 1);
+        ring.write_with(6, |i| i as f32);
+        let mut dst = [0.0f32; 4];
+        assert_eq!(ring.read(&mut dst), 4);
+        assert_eq!(dst, [2.0, 3.0, 4.0, 5.0]);
+        assert_eq!(ring.overruns(), 1);
+    }
+
+    #[test]
+    fn concurrent_overwrites_never_return_torn_or_out_of_order_samples() {
+        let ring = ring_for_tests(32, 1);
+        let done = Arc::new(AtomicBool::new(false));
+        let producer_ring = Arc::clone(&ring);
+        let producer_done = Arc::clone(&done);
+
+        let producer = std::thread::spawn(move || {
+            for batch in 0..20_000usize {
+                let base = batch * 8;
+                producer_ring.write_with(8, |i| (base + i) as f32);
+            }
+            producer_done.store(true, Ordering::Release);
+        });
+
+        let mut last = 0.0f32;
+        let mut dst = [0.0f32; 32];
+        while !done.load(Ordering::Acquire) || ring.available() > 0 {
+            let count = ring.read(&mut dst);
+            for value in &dst[..count] {
+                assert!(*value > last, "sample order regressed: {value} after {last}");
+                last = *value;
+            }
+            if count == 0 {
+                std::thread::yield_now();
+            }
+        }
+
+        producer.join().expect("ring producer thread");
+        assert!(last > 0.0, "consumer should observe at least one sample");
     }
 
     #[test]

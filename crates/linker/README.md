@@ -12,7 +12,9 @@ existing compatibility tables.
 
 It currently supports only x86-64 hosts and explicitly rejects `PT_TLS`,
 `TPOFF64`, and `IRELATIVE` images. Its supported ELF and relocation surface
-remains limited to the behavior described above.
+remains limited to the behavior described above. The AArch64-specific bionic
+pthread wrappers elsewhere in the workspace are ABI groundwork only; they do
+not provide an AArch64 host loader or end-to-end runtime.
 
 The ELF parser, memory mapper, relocation decoder, and TLS layout foundations
 were adapted from [Eclipse](https://github.com/Kuenec/Eclipse); see

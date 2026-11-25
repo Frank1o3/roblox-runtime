@@ -21,6 +21,11 @@ The runtime is designed as an embeddable component rather than a standalone
 launcher. It does not download or discover Roblox builds itself; the embedding
 application supplies the APKs and runtime directories through `RuntimeConfig`.
 
+This is currently an **x86-64-only** runtime. Some AArch64-specific bionic
+pthread wrappers exist as ABI groundwork, but `crates/linker/src/map.rs`
+intentionally rejects non-x86-64 hosts at compile time; they do not constitute
+end-to-end AArch64 support.
+
 ### Manual runtime observations
 
 On 2026-11-15, the embedding `rusty-blox` client was run with `cargo run
@@ -248,6 +253,22 @@ The long-term direction is:
 5. Keep `rusty-blox` responsible for application integration rather than making
    the runtime depend on one particular frontend.
 
+## Roblox compatibility and account risk
+
+This is an unofficial compatibility project. It is not affiliated with,
+endorsed by, or sponsored by Roblox Corporation. It runs the Android client in
+an unsupported host environment.
+
+Roblox's terms, client-integrity checks, anti-cheat systems, or service-side
+enforcement may refuse the client or result in account action, including
+suspension or termination. No account-safety guarantee is made. Review
+Roblox's current terms before use, and do not use an account you cannot afford
+to lose.
+
 ## License
 
-BSD 3-Clause License.
+Project-owned runtime code is licensed under **GPL-3.0-or-later**. Certain
+adapted files retain their upstream licenses and attribution; see
+[docs/licensing.md](docs/licensing.md),
+[crates/linker/ECLIPSE-NOTICE.md](crates/linker/ECLIPSE-NOTICE.md), and
+[crates/jnivm/LIBJNIVM-NOTICE.md](crates/jnivm/LIBJNIVM-NOTICE.md).

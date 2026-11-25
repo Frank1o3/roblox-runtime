@@ -18,6 +18,10 @@ static VM: OnceLock<Vm> = OnceLock::new();
 static ENV_TABLE: OnceLock<usize> = OnceLock::new();
 static VM_TABLE: OnceLock<usize> = OnceLock::new();
 static VM_HANDLE: OnceLock<usize> = OnceLock::new();
+// JNI char pointers remain valid until the matching ReleaseString*Chars call.
+// Never reclaim them from GC or by a size threshold: native code may still hold
+// a returned pointer. A caller that omits Release leaks memory, but background
+// reclamation here would turn that misuse into a use-after-free.
 static UTF8_BUFFERS: OnceLock<Mutex<HashMap<usize, CString>>> = OnceLock::new();
 static UTF16_BUFFERS: OnceLock<Mutex<HashMap<usize, Box<[u16]>>>> = OnceLock::new();
 
@@ -1189,6 +1193,5 @@ pub fn gc() -> crate::GcStats {
         return crate::GcStats::default();
     };
     let (stats, _) = vm.gc();
-    prune_string_buffers();
     stats
 }

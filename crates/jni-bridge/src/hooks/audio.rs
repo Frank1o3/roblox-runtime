@@ -337,7 +337,7 @@ fn audio_record_create(vm: &Vm, _: Option<jnivm::ObjectId>, args: &[JniValue]) -
         Some(JniValue::Int(value)) => *value,
         _ => default,
     };
-    let rate = int_arg(1, AUDIO_DEFAULT_RATE as i32);
+    let requested_rate = int_arg(1, AUDIO_DEFAULT_RATE as i32);
     let channel_config = int_arg(2, 0x10);
     let encoding = int_arg(3, AUDIO_PCM_S16);
     let buffer_bytes = int_arg(4, 4096).max(1) as usize;
@@ -347,13 +347,15 @@ fn audio_record_create(vm: &Vm, _: Option<jnivm::ObjectId>, args: &[JniValue]) -
     };
     let env = attached_thread_env(vm);
     let channels = if channel_config == 0x0c { 2 } else { 1 };
-    let rate = if (8_000..=192_000).contains(&rate) && encoding == AUDIO_PCM_S16 {
-        rate
+    let rate = if (8_000..=192_000).contains(&requested_rate) && encoding == AUDIO_PCM_S16 {
+        requested_rate
     } else {
         0
     };
     if rate == 0 {
-        eprintln!("[audio] AudioRecord rejected rate={rate}, encoding={encoding}");
+        eprintln!(
+            "[audio] AudioRecord rejected rate={requested_rate}, encoding={encoding}"
+        );
     }
     let Ok(object) = vm.new_local_object(&env, class, ObjectValue::Opaque) else {
         return JniValue::Object(None);

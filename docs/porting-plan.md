@@ -1,11 +1,14 @@
-# Porting plan: removing every C++ dependency from roblox-runtime
+# Native-code migration plan for roblox-runtime
 
-Status: **Implementation in progress. The MCP launcher linker has been removed
-and the Rust ELF mapper is the only engine loader. JNI hook migration remains.**
+Status: **Mixed Rust/C++ runtime. The Rust ELF mapper is the active engine loader,
+but the runtime still builds project-owned native compatibility targets and a
+companion C++ JNI VM.**
 
-Goal: after this work the workspace is 100% Rust. No `crates/native-sys/native/`, no `third_party/`,
-no CMake/C++ toolchain, no `*-sys` crate that links a C++ project. System libraries
-loaded at run time (Vulkan, cpal's host audio stack) remain.
+Goal: migrate or remove each project-owned C/C++ target only after its callers,
+ABI behavior, parity tests, and manual evidence justify the change. The current
+workspace is not Rust-only: builds still require CMake, Clang/Clang++, and
+initialized native dependencies. System libraries and dependencies that bring
+their own native code are tracked separately.
 
 ### User-directed scope adjustment
 
@@ -59,12 +62,29 @@ already-ported audio crate (`cargo test -p roblox-audio`: 19 passed). The audio
 files listed as "already ported, uncompiled" in the task actually compile and
 pass. See §Audio for what still has to happen there anyway.
 
-### License and provenance finding — flagged for audit
+### License and provenance
 
-The 2026-11-14 source comparison recorded `crates/native-sys/native/*.cpp` as a near-verbatim
-derivative of cordial's GPL-3 `crates/native-sys/native/` tree. That inventory predates current
-source removals and is historical evidence, not a current per-file audit.
-Measured with `diff` (differing lines of both files combined):
+The repository uses `GPL-3.0-or-later` to match the existing
+`ECLIPSE-NOTICE.md` and `LIBJNIVM-NOTICE.md`, which explicitly place the
+non-upstream project files they cover under GPL-3.0-or-later, and the historical
+source comparison recording GPL-derived native compatibility code. The former
+BSD-3-Clause workspace declaration contradicted these checked-in provenance
+records and has been removed.
+
+This repository-level declaration does not replace upstream attribution.
+The Eclipse-derived linker foundations and the direct ByteBuffer JNI adaptation
+retain their MIT notices. Any Apache-2.0-derived portions identified by
+file-level notices must keep those notices and applicable terms. See
+[`docs/licensing.md`](licensing.md) for the summary and the exact upstream
+notice files.
+
+The 2026-11-14 source comparison below is historical: it predates current
+source removals and is not a complete audit of every current file. Keep
+per-file provenance notes as native sources are removed or ported. Future ports
+must implement behavior from public specifications and measured contracts
+rather than copy reference-project source.
+
+Measured in the historical comparison (differing lines of both files combined):
 
 | file | lines here | diff vs cordial |
 | --- | --- | --- |
@@ -75,30 +95,17 @@ Measured with `diff` (differing lines of both files combined):
 | shim.cpp | 156 | 100 |
 | jni_shim.cpp | 697 | 539 |
 
-The checked-in `LICENSE`, `Cargo.toml` files, and runtime README currently all
-claim BSD-3-Clause. Reconcile provenance for each remaining native file and
-ported replacement against that claim. Two further wrinkles recorded in the
-prior comparison:
+Other provenance details from that review remain relevant:
 
-1. cordial's `NOTICE` also carries Apache-2.0-derived code from mocktail
-   (per-file headers), which is one-way compatible into GPL but not back out.
-2. `third_party/libjnivm` and `third_party/mcpelauncher-linker` are MIT — fine to
-   port from with attribution — but libjnivm itself descends from fake-jni/baron,
-   and the task's rule is explicit: *nothing derived from `third_party/` survives
-   in Rust form without your explicit sign-off*.
-
-The user has explicitly directed this Rust-only migration and authorized work
-in phases. That resolves the earlier request for engineering-task sign-off; it
-does not change the repository license or settle source provenance. Port
-behavior from public specifications and observed contracts, keep provenance
-notes, and do not copy implementation text from reference projects. The old
-claim that README advertised GPL-3 is stale: its current License section says
-BSD 3-Clause, consistent with `LICENSE` and the manifests.
-
-MIT sources are not a problem: libjnivm and Eclipse are MIT. Their licenses
-still require attribution when code is used; no reference-project source is to
-be copied as part of this behavioral migration.
-
+1. cordial's `NOTICE` identifies Apache-2.0-derived portions from mocktail.
+   Keep the corresponding file-level notices; the repository GPL declaration
+   is not permission to remove upstream attribution or terms.
+2. `third_party/libjnivm` and `third_party/mcpelauncher-linker` are MIT
+   projects. The direct ByteBuffer adaptation from libjnivm is documented in
+   `crates/jnivm/LIBJNIVM-NOTICE.md`; the Eclipse-derived linker files are
+   documented in `crates/linker/ECLIPSE-NOTICE.md`. Other future ports must
+   not retain copied reference-project implementation code without a
+   documented license and provenance review.
 ---
 
 ## A. Inventory of `crates/native-sys/native/` and `third_party/`, and target crates
@@ -174,7 +181,7 @@ still follows the checked-in CMake target, not the crate layout):
 | `system_paths.cpp` (350) | Native table now retains `stat`, `lstat`, `opendir`, `realpath`, `statvfs`, `open`, and `__open_2`, plus the optional trace setter. Rust owns and registers `access`, `readlink`, `fopen`, `mkdir`, `unlink`, and `rename` in `crates/abi/src/bionic/system_paths.rs`, using configured root state from `crates/android/src/system.rs`. C++ definitions/table entries for those six functions are removed. | **partially ported**; retained functions are structure-sensitive or variadic; parity tests cover Rust remapping and registration. |
 | `netdb_compat.cpp` (206) | `roblox_getaddrinfo/freeaddrinfo` table | **ported and removed**; `crates/abi/src/bionic/netdb.rs` exports the bionic-layout resolver and symbol table. Focused tests cover numeric IPv4 layout/freeing, bionic error mapping, and registration. |
 | `legacy_stdio.cpp` (103) | `roblox_legacy_{fflush,fclose,fseek,ftell,fputs,setvbuf,fread,fwrite,vfprintf,fprintf}` | **TODO** → `crates/abi/bionic/legacy_stdio.rs` (Rust already owns `__sF` and exports `roblox_legacy_sf_base/stride`) |
-| `thread_trace.cpp` (173) | `roblox_pthread_create`, `roblox_set_thread_trace`, table (`pthread_create`) | **TODO** → `crates/abi/bionic/pthread.rs` (the aarch64 `roblox_pthread_attr_real` it resolves is already Rust) |
+| `thread_trace.cpp` (173) | `roblox_pthread_create`, `roblox_set_thread_trace`, table (`pthread_create`) | **TODO** → `crates/abi/bionic/pthread.rs` (AArch64-specific pthread wrappers are preliminary ABI groundwork only; the ELF linker rejects non-x86-64 hosts) |
 | `audio_probe.cpp`, `alsa/pulse_backend_probe.cpp` | none | Rust examples exist under `crates/audio/examples/`; current native tree has no probe source. Compare scenarios before declaring all cases ported. |
 | `pipewire_backend_test.cpp` | PipeWire queue/backend behavior | Still a CMake POST_BUILD test target; compare its cases with Rust tests before removal. |
 | `aaudio_input_callback_test.cpp`, `aaudio_input_test.cpp` | AAudio callback/input behavior | No matching native source is present in the current tree; Rust tests/examples are present. Historical test counts above are not a current source inventory. |
@@ -266,16 +273,15 @@ lookups no longer dispatch to C++ fallback hooks. Capability-by-capability:
 | `shared_from_this` (hooks hand their own object to engine natives / detached threads) | ✓ equivalent: hooks receive `ObjectId` receiver and can hand objects back via `class_ref`/object values; no borrow-splitting hazard like the C++ one |
 | direct ByteBuffers (`NewDirectByteBuffer`/`GetDirectBufferAddress`/capacity; AudioRecord.read feeds engine-recorded audio this way) | ✓ `ObjectValue::DirectByteBuffer` + ABI entries |
 | process-wide attach for engine-created threads (`process_env` attaching on demand) | ~ `attach_current_thread` exists and `current_env()` is per-thread; the call and exception ABI entries auto-attach through `attached_thread_env` (mirroring the C++ shim's attach-on-demand), while array/string entries validate the passed env against the thread-local handle via `env_token` and do not attach. **gap**: unify the two entry styles or auto-attach at hook entry / `pthread_create` override (thread_trace port is the natural place, mirroring `process_env`) |
-| strings | ✓ UTF-16 String objects, `Get/ReleaseStringChars`, `Get/ReleaseStringUTFChars` with buffer pools; `NewStringUTF(null)→""` parity |
+| strings | ✓ UTF-16 String objects, `Get/ReleaseStringChars`, `Get/ReleaseStringUTFChars` with buffers retained until the matching release call; `NewStringUTF(null)→""` parity |
 | arrays | ✓ byte arrays complete (AudioRecord path); object arrays complete; all eight primitive element types (boolean, char, short, int, long, float, double) now have full JNI ABI entries — New/Get/Release/GetRegion/SetRegion — driven by a sealed `PrimitiveElement` trait and generic VM methods, covered by VM-level unit tests. Needed by init_params (`Map`/`List` paths, `getSupportedRefreshRates` int arrays) |
 | Call*MethodV/A return variants | ✓ Object/Boolean/Int/Long/Void hand-written; Char/Short/Float/Double generated by a macro over the same invoke/invoke_a path (instance + static, V + A). init_params reads floats (`dpiScale`, `refreshRate`); battery reads Float. The variadic `...` slots stay unwired by design — hooks port onto the V/A entries |
 | CharSequence | ✓ interface dispatch via descriptor compatibility at lookup time: `Ljava/lang/CharSequence;` and `Ljava/lang/String;` describe the same method to this VM (String is the only CharSequence implementation it hands out), in both directions, for returns and parameters. Hook ports register one handler instead of the C++ double-registration workaround; the first compat match logs once per process |
 | exceptions | ✓ per-thread pending-throwable model: `Vm::throw`/`throw_new` (ThrowNew builds a `Throwable` object with optional detail message), `pending_exception`/`clear_pending_exception`, and truthful ABI `Throw`/`ThrowNew`/`ExceptionOccurred`/`ExceptionCheck`/`ExceptionClear`/`ExceptionDescribe` (describe prints class+message then clears, matching OpenJDK). Ported hooks still need to translate their failures into these calls |
-| Call*MethodV/A return variants | ✓ Object/Boolean/Int/Long/Void plus Char/Short/Float/Double are implemented for instance and static V/A calls; init_params reads `dpiScale`/`refreshRate`, and battery reads Float |
 | GetStatic*/SetStatic* fields, all types | ✓ fields.rs (all 8 types, instance+static) |
 | `NewObjectV/A`, AllocObject | ~ `<init>` factory trick works; `AllocObject` falls to descriptor-correct zero values — acceptable unless the dex check shows use |
 | JNI table completeness | ~ `env_table()` leaves unlisted entries null; enumerate engine's used entries from the dump-classes inventory and fill |
-| GC (`gc()`, GcStats) | ✓ (Rust mark-and-sweep and string-buffer pruning) |
+| GC (`gc()`, GcStats) | ✓ Rust mark-and-sweep; JNI string buffers are independently retained until their matching `ReleaseString*Chars` call |
 | unresolved reporting ("Constructed Unresolved symbol") | ~ jnivm logs unresolved via roblox-logging; **gap**: feed the same inventory the C++ `logger` fed `crate::unimplemented` (kind=JNI), so `unimplemented::report` stays populated |
 | VM lifecycle | ~ `DestroyJavaVM` → JNI_ERR (parity with libjnivm's behavior here is fine); `JNI_VERSION_1_6` ✓ |
 
@@ -414,8 +420,8 @@ old path and its build edge.
      lifecycle, callback/error, symbol-table, backend-selection, and
      capture-policy coverage.
   Rust owns the OpenSL symbol registry and seven IID data exports, and has a
-  Rust policy/test surface. C++ still owns `slCreateEngine`, the vtables, audio
-  backends, and Java audio hooks.
+  Rust policy/test surface. Rust also owns the Java audio hooks. C++ still owns
+  `slCreateEngine`, the OpenSL vtables, and native host audio backends.
 
 - **P1 — JNI parity and hooks (pending).** Verify only operations and
   descriptors observed in the APK/runtime. Port Android/platform, GameActivity,
@@ -456,8 +462,8 @@ Historical unvalidated proposal (retain only as research notes):
 
 - `open`: a naked-assembly trampoline (stable `#[naked]`, or `global_asm!`) that
   redirects the path through a Rust helper and tail-calls host `open`
-  preserving the optional mode argument. ~10 instructions per ISA (x86-64 +
-  aarch64; this repo builds for both).
+  preserving the optional mode argument. ~10 instructions per ISA (x86-64
+  today; an AArch64 implementation is design-only and is not built).
 - `fprintf`: trampoline spills the SysV (or AArch64 PCS) register save area,
   builds a `va_list`, remaps the FILE* through the existing `__sF` logic, and
   tail-calls host `vfprintf`. glibc does the formatting; only the save-area
@@ -505,10 +511,10 @@ trampoline and compare against the same call on host libc semantics).
   measured contract is re-checked from `docs/analysis`-style comments in the
   C++ itself. Eclipse's `src/loader/aaudio.rs` (MIT) confirmed the shape
   (slab registry, error-streak→Disconnected mapping) as prior art, not copied.
-- **libjnivm → crates/jnivm**: the Rust VM was written before this plan; §B
-  gaps were found by comparing its public surface against every libjnivm API
-  the C++ shims call (cordial's usage was the checklist; nothing copied —
-  cordial is GPL and stays a behavioral reference only).
+- **libjnivm → crates/jnivm**: the Rust VM is an independent Rust
+  implementation checked against the JNI specification and observed call
+  surface. The direct ByteBuffer ABI entries are the documented MIT-derived
+  exception; no cordial implementation source is retained in the Rust VM.
 - **Linker**: `crates/linker` is the current Rust engine loader; no project C++
   linker target remains in the current build graph.
 - **Descriptor tooling**: fresh implementation from the public dex spec;
