@@ -1,0 +1,69 @@
+name: Bug report
+description: Report a reproducible problem in the Roblox Linux runtime.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Search existing issues first. Do not include cookies, tokens, credentials, APKs containing private data, or unredacted logs.
+  - type: input
+    id: version
+    attributes:
+      label: Runtime version or commit
+      description: Release version or Git commit SHA.
+      placeholder: "0.1.5 or commit SHA"
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Linux distribution, x86-64 CPU, desktop session (Wayland/X11), GPU/driver, and relevant audio backend.
+    validations:
+      required: true
+  - type: textarea
+    id: subsystem
+    attributes:
+      label: Affected subsystem
+      description: For example, ELF loader, ABI, JNI, graphics, audio, or Android service hooks.
+    validations:
+      required: false
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Start the bootstrapper with ...
+        2. Join ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant redacted logs
+      description: Include only relevant lines. Remove cookies, tokens, account details, and personal paths.
+      render: text
+    validations:
+      required: false
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I checked for an existing report.
+          required: true
+        - label: I removed credentials, cookies, tokens, and personal information from the report.
+          required: true

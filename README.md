@@ -272,3 +272,10 @@ adapted files retain their upstream licenses and attribution; see
 [docs/licensing.md](docs/licensing.md),
 [crates/linker/ECLIPSE-NOTICE.md](crates/linker/ECLIPSE-NOTICE.md), and
 [crates/jnivm/LIBJNIVM-NOTICE.md](crates/jnivm/LIBJNIVM-NOTICE.md).
+
+## Community
+
+Contributions should follow [CONTRIBUTING.md](CONTRIBUTING.md) and the
+[Code of Conduct](CODE_OF_CONDUCT.md). Please read [SECURITY.md](SECURITY.md)
+before reporting a vulnerability. Bug reports and feature proposals can be
+submitted through the GitHub issue templates.
