@@ -137,7 +137,7 @@ impl SampleRing {
             // Odd means the slot is being written; the following even value
             // identifies the complete sample at this absolute index.
             slot.sequence.store(writing, Ordering::Release);
-            slot.value_bits.store(sample(i).to_bits(), Ordering::Relaxed);
+            slot.value_bits.store(sample(i).to_bits(), Ordering::Release);
             slot.sequence.store(writing.wrapping_add(1), Ordering::Release);
         }
 
@@ -168,7 +168,7 @@ impl SampleRing {
                 break;
             }
 
-            let bits = slot.value_bits.load(Ordering::Relaxed);
+            let bits = slot.value_bits.load(Ordering::Acquire);
             let after = slot.sequence.load(Ordering::Acquire);
             if before != after {
                 next_read = next_read.saturating_add(1);
